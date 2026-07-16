@@ -1,5 +1,20 @@
 {
   "app": {
     "title": "Foghaven"
+  },
+  "lobby": {
+    "heading": "Join a game",
+    "nameLabel": "Display name",
+    "namePlaceholder": "Enter your name",
+    "roomCodeLabel": "Room code (optional)",
+    "roomCodePlaceholder": "Leave blank to create or join",
+    "joinButton": "Play",
+    "joiningButton": "Connecting…",
+    "error": "Could not join the game. Please try again."
+  },
+  "game": {
+    "roomCodeLabel": "Room code",
+    "playersLabel": "Players",
+    "leaveButton": "Leave"
   }
 }
