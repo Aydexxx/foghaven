@@ -3,6 +3,8 @@
   "compilerOptions": {
     "lib": ["ES2022"],
     "types": ["node"],
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
     "noEmit": true
   },
   "include": ["src/**/*.ts"],
