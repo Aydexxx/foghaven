@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import type { Room } from "colyseus.js";
+import { MAP } from "@foghaven/shared";
 import type { GameState } from "../net/types";
 import { GameScene } from "./GameScene";
 
-/** World size in pixels — matches the server's spawn bounds for now. */
-const WORLD_WIDTH = 800;
-const WORLD_HEIGHT = 600;
+/** World size in pixels — the shared map bounds the server clamps against. */
+const WORLD_WIDTH = MAP.width;
+const WORLD_HEIGHT = MAP.height;
 
 interface GameCanvasProps {
   room: Room<GameState>;

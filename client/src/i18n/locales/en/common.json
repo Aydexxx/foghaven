@@ -2,15 +2,45 @@
   "app": {
     "title": "Foghaven"
   },
-  "lobby": {
-    "heading": "Join a game",
-    "nameLabel": "Display name",
-    "namePlaceholder": "Enter your name",
-    "roomCodeLabel": "Room code (optional)",
-    "roomCodePlaceholder": "Leave blank to create or join",
-    "joinButton": "Play",
-    "joiningButton": "Connecting…",
-    "error": "Could not join the game. Please try again."
+  "nameEntry": {
+    "label": "Display name",
+    "placeholder": "Enter your name",
+    "continueButton": "Continue"
+  },
+  "mainMenu": {
+    "greeting": "Welcome, {{name}}",
+    "createButton": "Create Room",
+    "creatingButton": "Creating…",
+    "createError": "Could not create a room. Please try again.",
+    "joinByCodeButton": "Join by Code",
+    "joinHeading": "Join a room",
+    "roomCodeLabel": "Room code",
+    "roomCodePlaceholder": "Enter room code",
+    "joinButton": "Join",
+    "joiningButton": "Joining…",
+    "joinError": "That room code doesn't exist.",
+    "backButton": "Back"
+  },
+  "lobbyRoom": {
+    "heading": "Waiting for players",
+    "copyButton": "Copy",
+    "copied": "Copied!",
+    "hostTag": "Host",
+    "playerCount": "{{count}} / {{min}} players",
+    "startButton": "Start Game",
+    "leaveButton": "Leave"
+  },
+  "roleReveal": {
+    "waiting": "Dealing roles…",
+    "intro": "You are",
+    "townsfolk": "TOWNSFOLK",
+    "stranger": "a STRANGER",
+    "townsfolkHint": "Someone here is not who they seem. Find them.",
+    "strangerHint": "Blend in. Do not get caught.",
+    "fellowStrangers": "Your fellow strangers:",
+    "soloStranger": "You are the only stranger.",
+    "strangerTally_one": "{{count}} stranger hides among {{total}} players.",
+    "strangerTally_other": "{{count}} strangers hide among {{total}} players."
   },
   "game": {
     "roomCodeLabel": "Room code",

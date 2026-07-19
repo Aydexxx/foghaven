@@ -1,3 +1,5 @@
+import { MAP, PLAYER_RADIUS } from "@foghaven/shared";
+
 /**
  * Human-readable room code alphabet. Ambiguous glyphs are excluded so codes
  * are easy to read aloud and type: no 0/O, no 1/I/L.
@@ -28,13 +30,34 @@ export const PLAYER_COLORS = [
   "#469990",
 ] as const;
 
-/** The world bounds new players spawn within, in world units. */
-export const SPAWN_BOUNDS = { width: 800, height: 600 } as const;
+/**
+ * Pick `count` distinct items uniformly at random.
+ *
+ * Uses a partial Fisher-Yates shuffle on a copy: every subset of the given size
+ * is equally likely. (The tempting `sort(() => Math.random() - 0.5)` one-liner
+ * is measurably biased, which for role assignment would mean some players draw
+ * stranger more often than others.)
+ */
+export function pickRandom<T>(items: readonly T[], count: number): T[] {
+  const pool = [...items];
+  const take = Math.max(0, Math.min(count, pool.length));
 
-/** A random spawn position within the world bounds. */
+  for (let i = 0; i < take; i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+
+  return pool.slice(0, take);
+}
+
+/** A random spawn position fully inside the play area (accounting for radius). */
 export function randomSpawn(): { x: number; y: number } {
+  const minX = PLAYER_RADIUS;
+  const maxX = MAP.width - PLAYER_RADIUS;
+  const minY = PLAYER_RADIUS;
+  const maxY = MAP.height - PLAYER_RADIUS;
   return {
-    x: Math.floor(Math.random() * SPAWN_BOUNDS.width),
-    y: Math.floor(Math.random() * SPAWN_BOUNDS.height),
+    x: Math.floor(minX + Math.random() * (maxX - minX)),
+    y: Math.floor(minY + Math.random() * (maxY - minY)),
   };
 }

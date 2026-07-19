@@ -26,6 +26,7 @@ npm run dev:client   # start the client dev server
 ```bash
 npm run typecheck   # type-check all workspaces
 npm run build        # build all workspaces
+npm test             # run the server test suite
 ```
 
 ## License

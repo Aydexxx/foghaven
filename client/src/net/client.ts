@@ -8,17 +8,25 @@ const serverUrl = import.meta.env.VITE_SERVER_URL ?? "ws://localhost:2567";
 
 export const client = new Client(serverUrl);
 
-/**
- * Join an existing room by its code, or create/join a shared room when no code
- * is given. Returns the connected room with typed state.
- */
-export async function joinGame(
+/** Always creates a brand new room, never joins an existing one. */
+export async function createRoom(name: string): Promise<Room<GameState>> {
+  const room = await client.create<GameState>(ROOM_NAME, { name });
+  exposeForDev(room);
+  return room;
+}
+
+/** Joins an existing room by its code. Rejects if the code doesn't exist. */
+export async function joinRoomByCode(
   name: string,
-  roomCode?: string,
+  roomCode: string,
 ): Promise<Room<GameState>> {
-  const options = { name };
-  if (roomCode && roomCode.trim() !== "") {
-    return client.joinById<GameState>(roomCode.trim(), options);
+  const room = await client.joinById<GameState>(roomCode.trim(), { name });
+  exposeForDev(room);
+  return room;
+}
+
+function exposeForDev(room: Room<GameState>): void {
+  if (import.meta.env.DEV) {
+    (globalThis as unknown as { __foghavenRoom?: unknown }).__foghavenRoom = room;
   }
-  return client.joinOrCreate<GameState>(ROOM_NAME, options);
 }

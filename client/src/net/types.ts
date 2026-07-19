@@ -5,6 +5,10 @@ import type { MapSchema, Schema } from "@colyseus/schema";
  * us the runtime callback methods colyseus.js attaches to decoded instances
  * (`listen`, `onChange`, ...) without pulling the decorator-based classes into
  * the Vite build. Field names must mirror the server's `Player` schema.
+ *
+ * There is no `role` here because roles are not public state: the server sends
+ * each client its own role over a private message instead. See the `Player`
+ * schema on the server.
  */
 export interface PlayerState extends Schema {
   id: string;
@@ -12,8 +16,8 @@ export interface PlayerState extends Schema {
   x: number;
   y: number;
   color: string;
-  role: string;
   alive: boolean;
+  lastSeq: number;
 }
 
 /** Client-side view of the server's `GameState` schema. */
