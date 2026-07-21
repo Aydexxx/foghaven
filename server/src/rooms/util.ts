@@ -1,4 +1,4 @@
-import { MAP, PLAYER_RADIUS } from "@foghaven/shared";
+import { PLAYER_RADIUS, SPAWN_ZONE, TILE_SIZE } from "@foghaven/shared";
 
 /**
  * Human-readable room code alphabet. Ambiguous glyphs are excluded so codes
@@ -15,20 +15,6 @@ export function generateRoomCode(length = 6): string {
   }
   return code;
 }
-
-/** Distinct, visually separable player colours cycled as players join. */
-export const PLAYER_COLORS = [
-  "#e6194b",
-  "#3cb44b",
-  "#4363d8",
-  "#f58231",
-  "#911eb4",
-  "#42d4f4",
-  "#f032e6",
-  "#bfef45",
-  "#fabed4",
-  "#469990",
-] as const;
 
 /**
  * Pick `count` distinct items uniformly at random.
@@ -50,12 +36,18 @@ export function pickRandom<T>(items: readonly T[], count: number): T[] {
   return pool.slice(0, take);
 }
 
-/** A random spawn position fully inside the play area (accounting for radius). */
+/**
+ * A random spawn position in the open plaza. `SPAWN_ZONE` is a sub-rectangle
+ * of the Streets chosen (and validated — see the town map) to be entirely
+ * open floor, clear of Town Hall's footprint and every door threshold, so
+ * every point sampled from it is walkable by construction — no rejection
+ * sampling needed, and no chance of a fresh player spawning inside a wall.
+ */
 export function randomSpawn(): { x: number; y: number } {
-  const minX = PLAYER_RADIUS;
-  const maxX = MAP.width - PLAYER_RADIUS;
-  const minY = PLAYER_RADIUS;
-  const maxY = MAP.height - PLAYER_RADIUS;
+  const minX = SPAWN_ZONE.x * TILE_SIZE + PLAYER_RADIUS;
+  const maxX = (SPAWN_ZONE.x + SPAWN_ZONE.w) * TILE_SIZE - PLAYER_RADIUS;
+  const minY = SPAWN_ZONE.y * TILE_SIZE + PLAYER_RADIUS;
+  const maxY = (SPAWN_ZONE.y + SPAWN_ZONE.h) * TILE_SIZE - PLAYER_RADIUS;
   return {
     x: Math.floor(minX + Math.random() * (maxX - minX)),
     y: Math.floor(minY + Math.random() * (maxY - minY)),

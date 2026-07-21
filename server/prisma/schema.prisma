@@ -1,0 +1,41 @@
+// Foghaven account system.
+//
+// The one durable identity a ban can attach to — see `server/src/auth/` for the
+// service layer that reads/writes this, and `GameRoom.onAuth` for where a ban is
+// actually enforced (nobody joins a room without passing through it).
+//
+// `DATABASE_URL` comes from the environment and is never committed — see
+// `server/.env.example` and the root `docker-compose.yml` for a local Postgres.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  /// The display name, shown in-game. Unique, profanity-checked at register time.
+  username     String   @unique
+  /// Lowercased `username`, so uniqueness is case-insensitive ("Ada" and "ada"
+  /// can't both exist) without depending on a database collation.
+  usernameLower String  @unique
+  email        String   @unique
+  /// A bcrypt hash — never the password itself, and never sent to any client.
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  /// Whether this account is currently banned. Checked fresh on every join, so a
+  /// ban issued after a token was minted still takes effect immediately.
+  banned    Boolean   @default(false)
+  banReason String?
+  /// When a temporary ban lifts. Null with `banned = true` means a permanent ban;
+  /// a past date means the ban has effectively expired (see `isBanActive`).
+  banUntil  DateTime?
+
+  @@map("users")
+}

@@ -1,12 +1,51 @@
 :root {
   color-scheme: dark;
-  font-family: system-ui, sans-serif;
+
+  /* Georgia's stack reads as old-world type without fetching a web font —
+     index.html loads nothing external, and this keeps it that way. */
+  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --font-body: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+
+  --ink: #ece1c8;
+  --ink-dim: #b3a487;
+  --ink-faint: #83745a;
+
+  --paper-void: #16120c;
+  --paper-base: #241d14;
+  --paper-raised: #2c2318;
+  --paper-sunken: #17120b;
+
+  --timber: #3c2c19;
+  --timber-light: #5c4527;
+  --timber-dark: #241a0f;
+
+  --brass: #c99a4c;
+  --brass-bright: #e6bc70;
+  --brass-dim: #8a6a3a;
+
+  --danger: #a8402c;
+  --danger-bright: #d65e42;
+  --danger-well: #2c1712;
+
+  --success: #6f8f42;
+  --success-bright: #8fb85c;
+
+  --shadow-deep: rgba(0, 0, 0, 0.55);
+  --shadow-soft: rgba(0, 0, 0, 0.3);
+  --highlight: rgba(255, 235, 200, 0.07);
+
+  /* A faint fractal-noise wash, tiled behind every parchment-like surface —
+     self-contained (no image asset), see the grouped selector below. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 0.94 0 0 0 0 0.8 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  font-family: var(--font-body);
 }
 
 body {
   margin: 0;
-  background: #14141b;
-  color: #e8e8ef;
+  background: var(--paper-void);
+  color: var(--ink);
 }
 
 .app {
@@ -16,6 +55,22 @@ body {
   justify-content: center;
 }
 
+/* Every parchment-like surface shares the same grain wash and timber frame. */
+.panel,
+.minigame-panel,
+.reveal,
+.meeting,
+.game-over,
+.chat-panel,
+.audio-settings-panel,
+.reconnect-card {
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 10px 24px var(--shadow-deep);
+}
+
 /* Shared form/menu panel (name entry, main menu, lobby waiting room) */
 .panel {
   display: flex;
@@ -23,23 +78,27 @@ body {
   gap: 1rem;
   width: min(360px, 90vw);
   padding: 2rem;
-  background: #1d1d26;
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 .panel h1 {
   margin: 0;
+  font-family: var(--font-display);
   font-size: 1.75rem;
+  color: var(--brass-bright);
+  letter-spacing: 0.02em;
 }
 
 .hint {
   margin: 0;
   font-size: 0.9rem;
-  color: #9a9ab0;
+  color: var(--ink-dim);
 }
 
 button.secondary {
-  background: #2b2b3a;
+  background: var(--timber);
+  border-color: var(--timber-light);
+  color: var(--ink-dim);
 }
 
 /* Room code display */
@@ -49,16 +108,18 @@ button.secondary {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 1rem;
-  background: #14141b;
-  border: 1px solid #35354a;
-  border-radius: 8px;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 var(--shadow-soft) inset;
 }
 
 .room-code-value {
-  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: 0.15em;
+  color: var(--brass-bright);
 }
 
 /* Player roster */
@@ -76,15 +137,163 @@ button.secondary {
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
-  background: #14141b;
-  border-radius: 8px;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber);
+  border-radius: 4px;
 }
 
 .host-tag {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #5b5bd6;
+  color: var(--brass-bright);
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Lobby role settings */
+.role-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.role-settings h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preset-button {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+  background: var(--timber);
+  color: var(--ink-dim);
+  border: 1px solid var(--timber-light);
+}
+
+.preset-button-active {
+  background: linear-gradient(180deg, var(--brass-bright), var(--brass) 55%, var(--brass-dim));
+  color: #2a1c0a;
+  border-color: var(--timber-dark);
+}
+
+.preset-custom-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+
+.role-toggle-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.role-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.role-toggle-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.role-toggle-row input:disabled + .role-toggle-name {
+  color: var(--ink-dim);
+}
+
+.faction-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--timber-light);
+  color: var(--ink-dim);
+}
+
+.faction-tag-stranger {
+  color: var(--danger-bright);
+  border-color: var(--danger);
+}
+
+/* Balance tuning — mirrors .role-settings' layout, so both panels read as one family. */
+.balance-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.balance-settings h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+.setting-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setting-row {
+  padding: 0.4rem 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.setting-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+
+.setting-row input[type="range"] {
+  flex: 1;
+}
+
+.setting-label {
+  flex-shrink: 0;
+  color: var(--ink);
+}
+
+.faction-tag-townsfolk {
+  color: var(--success-bright);
+  border-color: var(--success);
 }
 
 .field {
@@ -92,44 +301,120 @@ button.secondary {
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: #9a9ab0;
+  color: var(--ink-dim);
 }
 
 .field input {
   padding: 0.6rem 0.75rem;
-  border: 1px solid #35354a;
-  border-radius: 8px;
-  background: #14141b;
-  color: #e8e8ef;
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  background: var(--paper-sunken);
+  color: var(--ink);
   font-size: 1rem;
+  font-family: var(--font-body);
+  box-shadow: 0 1px 0 var(--shadow-soft) inset;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--brass);
 }
 
 button {
   padding: 0.7rem 1rem;
-  border: none;
-  border-radius: 8px;
-  background: #5b5bd6;
-  color: #fff;
+  border: 1px solid var(--timber-dark);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--brass-bright), var(--brass) 55%, var(--brass-dim));
+  color: #2a1c0a;
+  font-family: var(--font-body);
+  font-weight: 600;
   font-size: 1rem;
   cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 2px 0 rgba(0, 0, 0, 0.25),
+    0 3px 6px var(--shadow-soft);
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+button:active:not(:disabled) {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25) inset;
+  transform: translateY(1px);
 }
 
 button:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: default;
+  filter: grayscale(0.3);
+}
+
+button.secondary {
+  color: var(--ink);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 2px 4px var(--shadow-soft);
 }
 
 .error {
   margin: 0;
-  color: #ff6b6b;
+  color: var(--danger-bright);
   font-size: 0.85rem;
+}
+
+/* Auth screen */
+.auth-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+  background: transparent;
+  color: var(--ink-dim);
+  border: 1px solid var(--timber);
+  box-shadow: none;
+}
+
+.auth-tab-active {
+  color: var(--ink);
+  background: var(--paper-sunken);
+  border-color: var(--brass);
+}
+
+.field-hint {
+  color: var(--ink-dim);
+  font-size: 0.75rem;
+}
+
+.guest-tag {
+  color: var(--brass);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+}
+
+/* A quiet, link-styled button — sign in/out, not a primary action. */
+.link-button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  padding: 0.25rem;
 }
 
 /* Role reveal */
 .reveal {
   align-items: center;
   text-align: center;
-  border: 1px solid #35354a;
+  border-radius: 6px;
 }
 
 .reveal-intro {
@@ -137,21 +422,22 @@ button:disabled {
   font-size: 0.9rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #9a9ab0;
+  color: var(--ink-dim);
 }
 
 .reveal-role {
   margin: 0;
+  font-family: var(--font-display);
   font-size: 2.5rem;
   letter-spacing: 0.05em;
 }
 
 .reveal-townsfolk .reveal-role {
-  color: #3cb44b;
+  color: var(--success-bright);
 }
 
 .reveal-stranger .reveal-role {
-  color: #e6194b;
+  color: var(--danger-bright);
 }
 
 .reveal-fellows {
@@ -179,6 +465,7 @@ button:disabled {
   gap: 1.5rem;
   width: 800px;
   max-width: 90vw;
+  color: var(--ink-dim);
 }
 
 .hud button {
@@ -186,6 +473,1086 @@ button:disabled {
 }
 
 .game-canvas canvas {
-  border-radius: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--timber-light);
+  box-shadow: 0 10px 24px var(--shadow-deep);
   display: block;
+}
+
+/* Global task bar */
+.task-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 800px;
+  max-width: 90vw;
+}
+
+.task-bar-label {
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+.task-bar-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  overflow: hidden;
+}
+
+.task-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), var(--success-bright));
+  transition: width 0.3s ease;
+}
+
+.task-bar-count {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+  min-width: 4.5rem;
+  text-align: right;
+}
+
+/* Wraps the canvas so the task list can overlay its top-left corner.
+   Matches GameCanvas's VIEWPORT_WIDTH — the window onto the map, not the
+   map itself, which is considerably larger and scrolls under the camera. */
+.game-stage {
+  position: relative;
+  width: 960px;
+  max-width: 90vw;
+}
+
+/* Local player's own task list */
+.task-list {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  width: 200px;
+  padding: 0.75rem 0.85rem;
+  background: rgba(23, 18, 11, 0.82);
+  background-image: var(--grain), none;
+  border: 1px solid var(--timber-light);
+  border-radius: 6px;
+  backdrop-filter: blur(2px);
+}
+
+.task-list h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+.task-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.task-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+/* Comms sabotage: replaces the task list while cut, same slot and sizing. */
+.task-list-offline {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  width: 200px;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  background: rgba(23, 18, 11, 0.82);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  color: var(--danger-bright);
+  font-size: 0.85rem;
+  backdrop-filter: blur(2px);
+}
+
+/* Critical sabotage: the one screen-wide alarm banner. */
+.critical-sabotage-banner {
+  width: 960px;
+  max-width: 90vw;
+  margin: 0 auto 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--danger-well);
+  border: 2px solid var(--danger);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.critical-sabotage-heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--danger-bright);
+}
+
+.critical-sabotage-timer {
+  margin: 0.2rem 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--danger-bright);
+}
+
+.critical-sabotage-points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.critical-sabotage-points li[data-fixed="true"] {
+  color: var(--brass);
+}
+
+.task-check {
+  color: var(--ink-dim);
+  width: 1em;
+}
+
+.task-done {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+}
+
+.task-done .task-check {
+  color: var(--success-bright);
+}
+
+.task-room {
+  flex: 1;
+}
+
+.task-progress {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+/* Mini-game modal chrome */
+.minigame-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.75);
+}
+
+.minigame-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(380px, 92vw);
+  padding: 1.25rem;
+  border-radius: 6px;
+}
+
+.minigame-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--brass-bright);
+}
+
+.minigame-panel-close {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.minigame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.minigame-instructions {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+/* Wire connecting */
+.wires-board {
+  position: relative;
+}
+
+.wires-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.wire-plug,
+.wire-socket {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0;
+}
+
+.wire-plug {
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  touch-action: none;
+}
+
+.wire-plug:disabled {
+  cursor: default;
+}
+
+.wire-plug-connected {
+  opacity: 0.55;
+}
+
+.wire-socket {
+  background: var(--paper-sunken);
+  border: 3px solid;
+  /* Must stay hit-testable: drop detection reads elementFromPoint() at
+     pointerup, which pointer-events: none would make skip straight past
+     this element to whatever's behind it. */
+  pointer-events: auto;
+}
+
+.wire-socket-connected {
+  box-shadow: 0 0 0 3px var(--highlight) inset;
+}
+
+/* Code entry */
+.code-display {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.code-digit {
+  width: 2.2rem;
+  height: 2.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  color: var(--brass-bright);
+}
+
+.code-entry {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.code-entry-slot {
+  width: 2.2rem;
+  height: 2.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: var(--paper-sunken);
+  border: 1px solid var(--brass-dim);
+  border-radius: 4px;
+  color: var(--ink);
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.code-entry-error .code-entry-slot {
+  border-color: var(--danger-bright);
+  background: var(--danger-well);
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 3.2rem);
+  gap: 0.5rem;
+}
+
+.keypad-key {
+  width: 3.2rem;
+  height: 3.2rem;
+  padding: 0;
+  font-size: 1.1rem;
+  background: linear-gradient(180deg, var(--timber-light), var(--timber));
+  color: var(--ink);
+  border-color: var(--timber-dark);
+}
+
+/* Calibration bar */
+.calibration-track {
+  position: relative;
+  width: 280px;
+  height: 20px;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 10px;
+  transition: border-color 0.2s;
+}
+
+.calibration-track-miss {
+  border-color: var(--danger-bright);
+}
+
+.calibration-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(143, 184, 92, 0.33);
+  border-left: 2px solid var(--success-bright);
+  border-right: 2px solid var(--success-bright);
+}
+
+.calibration-indicator {
+  position: absolute;
+  top: -4px;
+  width: 6px;
+  height: 28px;
+  background: var(--brass-bright);
+  border-radius: 3px;
+  transform: translateX(-50%);
+}
+
+.calibration-indicator-locked {
+  background: var(--success-bright);
+}
+
+.calibration-stop {
+  width: 140px;
+}
+
+/* Pattern memory */
+.pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 70px);
+  gap: 0.75rem;
+}
+
+.pattern-tile {
+  width: 70px;
+  height: 70px;
+  padding: 0;
+  border-radius: 10px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.pattern-tile:disabled {
+  cursor: default;
+}
+
+.pattern-tile-lit {
+  opacity: 1;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.65) inset;
+}
+
+/* Ordering */
+.ordering-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 220px;
+}
+
+.ordering-item {
+  padding: 0.6rem;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  background: linear-gradient(180deg, var(--timber-light), var(--timber));
+  border: 1px solid var(--timber-dark);
+  border-radius: 6px;
+  color: var(--ink);
+  cursor: grab;
+}
+
+.ordering-item-dragging {
+  opacity: 0.4;
+}
+
+.ordering-item-over {
+  border-color: var(--brass);
+}
+
+/* Rotation puzzle */
+.rotation-dials {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.rotation-dial {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--paper-sunken);
+  border: 2px solid var(--timber-light);
+  padding: 0;
+}
+
+.rotation-dial-aligned {
+  border-color: var(--success-bright);
+}
+
+.rotation-target,
+.rotation-needle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.rotation-target {
+  width: 30px;
+  height: 3px;
+  margin-top: -1.5px;
+  background: rgba(143, 184, 92, 0.4);
+}
+
+.rotation-needle {
+  width: 30px;
+  height: 4px;
+  margin-top: -2px;
+  background: var(--brass-bright);
+  border-radius: 2px;
+}
+
+/* Ghost banner */
+.hud-ghost {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--timber);
+  border: 1px solid var(--timber-light);
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+}
+
+/* Kill button — overlays the bottom-right of the canvas */
+.kill-button {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  width: 92px;
+  height: 92px;
+  padding: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--danger-well);
+  border: 2px solid var(--danger);
+  color: #e8b3a5;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 4px 10px var(--shadow-deep);
+}
+
+.kill-button:disabled {
+  cursor: default;
+  opacity: 1; /* the cooldown sweep already reads as "not ready" */
+}
+
+.kill-button-ready {
+  background: var(--danger);
+  border-color: var(--danger-bright);
+  color: #fff3ee;
+  box-shadow: 0 0 16px rgba(168, 64, 44, 0.55);
+}
+
+/* Sweeps left-to-right as the cooldown drains. */
+.kill-button-cooldown {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+.kill-button-label {
+  position: relative;
+}
+
+/* Ability hint toast — the detective's trace, the medium's commune, the
+   doctor's shield confirmation. Transient: GameView clears it after a delay. */
+.ability-hint-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 0.6rem 1rem;
+  background: var(--paper-base);
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--brass-dim);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.85rem;
+  text-align: center;
+  box-shadow: 0 6px 16px var(--shadow-deep);
+  z-index: 3;
+}
+
+/* Meeting screen */
+.meeting-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 2rem 1rem;
+  position: relative;
+  border-radius: 6px;
+  /* Warm, enclosed, interrogation-room feel: a single lamp over the table,
+     the rest of the room lost to shadow. */
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 38%, rgba(120, 82, 34, 0.35), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, #241a0f 0%, #0e0a06 78%, #060402 100%);
+}
+
+/* A slow, faint flicker on the hanging lamp — purely cosmetic, so it backs
+   off for both the graphics toggle (`graphicsEngine` stamps `data-effects`
+   on <html>) and a user's OS-level reduced-motion preference. */
+.meeting-layout::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 55% 45% at 50% 30%, rgba(255, 214, 150, 0.06), transparent 70%);
+  animation: lamp-flicker 5s ease-in-out infinite;
+}
+
+@keyframes lamp-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  42% {
+    opacity: 0.85;
+  }
+  46% {
+    opacity: 1;
+  }
+  71% {
+    opacity: 0.92;
+  }
+}
+
+:root[data-effects="off"] .meeting-layout::before {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meeting-layout::before {
+    animation: none;
+  }
+}
+
+.meeting {
+  align-items: center;
+  text-align: center;
+  border-radius: 6px;
+  position: relative;
+}
+
+.meeting .roster {
+  width: 100%;
+}
+
+.meeting .roster li {
+  justify-content: center;
+}
+
+.meeting-stage-label {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.meeting-timer {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--brass-bright);
+}
+
+.ejection-line {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Watchman's camera reveal — its own quiet panel above the stage content. */
+.camera-reveal {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber);
+  border-radius: 6px;
+  text-align: left;
+}
+
+.camera-reveal .roster {
+  margin-top: 0.35rem;
+}
+
+/* Alderman's double vote */
+.alderman-double-vote {
+  width: 100%;
+}
+
+/* Constable's public execution — deliberately styled as a danger action. */
+.constable-panel {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--danger-well);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+}
+
+.constable-target-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.constable-target-list li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.constable-target {
+  background: var(--danger-well);
+  border-color: var(--danger);
+  color: #e8b3a5;
+}
+
+.constable-confirm {
+  background: var(--danger);
+  border-color: var(--danger-bright);
+  color: #fff3ee;
+}
+
+/* Assassin's role guess — same danger styling as the Constable's shot. */
+.assassin-panel {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--danger-well);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+}
+
+.assassin-target-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.assassin-target-list li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.assassin-target {
+  background: var(--danger-well);
+  border-color: var(--danger);
+  color: #e8b3a5;
+}
+
+.assassin-role-select {
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber);
+  border-radius: 4px;
+  color: var(--ink);
+  padding: 0.25rem 0.4rem;
+}
+
+.assassin-confirm {
+  background: var(--danger);
+  border-color: var(--danger-bright);
+  color: #fff3ee;
+}
+
+.silenced-notice {
+  color: var(--danger-bright, #c0392b);
+  font-weight: 600;
+}
+
+/* Ballot */
+.vote-panel {
+  width: 100%;
+}
+
+.vote-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.vote-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--timber-light);
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.vote-option:disabled {
+  opacity: 0.7;
+}
+
+.vote-option-chosen {
+  border-color: var(--brass);
+  background: var(--timber);
+}
+
+.vote-skip {
+  background: var(--paper-sunken);
+}
+
+.vote-marker {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--success-bright);
+}
+
+/* Vote tallies on the results screen */
+.tally-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.tally-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--paper-sunken);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.tally-name {
+  flex: 1;
+  text-align: left;
+}
+
+.tally-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--brass-bright);
+}
+
+.tally-voters {
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+/* Chat */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(320px, 92vw);
+  padding: 1rem;
+  border-radius: 6px;
+}
+
+.chat-panel h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+.chat-panel-dead {
+  border-color: var(--timber-light);
+  background-image: var(--grain), linear-gradient(160deg, #1c1710, var(--paper-void));
+}
+
+.chat-log {
+  height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-right: 0.25rem;
+}
+
+.chat-line {
+  margin: 0;
+  font-size: 0.85rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.chat-sender {
+  font-weight: 600;
+  margin-right: 0.4rem;
+  color: var(--brass-bright);
+}
+
+.chat-sender-dead {
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.chat-composer {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  background: var(--paper-sunken);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+}
+
+.chat-composer input:focus {
+  outline: none;
+  border-color: var(--brass);
+}
+
+.chat-composer button {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+/* Game over / results screen — reuses .reveal-intro, .reveal-role, .roster */
+.game-over {
+  align-items: center;
+  text-align: center;
+  border-radius: 6px;
+}
+
+.game-over-townsfolk .reveal-role {
+  color: var(--success-bright);
+}
+
+.game-over-stranger .reveal-role {
+  color: var(--danger-bright);
+}
+
+.game-over-roster li {
+  justify-content: space-between;
+}
+
+.role-tag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--success-bright);
+}
+
+.role-tag-stranger {
+  color: var(--danger-bright);
+}
+
+/*
+ * Reconnection. The overlay sits over the live game rather than replacing it,
+ * so a brief drop reads as an interruption to play rather than an exit from it.
+ */
+.reconnect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.reconnect-card {
+  padding: 1.5rem 2rem;
+  border-radius: 6px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.reconnect-title {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+
+/* A player holding their seat while they find their way back. */
+.roster-away {
+  opacity: 0.55;
+}
+
+.away-tag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+/*
+ * Audio and graphics settings: small always-reachable toggles (opposite
+ * bottom corners, above everything but the reconnect overlay) and the
+ * panels they open.
+ */
+.audio-settings-toggle {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 90;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--timber-light);
+  background: var(--paper-base);
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.graphics-settings-toggle {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 90;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--timber-light);
+  background: var(--paper-base);
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.audio-settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.audio-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 6px;
+  min-width: 20rem;
+}
+
+.audio-settings-panel h2 {
+  margin: 0 0 0.25rem;
+  font-family: var(--font-display);
+  color: var(--brass-bright);
+}
+
+.audio-settings-row {
+  display: grid;
+  grid-template-columns: 6rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.audio-settings-label {
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+}
+
+.audio-mute-button {
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--timber-light);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.audio-mute-active {
+  background: var(--danger-well);
+  border-color: var(--danger);
+  color: #e8b3a5;
 }

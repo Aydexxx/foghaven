@@ -1,17 +1,35 @@
 import { useTranslation } from "react-i18next";
-import { ROLES, strangerCount, type RoleAssignment } from "@foghaven/shared";
+import {
+  FACTION,
+  roleById,
+  strangerFactionCount,
+  type RoleAssignment,
+} from "@foghaven/shared";
 
 interface RoleRevealProps {
   assignment: RoleAssignment | null;
   playerCount: number;
+  /** The lobby's enabled role set (public state) — what the tally is computed from. */
+  enabledRoleIds: string[];
+  /** The host's `strangerCount` balance setting — 0 means "Auto" (the default threshold table). */
+  strangerCountOverride: number;
 }
 
 /**
- * Shows the player the one role the server told them about. The stranger
- * *count* is recomputed locally from the roster size — that's a public rule,
- * so displaying it gives nothing away about who they are.
+ * Shows the player the one role the server told them about, entirely
+ * registry-driven: the name and hint come from `roleInfo.<id>` i18n keys and
+ * the styling from the role's faction, so a new role needs strings, not
+ * code. The stranger *count* is recomputed locally from the roster size, the
+ * public role settings, and the public `strangerCount` balance setting
+ * (`strangerCountOverride`) — all public rules, so displaying the tally
+ * gives nothing away about who drew what.
  */
-export function RoleReveal({ assignment, playerCount }: RoleRevealProps) {
+export function RoleReveal({
+  assignment,
+  playerCount,
+  enabledRoleIds,
+  strangerCountOverride,
+}: RoleRevealProps) {
   const { t } = useTranslation();
 
   if (!assignment) {
@@ -22,21 +40,20 @@ export function RoleReveal({ assignment, playerCount }: RoleRevealProps) {
     );
   }
 
-  const isStranger = assignment.role === ROLES.STRANGER;
-  const fellows = assignment.fellowStrangers;
+  const definition = roleById(assignment.role);
+  const isStrangerFaction = definition?.faction === FACTION.STRANGER;
+  const fellows = assignment.fellows;
 
   return (
-    <div className={`panel reveal ${isStranger ? "reveal-stranger" : "reveal-townsfolk"}`}>
+    <div
+      className={`panel reveal ${isStrangerFaction ? "reveal-stranger" : "reveal-townsfolk"}`}
+    >
       <p className="reveal-intro">{t("roleReveal.intro")}</p>
-      <h1 className="reveal-role">
-        {isStranger ? t("roleReveal.stranger") : t("roleReveal.townsfolk")}
-      </h1>
+      <h1 className="reveal-role">{t(`roleInfo.${assignment.role}.reveal`)}</h1>
 
-      <p className="hint">
-        {isStranger ? t("roleReveal.strangerHint") : t("roleReveal.townsfolkHint")}
-      </p>
+      <p className="hint">{t(`roleInfo.${assignment.role}.hint`)}</p>
 
-      {isStranger &&
+      {definition?.revealsFellows &&
         (fellows.length > 0 ? (
           <div className="reveal-fellows">
             <p className="hint">{t("roleReveal.fellowStrangers")}</p>
@@ -52,7 +69,11 @@ export function RoleReveal({ assignment, playerCount }: RoleRevealProps) {
 
       <p className="hint">
         {t("roleReveal.strangerTally", {
-          count: strangerCount(playerCount),
+          count: strangerFactionCount(
+            playerCount,
+            enabledRoleIds,
+            strangerCountOverride > 0 ? { stranger: strangerCountOverride } : {},
+          ),
           total: playerCount,
         })}
       </p>

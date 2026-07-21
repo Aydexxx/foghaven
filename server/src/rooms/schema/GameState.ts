@@ -1,5 +1,13 @@
-import { Schema, MapSchema, type } from "@colyseus/schema";
-import { PHASE } from "@foghaven/shared";
+import { Schema, MapSchema, ArraySchema, type, filterChildren } from "@colyseus/schema";
+import { PHASE, canSee } from "@foghaven/shared";
+
+/**
+ * The phases during which the fog restricts what a living client is sent.
+ * Outside them — the lobby, a meeting, the game-over screen — everyone is
+ * visible to everyone: the lobby is social, a meeting needs every face on
+ * the ballot, and the fog guards nothing once the roles are public anyway.
+ */
+const FOG_PHASES = new Set<string>([PHASE.ROLE_REVEAL, PHASE.PLAYING]);
 
 /**
  * A single connected player. Positions are in world units; the client is
@@ -11,6 +19,10 @@ import { PHASE } from "@foghaven/shared";
  * network traffic — secrecy would be a client-side illusion. Roles live in a
  * server-only map on `GameRoom` and are delivered per-client over private
  * messages instead.
+ *
+ * `alive` is public and that is fine: who is dead becomes common knowledge as
+ * soon as their body is found, and the living stop receiving dead players
+ * entirely (see `GameState.players`).
  */
 export class Player extends Schema {
   @type("string") id = "";
@@ -21,10 +33,70 @@ export class Player extends Schema {
   @type("boolean") alive = true;
 
   /**
+   * Whether this player's socket is currently attached. False means they
+   * dropped and are inside their reconnection grace period: they keep their
+   * seat, their role and their position, and still count toward every win
+   * condition — they just aren't there to play it.
+   *
+   * Public on purpose. Everyone can already see a body standing perfectly
+   * still; saying so plainly is better than letting the room mistake a dropped
+   * connection for suspicious behaviour.
+   */
+  @type("boolean") connected = true;
+
+  /**
+   * Whether this player has cast their ballot in the current vote. Public on
+   * purpose — the "has voted" indicator is part of the meeting UI. *Who* they
+   * voted for is not here; that stays in a server-only map until the results
+   * are published, and only then if votes are configured public.
+   */
+  @type("boolean") hasVoted = false;
+
+  /**
    * Sequence number of the last input this player's position reflects. The
    * client uses it to discard acknowledged inputs during reconciliation.
    */
   @type("number") lastSeq = 0;
+}
+
+/**
+ * One candidate's line on the results screen. `voterNames` is left empty
+ * unless votes are configured public — the individual ballots are simply not
+ * broadcast in the anonymous case.
+ */
+export class VoteTally extends Schema {
+  /** A session id, or `SKIP_VOTE`. */
+  @type("string") targetId = "";
+  @type("string") targetName = "";
+  @type("number") count = 0;
+  @type("string") voterNames = "";
+}
+
+/**
+ * One player's line on the game-over results screen: their name and true
+ * role. Name is denormalised here for the same reason as `meetingBodyName`
+ * and `ejectedPlayerName` — some of these players are dead by the time the
+ * game ends, and dead players are filtered out of a living client's
+ * `players` map entirely, so a name lookup by id would come back empty for
+ * exactly the players whose names most need to be on this screen.
+ */
+export class RevealedPlayer extends Schema {
+  @type("string") id = "";
+  @type("string") name = "";
+  @type("string") role = "";
+}
+
+/**
+ * A corpse left where a player was killed. Bodies are public on purpose —
+ * finding them is how the living learn a kill happened.
+ */
+export class Body extends Schema {
+  /** Session id of the player this body belongs to. */
+  @type("string") playerId = "";
+  @type("string") name = "";
+  @type("number") x = 0;
+  @type("number") y = 0;
+  @type("string") color = "";
 }
 
 /**
@@ -33,7 +105,250 @@ export class Player extends Schema {
  * player to join, reassigned if they leave).
  */
 export class GameState extends Schema {
-  @type({ map: Player }) players = new MapSchema<Player>();
+  /**
+   * Every player, filtered per client. This one callback is both the ghost
+   * secrecy AND the fog of war: Colyseus evaluates it per client per patch
+   * and encodes a *different* byte stream for each, so a player a client is
+   * not entitled to see — dead, or beyond their fog — has their movement
+   * left off that client's wire entirely. The fog overlay the client draws
+   * is presentation; THIS is the boundary the data stops at. Hiding either
+   * in the renderer instead would leave every position readable in every
+   * client's network traffic, which for this game would be the single most
+   * exploitable defect possible.
+   *
+   * The rules, in order: you always receive yourself (prediction and
+   * reconciliation depend on it); the dead see everyone; the living never
+   * receive the dead; outside fog phases the living see all the living; in
+   * them, only who they can actually see — within their tile's vision
+   * radius, no wall between (`canSee`).
+   *
+   * Two properties of Colyseus's filtering shape everything around this:
+   *
+   *   1. Filters gate *changes*, not existing data. Nothing is retracted
+   *      when visibility closes — the viewer keeps a stale copy and simply
+   *      stops receiving updates. Client staleness handling builds on that
+   *      (see `GameScene`), as does the ghost catch-up behaviour pinned in
+   *      the tests.
+   *   2. A filter is only re-evaluated for an entity with a pending change.
+   *      A stationary player would otherwise never be re-checked as viewers
+   *      move around them — which is exactly why `GameRoom.update` dirties
+   *      every position each tick during play. Remove that heartbeat and
+   *      the fog silently stops tracking anyone who stands still.
+   */
+  @filterChildren(function (
+    this: GameState,
+    client: { sessionId: string },
+    key: string,
+    value: Player,
+  ) {
+    if (key === client.sessionId) {
+      return true;
+    }
+    const viewer = this.players.get(client.sessionId);
+    if (!viewer) {
+      // A connection with no seat (should not happen for joined clients):
+      // fall back to the living-only view.
+      return value.alive;
+    }
+    if (!viewer.alive) {
+      return true;
+    }
+    if (!value.alive) {
+      return false;
+    }
+    // The lamplighter's signature ability: everyone visible to everyone
+    // while the lamp is lit, bypassing ONLY this fog gate — the living/dead
+    // split above still applies unchanged.
+    if (this.lampLit) {
+      return true;
+    }
+    if (!FOG_PHASES.has(this.phase)) {
+      return true;
+    }
+    return canSee(viewer, value, this.sabotageActive);
+  })
+  @type({ map: Player })
+  players = new MapSchema<Player>();
+
+  /**
+   * Corpses — filtered by the same fog as the players. A body's location is
+   * exactly the information a hidden kill is supposed to conceal: finding
+   * it should take walking the town, not reading the byte stream. The dead
+   * see every body; the living only those within their vision. (A body,
+   * once seen, stays truthful in a client's stale copy — bodies never move
+   * — so nothing more needs retracting when the viewer walks away.)
+   */
+  @filterChildren(function (
+    this: GameState,
+    client: { sessionId: string },
+    _key: string,
+    value: Body,
+  ) {
+    const viewer = this.players.get(client.sessionId);
+    if (!viewer) {
+      return true;
+    }
+    if (!viewer.alive) {
+      return true;
+    }
+    if (!FOG_PHASES.has(this.phase)) {
+      return true;
+    }
+    return canSee(viewer, value, this.sabotageActive);
+  })
+  @type({ map: Body })
+  bodies = new MapSchema<Body>();
+
   @type("string") phase: string = PHASE.LOBBY;
   @type("string") hostId = "";
+
+  /**
+   * The lobby's role settings: which roles from the shared registry
+   * (`shared/config/roles.ts`) this game deals, and which preset the host
+   * last picked (`"custom"` after a manual toggle). Host-written, lobby-only
+   * — see `GameRoom.handleSetPreset` / `handleSetRoleEnabled`.
+   *
+   * Public on purpose, and NOT an exception to the "no roles in public
+   * state" rule on `Player`: these are the game's *rules*, a pure function
+   * of host inputs that every client needs identically (to render the lobby
+   * panel and compute the stranger tally). They carry no player→role
+   * mapping — the thing that rule actually protects.
+   */
+  @type(["string"]) enabledRoleIds = new ArraySchema<string>();
+  @type("string") rolePreset = "";
+
+  /**
+   * Balance settings: every host-tunable number/toggle from
+   * `shared/config/settings.ts`'s `SETTING_DEFINITIONS` (stranger count, kill
+   * cooldown, discussion/voting timers, task count, confirm-ejects), each
+   * stored as a plain string keyed by its setting id — see
+   * `serializeSettingValue`/`parseSettingValue`. One generic map rather than
+   * one schema field per setting, same reasoning as `enabledRoleIds`: adding
+   * a new tunable is one registry entry, not a schema change. Host-written,
+   * lobby-only — see `GameRoom.handleSetSetting`. Public for the same reason
+   * `enabledRoleIds` is: every client needs it identically (e.g. to compute
+   * the reveal screen's stranger tally when `strangerCount` overrides the
+   * default threshold table).
+   */
+  @type({ map: "string" }) settings = new MapSchema<string>();
+
+  /**
+   * Meeting context, set whenever a meeting starts. `meetingBodyName` is a
+   * deliberate denormalisation: the reported player is dead by the time the
+   * meeting begins, and dead players are filtered out of a living client's
+   * `players` map entirely, so looking their name up by id would come back
+   * empty for everyone but the ghosts. Copying the name in at report time
+   * sidesteps that. `meetingBodyId` is empty for an emergency meeting.
+   */
+  @type("string") meetingReporterId = "";
+  @type("string") meetingBodyId = "";
+  @type("string") meetingBodyName = "";
+  @type("boolean") meetingIsEmergency = false;
+
+  /** Which sub-stage of the meeting is running; empty outside a meeting. */
+  @type("string") meetingStage = "";
+
+  /**
+   * Everyone known to be dead, rebuilt at the start of every meeting (and
+   * appended to on ejection).
+   *
+   * This is published at meeting time rather than at the moment of death on
+   * purpose: mid-round, a killing nobody has discovered must stay unknown, so
+   * the only public trace is the body itself. By the time a meeting opens, who
+   * is missing is legitimately common knowledge — and the clients need it,
+   * because bodies get cleared here and an ejected player never leaves one.
+   */
+  @type(["string"]) deadPlayerIds = new ArraySchema<string>();
+
+  /** Per-candidate results, published only once voting has resolved. */
+  @type({ map: VoteTally }) voteResults = new MapSchema<VoteTally>();
+
+  /**
+   * Outcome of the last vote. `ejectedPlayerName` is denormalised for the
+   * same reason as `meetingBodyName`: the ejected player is dead by the time
+   * this is read, so a living client can no longer look their name up.
+   *
+   * `ejectedWasStranger` is only ever written when `CONFIRM_EJECTS` is on.
+   * With it off, no role information reaches public state at all.
+   */
+  @type("string") ejectedPlayerId = "";
+  @type("string") ejectedPlayerName = "";
+  @type("boolean") ejectedWasStranger = false;
+  @type("boolean") ejectionConfirmed = false;
+
+  /**
+   * The shared task bar. Both fields count only *real* (townsfolk) task
+   * steps — a stranger's completions are never added to `taskBarCompleted`,
+   * see `GameRoom.handleTaskInteract`. This is safe to be public: the
+   * percentage of tasks done reveals nothing about who did them.
+   */
+  @type("number") taskBarCompleted = 0;
+  @type("number") taskBarTotal = 0;
+
+  /**
+   * Whether a sabotage is active — set by the Stranger's `sabotage` and the
+   * Saboteur's `advanced_sabotage` abilities. Drives the bell lock
+   * (`BELL_LOCKED_DURING_SABOTAGE`), the client's alarm stinger/tension
+   * music/color grade, watchman camera blinding, and — via the `canSee`
+   * calls above — a shrunk vision radius for every player, symmetrically
+   * (see `visionRadiusAt`'s `sabotageActive` parameter; there is no
+   * per-viewer faction check here on purpose, since `Player` deliberately
+   * carries no faction — see its own doc comment). Public rather than
+   * server-only: an active sabotage is meant to be an alarm everyone hears,
+   * not hidden information.
+   */
+  @type("boolean") sabotageActive = false;
+
+  /**
+   * Room slugs whose doors are currently locked by a Saboteur's `lock_door`
+   * — see `applyInputWithLocks` (`shared/game/movement.ts`), which both
+   * client prediction and server simulation consult identically. Public for
+   * the same reason `sabotageActive` is: a locked door is a physical, visible
+   * thing, not hidden information.
+   */
+  @type(["string"]) lockedRoomSlugs = new ArraySchema<string>();
+
+  /**
+   * Whether the Saboteur's comms sabotage is active — the client hides the
+   * task list and room labels while this is true. Public: everyone loses
+   * comms together, the same way everyone hears the sabotage alarm.
+   */
+  @type("boolean") commsSabotageActive = false;
+
+  /**
+   * Whether a critical sabotage (Lighthouse failure/flooding) is currently
+   * counting down. Public — the whole town needs to see the clock and the
+   * repair prompts, not just whoever's near a repair point.
+   */
+  @type("boolean") criticalSabotageActive = false;
+
+  /**
+   * Which of the two `CRITICAL_REPAIR_POINTS` have been fixed so far this
+   * critical sabotage — cleared the instant a new one starts. Both entries
+   * present resolves it; the countdown running out with fewer than both ends
+   * the game for the Strangers instead. Public for the same reason the
+   * countdown itself is.
+   */
+  @type(["string"]) criticalRepairedPoints = new ArraySchema<string>();
+
+  /**
+   * Whether the lamplighter's lamp is currently lit — see the `lampLit`
+   * bypass on `players`'s `filterChildren` above. Public rather than a
+   * private message: everyone experiences a lit lamp together, the same way
+   * everyone hears the sabotage alarm.
+   */
+  @type("boolean") lampLit = false;
+
+  /** Set once the game ends (a `FACTION` value); empty while play continues. */
+  @type("string") winningFaction = "";
+  /** Which condition ended the game — a `WIN_REASON` value. */
+  @type("string") winReason = "";
+
+  /**
+   * Every player's name and true role, keyed by session id. Populated only at
+   * game over, and this is the one deliberate place role information becomes
+   * public — see the note on `Player` for why a role field must never live
+   * there instead.
+   */
+  @type({ map: RevealedPlayer }) finalRoster = new MapSchema<RevealedPlayer>();
 }

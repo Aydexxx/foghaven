@@ -1,0 +1,29 @@
+# Local Postgres for the Foghaven account system.
+#
+# `docker compose up -d` gives you a database matching the DATABASE_URL in
+# server/.env.example. These credentials are DEV-ONLY and intentionally weak —
+# production must supply its own DATABASE_URL (never this file) via the
+# environment. Nothing here is a secret worth guarding; the real secret is
+# JWT_SECRET, which lives only in an un-committed server/.env.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: foghaven-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: foghaven
+      POSTGRES_PASSWORD: foghaven_dev
+      POSTGRES_DB: foghaven
+    ports:
+      - "5432:5432"
+    volumes:
+      - foghaven-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foghaven -d foghaven"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  foghaven-pgdata:

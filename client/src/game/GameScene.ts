@@ -1,15 +1,63 @@
 import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
-  applyInput,
+  applyInputWithLocks,
+  canSee,
+  visionRadiusAt,
+  roomSlugAt,
   SIM_DT,
   PLAYER_RADIUS,
+  TASK_INTERACT_RADIUS,
+  KILL_RANGE,
+  REPORT_BODY_RANGE,
+  BELL_RANGE,
+  TOWN_HALL,
+  TILE_SIZE,
+  TILEMAP_DATA,
+  ROOMS,
+  MAP,
+  TUNNEL_SOUND_RADIUS,
+  CRITICAL_REPAIR_POINTS,
+  REPAIR_RANGE,
+  type ClientTask,
+  type CriticalRepairPointId,
   type Direction,
+  type TaskProgressMessage,
+  type TunnelSoundMessage,
   type Vec2,
+  type AbilityTargetKind,
 } from "@foghaven/shared";
-import type { GameState, PlayerState } from "../net/types";
+import type { BodyState, GameState, PlayerState } from "../net/types";
+import i18n from "../i18n";
+import { archetypeForColor } from "./characters/assign";
+import { RIG_ORIGIN, FRAME_SIZE } from "./characters/rig";
+import { buildCharacterSpriteSheet, type CharacterAnimSet } from "./characters/spriteSheet";
+import { audioEngine } from "../audio/audioEngine";
+import { PhaseAtmosphere } from "./atmosphere/PhaseAtmosphere";
 
-const LABEL_OFFSET_Y = PLAYER_RADIUS + 10;
+/**
+ * The sprite's anchor point, as a fraction of the frame — where the rig's
+ * ground-contact point sits within its cell (see `characters/rig.ts`).
+ * Setting a sprite's origin to this, rather than the default centre,
+ * anchors the character's *feet* to `(player.x, player.y)`: the same point
+ * every distance check (task range, kill range, report range) already
+ * measures from, so the visual upgrade changes nothing about where a
+ * character logically stands.
+ */
+const CHARACTER_ORIGIN_X = RIG_ORIGIN.x / FRAME_SIZE;
+const CHARACTER_ORIGIN_Y = RIG_ORIGIN.y / FRAME_SIZE;
+
+/** How far below the character's name sits above their head — clears even the alderman's top hat. */
+const LABEL_OFFSET_Y = 54;
+/** The small player-colour badge that rides beside the sprite for at-a-glance identity — see `createAccentBadge`. */
+const BADGE_RADIUS = 4;
+/** Chest height — clear of every archetype's head (which sits above y ≈ -30) and low enough to read as a pin, not a growth on the neck. */
+const BADGE_OFFSET: Vec2 = { x: 9, y: -18 };
+/** Below this speed (world units/frame-independent — see usage) a player reads as standing still. */
+const MOVEMENT_EPSILON = 0.05;
+/** World units of walking between spatial footstep triggers — a plausible stride at `PLAYER_SPEED`. */
+const FOOTSTEP_STEP_DISTANCE = 75;
+
 const FALLBACK_COLOR = 0xffffff;
 
 /** Milliseconds of movement represented by one input command. */
@@ -29,20 +77,107 @@ const MAX_STEPS_PER_FRAME = 5;
 /** Keep prediction history bounded if the server ever stops acknowledging. */
 const MAX_PENDING = 120;
 
+const TASK_MARKER_SIZE = 18;
+const TASK_MARKER_COLOR = 0xffd166;
+const TASK_LABEL_OFFSET_Y = TASK_MARKER_SIZE;
+
+/** How see-through a ghost looks to other ghosts. */
+const GHOST_ALPHA = 0.4;
+
+const TOWN_HALL_MARKER_SIZE = 28;
+const TOWN_HALL_MARKER_COLOR = 0x8899ff;
+
+/** A critical repair point's marker: red while broken, green once fixed. */
+const REPAIR_MARKER_SIZE = 24;
+const REPAIR_MARKER_BROKEN_COLOR = 0xdb4b3c;
+const REPAIR_MARKER_FIXED_COLOR = 0x4bb35c;
+
+/** Tile colours for the procedurally generated tileset — see `createTilemap`. */
+const TILE_COLOR_WALL = 0x14141c;
+const TILE_COLOR_STREET = 0x4a4a5c;
+const TILE_COLOR_ROOM = 0x5c4a38;
+const TILESET_KEY = "town-tiles";
+
+/** How the room signage reads compared to a task's location label. */
+const ROOM_LABEL_COLOR = "#8f8fae";
+const ROOM_LABEL_FONT_SIZE = "13px";
+
+/** How smoothly the camera chases the local player — 1 would be instant. */
+const CAMERA_LERP = 0.15;
+
+/**
+ * How long a remote player may go without an update before they are treated
+ * as fogged and hidden. The server force-refreshes every position it is
+ * willing to send at every patch (50 ms — see the fog heartbeat in
+ * `GameRoom.update`), so silence is not ambiguity: an entity that has gone
+ * quiet for several patch intervals is one the server is deliberately
+ * withholding. This is how the client knows to stop drawing someone without
+ * ever being told — Colyseus retracts nothing when a filter closes, it just
+ * goes quiet.
+ */
+const VISIBILITY_TIMEOUT_MS = 350;
+
+/** The fog overlay: colour, how dark it gets, and how softly it moves. */
+const FOG_COLOR = 0x05070d;
+const FOG_MAX_ALPHA = 0.94;
+/** Size of the pre-rendered radial-gradient brush texture, in pixels. */
+const FOG_BRUSH_SIZE = 512;
+const FOG_BRUSH_KEY = "fog-brush";
+/** Per-frame lerp rates for the fog's radius and darkness transitions. */
+const FOG_RADIUS_RATE = 0.08;
+const FOG_FADE_RATE = 0.06;
+/** Draw order: above the world and its actors, below nothing that matters. */
+const FOG_DEPTH = 50;
+
 interface Snapshot extends Vec2 {
   t: number;
 }
 
+/** One task marker's render objects, plus the mutable progress it reflects. */
+interface TaskMarker {
+  task: ClientTask;
+  rect: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+}
+
+/** A corpse's render objects. Bodies are public, so everyone draws these. */
+interface BodyEntity {
+  circle: Phaser.GameObjects.Arc;
+  cross: Phaser.GameObjects.Text;
+}
+
 /** Phaser render objects plus per-player state and listener disposers. */
 interface PlayerEntity {
-  circle: Phaser.GameObjects.Arc;
+  sprite: Phaser.GameObjects.Sprite;
   label: Phaser.GameObjects.Text;
+  /** The small player-colour badge riding along beside the sprite — see `createAccentBadge`. */
+  badge: Phaser.GameObjects.Arc;
+  /** Which of the six costumes this player is wearing — see `characters/assign.ts`. */
+  anims: CharacterAnimSet;
   disposers: Array<() => void>;
   isLocal: boolean;
   /** Local player only: the client-side predicted position. */
   predicted?: Vec2;
   /** Remote players only: timestamped position snapshots for interpolation. */
   buffer?: Snapshot[];
+  /**
+   * When this player's data last arrived from the server. The fog filter
+   * retracts nothing — it just goes quiet — so recency IS visibility: see
+   * `VISIBILITY_TIMEOUT_MS`. Remote players start at 0 (hidden until the
+   * server actually says they're here), the local player at Infinity
+   * (always fresh, always drawn).
+   */
+  lastFreshAt: number;
+  /** Whether the fog currently lets this player be drawn. */
+  fogVisible: boolean;
+  /** Last position used to derive movement (idle vs walk) and facing (flip). */
+  lastPos?: Vec2;
+  /** True while the sprite is showing the one-shot fall — see `playDeathTransition`. */
+  deathPlaying: boolean;
+  /** World units walked since the last footstep audio trigger — see `updateFootstepAudio`. */
+  footstepDistance: number;
+  /** Whether this entity currently has a footstep voice registered with the audio engine. */
+  hasFootstepVoice: boolean;
 }
 
 interface InputCommand {
@@ -50,8 +185,34 @@ interface InputCommand {
   dir: Direction;
 }
 
+/** One PLAYING-phase ability the local role has, and how to gather its target. */
+export interface AbilitySlotInfo {
+  ability: string;
+  targetKind: AbilityTargetKind;
+}
+
 interface GameSceneData {
   room: Room<GameState>;
+  /** Initial task list seed — see the prop doc on `GameCanvasProps.tasks`. */
+  tasks: ClientTask[];
+  /**
+   * The local player's own role's PLAYING-phase abilities (meeting-phase
+   * ones — Alderman, Constable, Assassin — render entirely inside
+   * `MeetingScreen` instead, same as before). Fixed for the whole round,
+   * since a role never changes mid-game. Empty for a role with no ability at
+   * all.
+   */
+  abilitySlots: AbilitySlotInfo[];
+}
+
+/** One player, body, or room the local player could currently act on — see `getAbilityTarget`. */
+export interface AbilityTargetInfo {
+  kind: AbilityTargetKind;
+  /** Session id — a player for `"player"`, a body for `"body"`. */
+  id?: string;
+  name?: string;
+  /** A room slug, for `"room"`. */
+  room?: string;
 }
 
 type MoveKeys = Record<
@@ -72,9 +233,59 @@ export class GameScene extends Phaser.Scene {
   private torndown = false;
 
   private keys!: MoveKeys;
+  private eKey!: Phaser.Input.Keyboard.Key;
+  private rKey!: Phaser.Input.Keyboard.Key;
+  private bKey!: Phaser.Input.Keyboard.Key;
   private inputAccumulator = 0;
   private seq = 0;
   private pending: InputCommand[] = [];
+
+  private readonly taskMarkers = new Map<string, TaskMarker>();
+  private initialTasks: ClientTask[] = [];
+  private interactPrompt?: Phaser.GameObjects.Text;
+  private reportPrompt?: Phaser.GameObjects.Text;
+  private bellPrompt?: Phaser.GameObjects.Text;
+  private townHallRect?: Phaser.GameObjects.Rectangle;
+  private tilemapLayer?: Phaser.Tilemaps.TilemapLayer;
+  private readonly roomLabels: Phaser.GameObjects.Text[] = [];
+  /** The two critical-sabotage repair point markers, hidden until one is active. */
+  private readonly repairMarkers = new Map<CriticalRepairPointId, Phaser.GameObjects.Rectangle>();
+  private repairPrompt?: Phaser.GameObjects.Text;
+
+  /** Every archetype's registered animation keys, by archetype id. */
+  private readonly characterAnims = new Map<string, CharacterAnimSet>();
+
+  /**
+   * The fog visual: a screen-space darkness with a soft-edged hole erased
+   * around the local player each frame. Presentation only — what actually
+   * keeps distant players secret is the server never sending them (see the
+   * `filterChildren` on the server's `GameState`); this overlay just makes
+   * the world look the way the data already behaves.
+   */
+  private fogOverlay?: Phaser.GameObjects.RenderTexture;
+  private fogBrush?: Phaser.GameObjects.Image;
+  /** Colour grade, light bleed, ambient particles, puddles and screen shake — see the class doc. */
+  private atmosphere!: PhaseAtmosphere;
+  /** Starts at 0 so the world irises open on spawn. */
+  private fogRadius = 0;
+  private fogAlpha = FOG_MAX_ALPHA;
+  /**
+   * True while a mini-game modal is open on the React side. Movement input
+   * and the "press E" prompt both freeze during this — see `update()`.
+   */
+  private taskModalOpen = false;
+
+  private readonly bodies = new Map<string, BodyEntity>();
+  /**
+   * Whether the local player is dead. Ghosts are drawn semi-transparently for
+   * other ghosts; the living never receive them at all, so there is nothing
+   * for this flag to hide.
+   */
+  private localIsGhost = false;
+  /** Last targets emitted to React, as a stable key, so we only emit on change. */
+  private lastPublishedAbilityTargetKey: string | null = null;
+  /** The local role's PLAYING-phase abilities — see `GameSceneData`. */
+  private abilitySlots: AbilitySlotInfo[] = [];
 
   constructor() {
     super("game");
@@ -82,15 +293,78 @@ export class GameScene extends Phaser.Scene {
 
   init(data: GameSceneData): void {
     this.room = data.room;
+    this.initialTasks = data.tasks;
+    this.abilitySlots = data.abilitySlots;
   }
 
   create(): void {
     const keyboard = this.input.keyboard;
     if (keyboard) {
       this.keys = keyboard.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT") as MoveKeys;
+      this.eKey = keyboard.addKey("E");
+      this.rKey = keyboard.addKey("R");
+      this.bKey = keyboard.addKey("B");
       // Stop arrow keys from scrolling the page while playing.
-      keyboard.addCapture(["W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT"]);
+      keyboard.addCapture(["W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "E", "R", "B"]);
     }
+
+    // Drawn first so every other game object (players, task markers, the
+    // town hall marker) naturally layers on top of it — Phaser stacks same-
+    // depth objects in creation order.
+    this.createTilemap();
+    // Constructed here — right after the tile layer, before room labels or
+    // any player exists — so its puddle decals (default depth, no explicit
+    // z) land in the same "layers above ground, below everything else"
+    // creation-order stack this comment already relies on. Its other pieces
+    // (colour grade, light glows, particles) use explicit depths and don't
+    // care where in this sequence they're built.
+    this.atmosphere = new PhaseAtmosphere(this);
+    this.disposers.push(
+      this.room.state.listen("sabotageActive", (active) => this.atmosphere.setSabotageActive(active)),
+    );
+    // The Stranger's tunnel is "never fully invisible" — a sound broadcasts
+    // to every client (not fog-filtered) at both fixed endpoints; each
+    // client independently decides whether it's close enough to hear it.
+    this.disposers.push(
+      this.room.onMessage<TunnelSoundMessage>("tunnelSound", (message) =>
+        this.playTunnelSoundIfAudible(message),
+      ),
+    );
+    this.createRoomLabels();
+
+    // Registered before any player sprite exists — `addPlayer` needs an
+    // animation to play the instant an entity is created.
+    for (const set of buildCharacterSpriteSheet(this)) {
+      this.characterAnims.set(set.archetypeId, set);
+    }
+
+    // The world is far bigger than the viewport; the camera follows the
+    // local player around it once they exist (see `addPlayer`) and is
+    // fenced to the map's own edges so it never shows off-map void.
+    this.cameras.main.setBounds(0, 0, MAP.width, MAP.height);
+
+    this.createTownHallMarker();
+    this.createRepairMarkers();
+    this.createFogOverlay();
+    this.createTaskMarkers(this.initialTasks);
+    // Progress after the initial seed flows through here, independent of the
+    // React `tasks` prop — see the doc on `GameSceneData.tasks`.
+    this.disposers.push(
+      this.room.onMessage<TaskProgressMessage>("taskProgress", (message) =>
+        this.applyTaskProgress(message),
+      ),
+    );
+
+    // The React/Phaser bridge for mini-games: this scene decides WHEN a task
+    // opens (proximity + E, still checked here) and emits it on the Game's
+    // global emitter — GameCanvas relays that up to React, which renders the
+    // actual mini-game and reports back on the same channel when it's done.
+    // See GameCanvas.tsx for the other half of this bridge.
+    const onTaskClose = () => {
+      this.taskModalOpen = false;
+    };
+    this.game.events.on("task:close", onTaskClose);
+    this.disposers.push(() => this.game.events.off("task:close", onTaskClose));
 
     const players = this.room.state.players;
 
@@ -101,6 +375,18 @@ export class GameScene extends Phaser.Scene {
     );
     this.disposers.push(
       players.onRemove((_player, key) => this.removePlayer(key)),
+    );
+
+    // Bodies are public state — every client, living or dead, draws them.
+    const bodies = this.room.state.bodies;
+    this.disposers.push(bodies.onAdd((body, key) => this.addBody(body, key)));
+    this.disposers.push(bodies.onRemove((_body, key) => this.removeBody(key)));
+
+    // An ejected player leaves no body, so the graveyard is the only signal
+    // that they're gone. Without this their sprite would linger for the
+    // living exactly the way a killed player's used to.
+    this.disposers.push(
+      this.room.state.deadPlayerIds.onAdd((id: string) => this.onPlayerConfirmedDead(id)),
     );
 
     // Tear the state listeners down when this scene goes away. React StrictMode
@@ -115,11 +401,24 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Dev aid: current rendered circle positions, keyed by session id. */
-  getRenderedPositions(): Record<string, { x: number; y: number; local: boolean }> {
-    const out: Record<string, { x: number; y: number; local: boolean }> = {};
+  /**
+   * Dev aid: current rendered sprite positions, keyed by session id.
+   * `visible` is the sprite's own draw state (`fresh` in `render()`) — the
+   * ground truth for "is this entity actually being shown right now", as
+   * distinct from merely being a (possibly stale) key in `this.entities` or
+   * in `room.state.players`: Colyseus never retracts a key once a filter has
+   * let it through once, so `.has()` alone can't tell a currently-visible
+   * entity from a stale one the fog has since hidden again.
+   */
+  getRenderedPositions(): Record<string, { x: number; y: number; local: boolean; visible: boolean }> {
+    const out: Record<string, { x: number; y: number; local: boolean; visible: boolean }> = {};
     this.entities.forEach((entity, key) => {
-      out[key] = { x: entity.circle.x, y: entity.circle.y, local: entity.isLocal };
+      out[key] = {
+        x: entity.sprite.x,
+        y: entity.sprite.y,
+        local: entity.isLocal,
+        visible: entity.sprite.visible,
+      };
     });
     return out;
   }
@@ -129,20 +428,65 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Sample input and advance prediction on a fixed timestep, independent of
-    // frame rate, so a command always represents exactly SIM_DT of movement.
-    this.inputAccumulator += delta;
-    let steps = 0;
-    while (this.inputAccumulator >= SIM_DT_MS && steps < MAX_STEPS_PER_FRAME) {
-      this.sampleAndSend();
-      this.inputAccumulator -= SIM_DT_MS;
-      steps++;
-    }
-    if (this.inputAccumulator > SIM_DT_MS * MAX_STEPS_PER_FRAME) {
-      this.inputAccumulator = 0;
+    // Freeze movement and task interaction while a mini-game modal is open —
+    // the player is looking at a React overlay, not the world.
+    if (!this.taskModalOpen) {
+      // Sample input and advance prediction on a fixed timestep, independent
+      // of frame rate, so a command always represents exactly SIM_DT of
+      // movement.
+      this.inputAccumulator += delta;
+      let steps = 0;
+      while (this.inputAccumulator >= SIM_DT_MS && steps < MAX_STEPS_PER_FRAME) {
+        this.sampleAndSend();
+        this.inputAccumulator -= SIM_DT_MS;
+        steps++;
+      }
+      if (this.inputAccumulator > SIM_DT_MS * MAX_STEPS_PER_FRAME) {
+        this.inputAccumulator = 0;
+      }
     }
 
     this.render();
+    this.renderFog();
+    this.atmosphere.update(delta);
+
+    if (this.taskModalOpen) {
+      this.interactPrompt?.setVisible(false);
+      this.reportPrompt?.setVisible(false);
+      this.bellPrompt?.setVisible(false);
+      this.repairPrompt?.setVisible(false);
+    } else {
+      this.updateTaskInteraction();
+      this.updateReportPrompt();
+      this.updateBellPrompt();
+      this.updateRepairPrompt();
+    }
+
+    this.updateCommsVisibility();
+    this.publishAbilityTarget();
+  }
+
+  /**
+   * Push the current target for every PLAYING-phase ability the local role
+   * has up to React (which owns the ability buttons), but only when
+   * something actually changed — this runs every frame.
+   */
+  private publishAbilityTarget(): void {
+    const targets: Record<string, AbilityTargetInfo | null> = {};
+    for (const slot of this.abilitySlots) {
+      targets[slot.ability] = this.taskModalOpen ? null : this.getAbilityTarget(slot.targetKind);
+    }
+    const key = this.abilitySlots
+      .map((slot) => {
+        const target = targets[slot.ability];
+        return `${slot.ability}:${target ? `${target.kind}:${target.id ?? target.room ?? ""}` : ""}`;
+      })
+      .join("|");
+    if (key === this.lastPublishedAbilityTargetKey) {
+      return;
+    }
+    this.lastPublishedAbilityTargetKey = key;
+    this.game.events.emit("ability:targets", targets);
   }
 
   private sampleAndSend(): void {
@@ -157,7 +501,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.seq += 1;
-    local.predicted = applyInput(local.predicted, dir, SIM_DT);
+    local.predicted = applyInputWithLocks(
+      local.predicted,
+      dir,
+      SIM_DT,
+      this.lockedRoomSlugsSnapshot(),
+    );
     this.pending.push({ seq: this.seq, dir });
     if (this.pending.length > MAX_PENDING) {
       this.pending.splice(0, this.pending.length - MAX_PENDING);
@@ -183,18 +532,150 @@ export class GameScene extends Phaser.Scene {
   }
 
   private render(): void {
-    const renderTime = performance.now() - INTERP_DELAY_MS;
+    const now = performance.now();
+    const renderTime = now - INTERP_DELAY_MS;
+    const localPos = this.entities.get(this.room.sessionId)?.predicted;
 
-    for (const entity of this.entities.values()) {
+    // Ambience is purely a function of where the local player's own body
+    // currently stands — ghosts included, they still perceive the town
+    // around them. `setRoom` itself no-ops when the room hasn't changed.
+    if (localPos) {
+      audioEngine.setRoom(roomSlugAt(localPos.x, localPos.y));
+    }
+
+    for (const [id, entity] of this.entities) {
+      if (!entity.isLocal) {
+        // Recency is visibility — see `VISIBILITY_TIMEOUT_MS`. A stale
+        // entity is one the server has stopped sending: its last known
+        // position may be seconds out of date, so drawing it would show a
+        // phantom standing where someone no longer is.
+        const wasFogVisible = entity.fogVisible;
+        const fresh = now - entity.lastFreshAt < VISIBILITY_TIMEOUT_MS;
+        if (fresh && !wasFogVisible && entity.buffer && entity.buffer.length > 1) {
+          // Re-emerging from the fog: drop the stale interpolation history
+          // so they pop in where they are, rather than sliding there from
+          // wherever they were last seen.
+          entity.buffer = entity.buffer.slice(-1);
+        }
+        entity.fogVisible = fresh;
+        entity.sprite.setVisible(fresh);
+        entity.badge.setVisible(fresh);
+        entity.label.setVisible(fresh);
+        if (!fresh) {
+          // Leaving fog is exactly leaving earshot too — same principle as
+          // the position sync itself never sending what's out of range.
+          if (wasFogVisible && entity.hasFootstepVoice) {
+            audioEngine.removeFootstepSource(id);
+            entity.hasFootstepVoice = false;
+          }
+          continue;
+        }
+      }
+
       const pos = entity.isLocal
         ? entity.predicted
         : this.interpolate(entity, renderTime);
       if (!pos) {
         continue;
       }
-      entity.circle.setPosition(pos.x, pos.y);
+      entity.sprite.setPosition(pos.x, pos.y);
+      entity.badge.setPosition(pos.x + BADGE_OFFSET.x, pos.y + BADGE_OFFSET.y);
       entity.label.setPosition(pos.x, pos.y - LABEL_OFFSET_Y);
+      // Read before `updateCharacterAnimation` overwrites `entity.lastPos`
+      // to `pos` at its end.
+      this.updateFootstepAudio(id, entity, pos, localPos);
+      this.updateCharacterAnimation(id, entity, pos);
     }
+  }
+
+  /**
+   * Spatial footsteps: a persistent pan/distance/muffle voice per audible
+   * remote player (see `audio/synth/footstep.ts`), fed a burst every
+   * `FOOTSTEP_STEP_DISTANCE` of actual walked movement.
+   *
+   * Eligibility is deliberately narrow — remote, currently fog-visible
+   * (never local, never anyone the fog is already hiding), and alive (a
+   * drifting ghost doesn't step). That fog gate is not a nicety: `pos` here
+   * is only ever a position this client's socket was already sent, so a
+   * source that failed the eligibility check was never going to leak
+   * anything by being skipped — the same guarantee the visual fog relies
+   * on, applied to the audio channel instead of the render loop.
+   *
+   * "Direction" is left/right stereo pan and "distance" is loudness plus
+   * how muffled the burst sounds, both normalised against the *listener's*
+   * current vision radius (`visionRadiusAt`) — so footstep range always
+   * matches how far the listener can presently see, indoors or out.
+   */
+  private updateFootstepAudio(
+    id: string,
+    entity: PlayerEntity,
+    pos: Vec2,
+    localPos: Vec2 | undefined,
+  ): void {
+    const eligible = !entity.isLocal && entity.fogVisible && !!localPos && !this.isDeadPlayer(id);
+    if (!eligible) {
+      if (entity.hasFootstepVoice) {
+        audioEngine.removeFootstepSource(id);
+        entity.hasFootstepVoice = false;
+      }
+      return;
+    }
+    entity.hasFootstepVoice = true;
+
+    const toDx = pos.x - localPos!.x;
+    const toDy = pos.y - localPos!.y;
+    const radius = visionRadiusAt(localPos!);
+    const proximity = Math.max(0, 1 - Math.hypot(toDx, toDy) / radius);
+    const pan = Math.max(-1, Math.min(1, toDx / radius));
+    audioEngine.updateFootstepSpatial(id, pan, proximity);
+
+    const prev = entity.lastPos ?? pos;
+    const stepDistance = Math.hypot(pos.x - prev.x, pos.y - prev.y);
+    if (stepDistance <= MOVEMENT_EPSILON) {
+      return;
+    }
+    entity.footstepDistance += stepDistance;
+    if (entity.footstepDistance >= FOOTSTEP_STEP_DISTANCE) {
+      entity.footstepDistance %= FOOTSTEP_STEP_DISTANCE;
+      audioEngine.triggerFootstep(id);
+    }
+  }
+
+  /**
+   * Choose which loop this character should be showing right now — idle,
+   * walking, working a task, or drifting as a ghost — and which way they
+   * face. Facing is derived purely from horizontal movement (no facing
+   * exists server-side to read), and only ever flips on a real horizontal
+   * step so a player moving straight up or down keeps whichever way they
+   * were last walking rather than snapping to a default.
+   *
+   * The one-shot death fall (`playDeathTransition`) is deliberately left
+   * alone here — this only manages the four looping states, and stays out
+   * of the way for as long as `entity.deathPlaying` is set.
+   */
+  private updateCharacterAnimation(id: string, entity: PlayerEntity, pos: Vec2): void {
+    const prev = entity.lastPos ?? pos;
+    const dx = pos.x - prev.x;
+    const dy = pos.y - prev.y;
+    entity.lastPos = pos;
+
+    if (Math.abs(dx) > MOVEMENT_EPSILON) {
+      entity.sprite.setFlipX(dx < 0);
+    }
+
+    if (entity.deathPlaying) {
+      return;
+    }
+
+    const key = this.isDeadPlayer(id)
+      ? entity.anims.ghost
+      : id === this.room.sessionId && this.taskModalOpen
+        ? entity.anims.task
+        : Math.hypot(dx, dy) > MOVEMENT_EPSILON
+          ? entity.anims.walk
+          : entity.anims.idle;
+
+    entity.sprite.play(key, true);
   }
 
   /** Interpolate a remote player between the two snapshots straddling renderTime. */
@@ -227,9 +708,30 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const color = this.parseColor(player.color);
-    const circle = this.add.circle(player.x, player.y, PLAYER_RADIUS, color);
-    circle.setStrokeStyle(2, 0x000000, 0.35);
+    // The costume is derived from the player's already-public `color`, not
+    // assigned by the server — see `characters/assign.ts` for why that
+    // matters (no new network field, and archetype can never correlate
+    // with the one thing that actually is secret).
+    const archetype = archetypeForColor(player.color);
+    const anims = this.characterAnims.get(archetype.id);
+    if (!anims) {
+      // The sheet is built synchronously in `create()` before any player
+      // can exist, so this only fires if that ordering is ever broken.
+      throw new Error(`No animations registered for archetype "${archetype.id}"`);
+    }
+
+    const sprite = this.add
+      .sprite(player.x, player.y, "characters")
+      .setOrigin(CHARACTER_ORIGIN_X, CHARACTER_ORIGIN_Y);
+    sprite.play(anims.idle);
+
+    const badge = this.add.circle(
+      player.x + BADGE_OFFSET.x,
+      player.y + BADGE_OFFSET.y,
+      BADGE_RADIUS,
+      this.parseColor(player.color),
+    );
+    badge.setStrokeStyle(1.5, 0x000000, 0.5);
 
     const label = this.add
       .text(player.x, player.y - LABEL_OFFSET_Y, player.name, {
@@ -240,17 +742,40 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5, 1);
 
     const isLocal = key === this.room.sessionId;
-    const entity: PlayerEntity = { circle, label, disposers: [], isLocal };
+    const entity: PlayerEntity = {
+      sprite,
+      label,
+      badge,
+      anims,
+      disposers: [],
+      isLocal,
+      lastFreshAt: isLocal ? Number.POSITIVE_INFINITY : 0,
+      fogVisible: isLocal,
+      deathPlaying: false,
+      footstepDistance: 0,
+      hasFootstepVoice: false,
+    };
 
     if (isLocal) {
       entity.predicted = { x: player.x, y: player.y };
       // Reconcile prediction against every authoritative update.
       entity.disposers.push(player.onChange(() => this.reconcile(player, entity)));
+      // The world is bigger than the screen; follow whoever this client is
+      // playing as, smoothed rather than pinned so small corrections (like
+      // reconciliation snaps) don't visibly jerk the camera.
+      this.cameras.main.startFollow(sprite, true, CAMERA_LERP, CAMERA_LERP);
     } else {
+      // Hidden until the server actually delivers them: a remote entry can
+      // be a stale relic (the fog retracts nothing), so existence in the
+      // state map is not proof of presence — a fresh update is.
+      sprite.setVisible(false);
+      badge.setVisible(false);
+      label.setVisible(false);
       entity.buffer = [{ t: performance.now(), x: player.x, y: player.y }];
       entity.disposers.push(
         player.onChange(() => {
           entity.buffer?.push({ t: performance.now(), x: player.x, y: player.y });
+          entity.lastFreshAt = performance.now();
         }),
       );
     }
@@ -259,10 +784,612 @@ export class GameScene extends Phaser.Scene {
       player.listen("name", (value) => label.setText(value)),
     );
     entity.disposers.push(
-      player.listen("color", (value) => circle.setFillStyle(this.parseColor(value))),
+      // The costume itself is fixed at creation (see above); a colour
+      // change — which never happens today, but the schema allows it —
+      // only ever needs to move the identity badge, not re-derive an
+      // archetype for an already-animating sprite.
+      player.listen("color", (value) => badge.setFillStyle(this.parseColor(value))),
     );
-
     this.entities.set(key, entity);
+    // Liveness comes from the bodies map, not `player.alive` — see
+    // `isDeadPlayer` for why that flag is unreliable on living clients.
+    this.applyGhostStyle(entity, !this.isDeadPlayer(key));
+  }
+
+  /**
+   * Ghosts render translucent. This only ever applies to *other ghosts* seen
+   * by a ghost — a living client is never sent a dead player in the first
+   * place, so this is presentation, not concealment.
+   */
+  private applyGhostStyle(entity: PlayerEntity, alive: boolean): void {
+    const alpha = alive ? 1 : GHOST_ALPHA;
+    entity.sprite.setAlpha(alpha);
+    entity.badge.setAlpha(alive ? 1 : 0);
+    entity.label.setAlpha(alpha);
+  }
+
+  /**
+   * The one-shot fall, played exactly once at the moment this client learns
+   * a specific player has just died — see the three call sites in `addBody`
+   * / `onPlayerConfirmedDead` / `becomeGhost`. While it plays, the per-frame
+   * animation selector in `render` leaves the sprite alone (see
+   * `entity.deathPlaying`); once Phaser reports the animation complete, it
+   * hands off to the looping ghost-drift animation on its own.
+   */
+  private playDeathTransition(entity: PlayerEntity): void {
+    if (entity.deathPlaying) {
+      return;
+    }
+    entity.deathPlaying = true;
+    entity.sprite.play(entity.anims.death);
+    entity.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      entity.deathPlaying = false;
+      entity.sprite.play(entity.anims.ghost, true);
+    });
+  }
+
+  /**
+   * Whether a player is dead, from the two unfiltered public signals.
+   *
+   * A player's own `alive` flag is not usable here: the server's per-child
+   * filter stops sending a dead player to living clients at the very moment
+   * `alive` flips, so the living never receive that flip and their stale copy
+   * reads `alive: true` forever.
+   *
+   * Bodies cover deaths during play. `deadPlayerIds` covers the rest — it
+   * survives the body clearing that happens at every meeting, and an ejected
+   * player never leaves a body at all.
+   */
+  private isDeadPlayer(id: string): boolean {
+    return this.room.state.bodies.has(id) || this.room.state.deadPlayerIds.includes(id);
+  }
+
+  private addBody(body: BodyState, key: string): void {
+    if (this.torndown || this.bodies.has(key)) {
+      return;
+    }
+    const circle = this.add.circle(body.x, body.y, PLAYER_RADIUS, this.parseColor(body.color));
+    circle.setStrokeStyle(3, 0x000000, 0.6);
+    circle.setAlpha(0.75);
+    const cross = this.add
+      .text(body.x, body.y, "✕", {
+        fontFamily: "sans-serif",
+        fontSize: "16px",
+        color: "#000000",
+      })
+      .setOrigin(0.5, 0.5);
+
+    this.bodies.set(key, { circle, cross });
+
+    if (body.playerId === this.room.sessionId) {
+      this.becomeGhost();
+      return;
+    }
+
+    if (this.localIsGhost) {
+      // We are a ghost, so we keep seeing them — restyle them as one and
+      // play their fall, since this is this client's first word of it.
+      const entity = this.entities.get(body.playerId);
+      if (entity) {
+        this.applyGhostStyle(entity, false);
+        this.playDeathTransition(entity);
+      }
+      audioEngine.playStinger("bodyFound");
+      this.atmosphere.shakeBodyFound();
+      return;
+    }
+
+    // We are alive. The server has just stopped sending this player to us,
+    // which would otherwise leave their sprite frozen on top of their own
+    // corpse — and would let a stranger target a dead player. Drop it.
+    this.removePlayer(body.playerId);
+    // A body entering *our own* fog is a witnessed kill or a fresh
+    // discovery either way — the victim and killer already got the "kill"
+    // stinger privately (see `useGameAudio`'s "killed"/"killConfirmed"
+    // handling); this is the cue for everyone else this body just became
+    // visible to.
+    audioEngine.playStinger("bodyFound");
+    this.atmosphere.shakeBodyFound();
+  }
+
+  /**
+   * A player has been publicly confirmed dead (a graveyard entry). Mirrors
+   * `addBody`'s handling, which is the other way this can happen.
+   */
+  private onPlayerConfirmedDead(id: string): void {
+    if (this.torndown) {
+      return;
+    }
+
+    if (id === this.room.sessionId) {
+      if (!this.localIsGhost) {
+        this.becomeGhost();
+      }
+      return;
+    }
+
+    if (this.localIsGhost) {
+      const entity = this.entities.get(id);
+      if (entity) {
+        this.applyGhostStyle(entity, false);
+        this.playDeathTransition(entity);
+      }
+      return;
+    }
+
+    // We're alive, so the server has stopped sending them to us; drop the
+    // sprite rather than leave it frozen where they last stood.
+    this.removePlayer(id);
+  }
+
+  /**
+   * Called when the local player's own body appears. From here on the server
+   * sends us everyone — every ghost, and every living player the fog used to
+   * hide. Colyseus only streams *changes*, so the sprites rebuilt here start
+   * from whatever stale entries we still hold; the fog heartbeat (every
+   * position, every patch — see `GameRoom.update`) has them all fresh within
+   * a patch interval, at which point the staleness gate in `render` unhides
+   * them and the fog overlay itself dissolves (see `renderFog`).
+   */
+  private becomeGhost(): void {
+    this.localIsGhost = true;
+
+    const local = this.entities.get(this.room.sessionId);
+    if (local) {
+      this.playDeathTransition(local);
+    }
+
+    this.room.state.players.forEach((player, key) => {
+      if (!this.entities.has(key)) {
+        this.addPlayer(player, key);
+      }
+      const entity = this.entities.get(key);
+      if (entity) {
+        // Every OTHER ghost here is a resync, not a new death — they may
+        // have died long before this client could see them. Only the local
+        // player's own fall above is a live transition worth animating.
+        this.applyGhostStyle(entity, !this.isDeadPlayer(key));
+      }
+    });
+  }
+
+  private removeBody(key: string): void {
+    const body = this.bodies.get(key);
+    if (!body) {
+      return;
+    }
+    body.circle.destroy();
+    body.cross.destroy();
+    this.bodies.delete(key);
+  }
+
+  /**
+   * The current target for the local player's own ability, by target kind —
+   * purely a hint for the UI (which button shows, and whether it's enabled);
+   * the server independently re-derives and re-validates everything about
+   * an ability attempt before it does anything. `"none"` always reports
+   * available (no target to gather); `"player"`/`"body"`/`"room"` each
+   * follow the same "nearest thing in range, in fog, in sight" shape the
+   * kill button always has.
+   */
+  getAbilityTarget(kind: AbilityTargetKind): AbilityTargetInfo | null {
+    if (kind === "none") {
+      return { kind: "none" };
+    }
+    if (this.localIsGhost) {
+      return null;
+    }
+    const local = this.entities.get(this.room.sessionId);
+    const pos = local?.predicted;
+    if (!pos) {
+      return null;
+    }
+
+    if (kind === "player") {
+      const target = this.nearestPlayerTarget(pos);
+      return target && { kind: "player", id: target.id, name: target.name };
+    }
+    if (kind === "body") {
+      const bodyId = this.findNearestBody(pos);
+      if (!bodyId) {
+        return null;
+      }
+      const body = this.room.state.bodies.get(bodyId);
+      return { kind: "body", id: bodyId, name: body?.name ?? "?" };
+    }
+    // "room": Watchman bugs wherever they currently stand — no proximity
+    // search needed, just the tile the local player is on right now.
+    return { kind: "room", room: roomSlugAt(pos.x, pos.y) };
+  }
+
+  /**
+   * Play the tunnel's entry/exit stinger only if the local player is
+   * currently close enough to either endpoint — `TUNNEL_SOUND_RADIUS` is
+   * deliberately wider than sight, since a sound isn't blocked by walls the
+   * way sight is. The broadcast itself carries no information about who
+   * used the tunnel, only that something happened at these two fixed,
+   * already-public map points.
+   */
+  private playTunnelSoundIfAudible(message: TunnelSoundMessage): void {
+    const pos = this.entities.get(this.room.sessionId)?.predicted;
+    if (!pos) {
+      return;
+    }
+    const audible = message.points.some(
+      (point) => Phaser.Math.Distance.Between(pos.x, pos.y, point.x, point.y) <= TUNNEL_SOUND_RADIUS,
+    );
+    if (audible) {
+      audioEngine.playStinger("tunnel");
+    }
+  }
+
+  /** The nearest living player within `KILL_RANGE`, in fog, in range — shared by kill and protect. */
+  private nearestPlayerTarget(pos: Vec2): { id: string; name: string } | null {
+    let best: { id: string; name: string } | null = null;
+    let bestDistance = KILL_RANGE;
+
+    for (const [id, entity] of this.entities) {
+      if (id === this.room.sessionId || this.isDeadPlayer(id)) {
+        continue;
+      }
+      // No targeting into the fog: a hidden entity is a stale relic, not a
+      // player standing there. (The server re-checks range and line of
+      // sight regardless — this just keeps the button honest.)
+      if (!entity.fogVisible) {
+        continue;
+      }
+      const player = this.room.state.players.get(id);
+      if (!player) {
+        continue;
+      }
+      const distance = Phaser.Math.Distance.Between(pos.x, pos.y, entity.sprite.x, entity.sprite.y);
+      if (distance <= bestDistance) {
+        best = { id, name: player.name };
+        bestDistance = distance;
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * Builds the town's tile grid into an actual Phaser tilemap. The data and
+   * the tile-kind-to-index mapping both come from `@foghaven/shared` — the
+   * exact same grid `applyInput` collides against on both client and server
+   * — so what gets drawn and what gets enforced can never drift apart.
+   *
+   * There is no tileset image asset; one is generated on the fly from three
+   * flat colours (wall / street / room floor). That keeps the map data-driven
+   * and asset-free rather than tying it to art that doesn't exist yet.
+   */
+  private createTilemap(): void {
+    if (!this.textures.exists(TILESET_KEY)) {
+      const gfx = this.add.graphics();
+      gfx.fillStyle(TILE_COLOR_WALL).fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+      gfx.fillStyle(TILE_COLOR_STREET).fillRect(TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
+      gfx.fillStyle(TILE_COLOR_ROOM).fillRect(TILE_SIZE * 2, 0, TILE_SIZE, TILE_SIZE);
+      gfx.generateTexture(TILESET_KEY, TILE_SIZE * 3, TILE_SIZE);
+      gfx.destroy();
+    }
+
+    const map = this.make.tilemap({
+      data: TILEMAP_DATA,
+      tileWidth: TILE_SIZE,
+      tileHeight: TILE_SIZE,
+    });
+    const tileset = map.addTilesetImage(TILESET_KEY, TILESET_KEY, TILE_SIZE, TILE_SIZE, 0, 0);
+    this.tilemapLayer = tileset ? (map.createLayer(0, tileset, 0, 0) ?? undefined) : undefined;
+  }
+
+  /** Ambient wayfinding signage — one label per room, at its interior center. */
+  private createRoomLabels(): void {
+    for (const room of ROOMS) {
+      const label = this.add
+        .text(room.center.x, room.center.y, i18n.t(`rooms.${room.slug}`), {
+          fontFamily: "sans-serif",
+          fontSize: ROOM_LABEL_FONT_SIZE,
+          color: ROOM_LABEL_COLOR,
+        })
+        .setOrigin(0.5, 0.5)
+        .setAlpha(0.8);
+      this.roomLabels.push(label);
+    }
+  }
+
+  /**
+   * The visual "stand here" marker for the emergency bell — deliberately
+   * unlabelled. The building it sits in front of already carries a "Town
+   * Hall" sign from `createRoomLabels`; a second copy of the same text
+   * floating in the plaza would just be noise.
+   */
+  private createTownHallMarker(): void {
+    this.townHallRect = this.add
+      .rectangle(TOWN_HALL.x, TOWN_HALL.y, TOWN_HALL_MARKER_SIZE, TOWN_HALL_MARKER_SIZE, TOWN_HALL_MARKER_COLOR)
+      .setStrokeStyle(2, 0x000000, 0.5);
+  }
+
+  /**
+   * The two critical-sabotage repair points, at the Lighthouse's fixed
+   * coordinates from the shared registry. Created once, hidden until a
+   * critical sabotage is actually active (see `updateRepairPrompt`) —
+   * there's nothing to repair the rest of the game.
+   */
+  private createRepairMarkers(): void {
+    for (const [id, point] of Object.entries(CRITICAL_REPAIR_POINTS) as Array<
+      [CriticalRepairPointId, Vec2]
+    >) {
+      const marker = this.add
+        .rectangle(point.x, point.y, REPAIR_MARKER_SIZE, REPAIR_MARKER_SIZE, REPAIR_MARKER_BROKEN_COLOR)
+        .setStrokeStyle(2, 0x000000, 0.6)
+        .setVisible(false);
+      this.repairMarkers.set(id, marker);
+    }
+  }
+
+  /**
+   * Build the fog: a viewport-sized darkness with a soft radial hole erased
+   * around the player each frame. The hole's edge is a pre-rendered radial
+   * gradient — solid clarity through the middle of the vision radius,
+   * fading to full darkness AT the radius — so what the eye loses at the
+   * fog's edge is exactly what the server stops sending there, and nothing
+   * ever visibly pops at a hard circle boundary.
+   */
+  private createFogOverlay(): void {
+    if (!this.textures.exists(FOG_BRUSH_KEY)) {
+      const canvas = this.textures.createCanvas(FOG_BRUSH_KEY, FOG_BRUSH_SIZE, FOG_BRUSH_SIZE);
+      if (canvas) {
+        const ctx = canvas.getContext();
+        const half = FOG_BRUSH_SIZE / 2;
+        const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+        gradient.addColorStop(0, "rgba(255,255,255,1)");
+        gradient.addColorStop(0.55, "rgba(255,255,255,1)");
+        gradient.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, FOG_BRUSH_SIZE, FOG_BRUSH_SIZE);
+        canvas.refresh();
+      }
+    }
+
+    // The brush is never on the display list — it exists only to be stamped
+    // into the overlay with the erase blend each frame.
+    this.fogBrush = this.make.image({ key: FOG_BRUSH_KEY, add: false });
+    this.fogOverlay = this.add
+      .renderTexture(0, 0, this.scale.width, this.scale.height)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(FOG_DEPTH);
+  }
+
+  /**
+   * Redraw the fog for this frame: fill, then erase a soft circle at the
+   * player's screen position. Radius follows the ground the player stands
+   * on (`visionRadiusAt` — the same function the server filters by), eased
+   * so stepping through a doorway swells the light rather than snapping it.
+   * Death dissolves the fog entirely: the dead see the whole town, and the
+   * server really does send them all of it.
+   */
+  private renderFog(): void {
+    const rt = this.fogOverlay;
+    const brush = this.fogBrush;
+    if (!rt || !brush) {
+      return;
+    }
+
+    const pos = this.entities.get(this.room.sessionId)?.predicted;
+    // The lamplighter's lit lamp dissolves the fog for everyone, the same
+    // way being a ghost already does — the server's own visibility bypass
+    // (see `lampLit` on `GameState.players`'s filterChildren) is what
+    // actually reveals anyone; this only makes the world look the way the
+    // data already behaves.
+    const targetAlpha = this.localIsGhost || this.room.state.lampLit ? 0 : FOG_MAX_ALPHA;
+    this.fogAlpha += (targetAlpha - this.fogAlpha) * FOG_FADE_RATE;
+
+    rt.clear();
+    if (!pos || this.fogAlpha < 0.01) {
+      return;
+    }
+
+    this.fogRadius +=
+      (visionRadiusAt(pos, this.room.state.sabotageActive) - this.fogRadius) * FOG_RADIUS_RATE;
+
+    rt.fill(FOG_COLOR, this.fogAlpha);
+    const cam = this.cameras.main;
+    brush.setScale((this.fogRadius * 2) / FOG_BRUSH_SIZE);
+    rt.erase(brush, pos.x - cam.scrollX, pos.y - cam.scrollY);
+    this.atmosphere.stampLightBleed(rt, cam.scrollX, cam.scrollY);
+  }
+
+  /**
+   * Show a "press R" prompt when the local player is near an unreported body,
+   * and ask the server to start a meeting on a fresh R press. Same split as
+   * every other interaction here: this is only a proximity hint, the server
+   * re-checks the reporter's distance to that exact body before anything
+   * happens — see `GameRoom.handleReportBody`.
+   */
+  private updateReportPrompt(): void {
+    if (this.localIsGhost) {
+      this.reportPrompt?.setVisible(false);
+      return;
+    }
+    const local = this.entities.get(this.room.sessionId);
+    const pos = local?.predicted;
+    if (!pos) {
+      this.reportPrompt?.setVisible(false);
+      return;
+    }
+
+    const nearestBodyId = this.findNearestBody(pos);
+
+    if (!this.reportPrompt) {
+      this.reportPrompt = this.add
+        .text(0, 0, i18n.t("game.reportPrompt"), {
+          fontFamily: "sans-serif",
+          fontSize: "13px",
+          color: "#ffffff",
+          backgroundColor: "#000000aa",
+          padding: { x: 6, y: 3 },
+        })
+        .setOrigin(0.5, 1);
+    }
+
+    if (nearestBodyId) {
+      this.reportPrompt.setPosition(pos.x, pos.y - LABEL_OFFSET_Y - 14);
+      this.reportPrompt.setVisible(true);
+    } else {
+      this.reportPrompt.setVisible(false);
+    }
+
+    if (nearestBodyId && Phaser.Input.Keyboard.JustDown(this.rKey)) {
+      this.room.send("report_body", { bodyId: nearestBodyId });
+    }
+  }
+
+  /** The nearest body's key (== the dead player's session id) in range, if any. */
+  private findNearestBody(pos: Vec2): string | undefined {
+    let best: string | undefined;
+    let bestDistance = REPORT_BODY_RANGE;
+
+    for (const [key, entity] of this.bodies) {
+      const bodyPos = { x: entity.circle.x, y: entity.circle.y };
+      const distance = Phaser.Math.Distance.Between(pos.x, pos.y, bodyPos.x, bodyPos.y);
+      if (distance <= bestDistance) {
+        // A corpse just across a wall is in range but not in sight; the
+        // server would refuse the report, so don't offer the prompt.
+        if (!canSee(pos, bodyPos)) {
+          continue;
+        }
+        best = key;
+        bestDistance = distance;
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * Show a "press B" prompt near the Town Hall and ask the server to ring the
+   * bell on a fresh press. Whether it actually rings — uses remaining,
+   * sabotage lock — is decided entirely server-side; a rejected ring is
+   * silent here, the same as every other rejected interaction in this scene.
+   */
+  private updateBellPrompt(): void {
+    if (this.localIsGhost) {
+      this.bellPrompt?.setVisible(false);
+      return;
+    }
+    const local = this.entities.get(this.room.sessionId);
+    const pos = local?.predicted;
+    if (!pos) {
+      this.bellPrompt?.setVisible(false);
+      return;
+    }
+
+    const inRange = Phaser.Math.Distance.Between(pos.x, pos.y, TOWN_HALL.x, TOWN_HALL.y) <= BELL_RANGE;
+
+    if (!this.bellPrompt) {
+      this.bellPrompt = this.add
+        .text(0, 0, i18n.t("game.bellPrompt"), {
+          fontFamily: "sans-serif",
+          fontSize: "13px",
+          color: "#ffffff",
+          backgroundColor: "#000000aa",
+          padding: { x: 6, y: 3 },
+        })
+        .setOrigin(0.5, 1);
+    }
+
+    if (inRange) {
+      this.bellPrompt.setPosition(pos.x, pos.y - LABEL_OFFSET_Y - 14);
+      this.bellPrompt.setVisible(true);
+    } else {
+      this.bellPrompt.setVisible(false);
+    }
+
+    if (inRange && Phaser.Input.Keyboard.JustDown(this.bKey)) {
+      this.room.send("call_meeting");
+    }
+  }
+
+  /**
+   * The Saboteur's comms sabotage blacks out room signage — the client's
+   * closest analog to a minimap, since there isn't a separate one. The task
+   * list going dark alongside it is React's job (`GameView` reads the same
+   * `commsSabotageActive` flag directly off `room.state`).
+   */
+  private updateCommsVisibility(): void {
+    const dark = this.room.state.commsSabotageActive;
+    for (const label of this.roomLabels) {
+      label.setVisible(!dark);
+    }
+  }
+
+  /**
+   * Show/color the two repair markers and a "press E" prompt near whichever
+   * unfixed one the local player is closest to. Whether a repair actually
+   * lands — proximity, whether it's already fixed, whether a critical
+   * sabotage is even running — is re-checked entirely server-side; this is
+   * only the hint.
+   */
+  private updateRepairPrompt(): void {
+    const active = this.room.state.criticalSabotageActive;
+    for (const [id, marker] of this.repairMarkers) {
+      if (!active) {
+        marker.setVisible(false);
+        continue;
+      }
+      const fixed = this.room.state.criticalRepairedPoints.includes(id);
+      marker.setVisible(true);
+      marker.setFillStyle(fixed ? REPAIR_MARKER_FIXED_COLOR : REPAIR_MARKER_BROKEN_COLOR);
+    }
+
+    if (!active || this.localIsGhost) {
+      this.repairPrompt?.setVisible(false);
+      return;
+    }
+    const local = this.entities.get(this.room.sessionId);
+    const pos = local?.predicted;
+    if (!pos) {
+      this.repairPrompt?.setVisible(false);
+      return;
+    }
+
+    let nearestId: CriticalRepairPointId | undefined;
+    let nearestDistance = REPAIR_RANGE;
+    for (const [id, point] of Object.entries(CRITICAL_REPAIR_POINTS) as Array<
+      [CriticalRepairPointId, Vec2]
+    >) {
+      if (this.room.state.criticalRepairedPoints.includes(id)) {
+        continue;
+      }
+      const distance = Phaser.Math.Distance.Between(pos.x, pos.y, point.x, point.y);
+      if (distance <= nearestDistance) {
+        nearestId = id;
+        nearestDistance = distance;
+      }
+    }
+
+    if (!this.repairPrompt) {
+      this.repairPrompt = this.add
+        .text(0, 0, i18n.t("game.repairPrompt"), {
+          fontFamily: "sans-serif",
+          fontSize: "13px",
+          color: "#ffffff",
+          backgroundColor: "#000000aa",
+          padding: { x: 6, y: 3 },
+        })
+        .setOrigin(0.5, 1);
+    }
+
+    if (nearestId) {
+      this.repairPrompt.setPosition(pos.x, pos.y - LABEL_OFFSET_Y - 14);
+      this.repairPrompt.setVisible(true);
+    } else {
+      this.repairPrompt.setVisible(false);
+    }
+
+    if (nearestId && Phaser.Input.Keyboard.JustDown(this.eKey)) {
+      this.room.send("repair_critical", { pointId: nearestId });
+    }
   }
 
   /**
@@ -274,10 +1401,120 @@ export class GameScene extends Phaser.Scene {
   private reconcile(player: PlayerState, entity: PlayerEntity): void {
     let pos: Vec2 = { x: player.x, y: player.y };
     this.pending = this.pending.filter((command) => command.seq > player.lastSeq);
+    const lockedRoomSlugs = this.lockedRoomSlugsSnapshot();
     for (const command of this.pending) {
-      pos = applyInput(pos, command.dir, SIM_DT);
+      pos = applyInputWithLocks(pos, command.dir, SIM_DT, lockedRoomSlugs);
     }
     entity.predicted = pos;
+  }
+
+  /** A plain-array snapshot of the currently locked rooms, for `applyInputWithLocks`. */
+  private lockedRoomSlugsSnapshot(): string[] {
+    const slugs: string[] = [];
+    this.room.state.lockedRoomSlugs.forEach((slug) => slugs.push(slug));
+    return slugs;
+  }
+
+  private createTaskMarkers(tasks: ClientTask[]): void {
+    for (const task of tasks) {
+      // A reconnect could in principle hand back an already-finished task;
+      // skip drawing a marker nobody needs to interact with.
+      if (task.completedSteps < task.totalSteps) {
+        this.addTaskMarker(task);
+      }
+    }
+  }
+
+  private addTaskMarker(task: ClientTask): void {
+    const rect = this.add
+      .rectangle(task.x, task.y, TASK_MARKER_SIZE, TASK_MARKER_SIZE, TASK_MARKER_COLOR)
+      .setStrokeStyle(2, 0x000000, 0.4);
+    const label = this.add
+      .text(task.x, task.y - TASK_LABEL_OFFSET_Y, task.room, {
+        fontFamily: "sans-serif",
+        fontSize: "11px",
+        color: "#ffd166",
+      })
+      .setOrigin(0.5, 1);
+
+    this.taskMarkers.set(task.id, { task, rect, label });
+  }
+
+  /**
+   * Applied identically whether the underlying task is real or fake — the
+   * client has no way to know which, by design. A finished task's marker is
+   * removed exactly like a real completion would be.
+   */
+  private applyTaskProgress(message: TaskProgressMessage): void {
+    const marker = this.taskMarkers.get(message.taskId);
+    if (!marker) {
+      return;
+    }
+    marker.task.completedSteps = message.completedSteps;
+    if (marker.task.completedSteps >= marker.task.totalSteps) {
+      marker.rect.destroy();
+      marker.label.destroy();
+      this.taskMarkers.delete(message.taskId);
+    }
+  }
+
+  /**
+   * Show a "press E" prompt when the local player is near one of their own
+   * tasks, and open its mini-game on a fresh E press. This proximity check is
+   * UX only: the mini-game itself doesn't complete the task, it just decides
+   * *when* to ask the server to. The server re-checks distance and ownership
+   * itself at that point and is the only thing that actually grants the
+   * completion — see `GameRoom.handleTaskInteract`.
+   */
+  private updateTaskInteraction(): void {
+    const local = this.entities.get(this.room.sessionId);
+    const pos = local?.predicted;
+    if (!pos) {
+      this.interactPrompt?.setVisible(false);
+      return;
+    }
+
+    const nearest = this.findNearestTask(pos);
+
+    if (!this.interactPrompt) {
+      this.interactPrompt = this.add
+        .text(0, 0, i18n.t("game.interactPrompt"), {
+          fontFamily: "sans-serif",
+          fontSize: "13px",
+          color: "#ffffff",
+          backgroundColor: "#000000aa",
+          padding: { x: 6, y: 3 },
+        })
+        .setOrigin(0.5, 1);
+    }
+
+    if (nearest) {
+      this.interactPrompt.setPosition(pos.x, pos.y - LABEL_OFFSET_Y - 14);
+      this.interactPrompt.setVisible(true);
+    } else {
+      this.interactPrompt.setVisible(false);
+    }
+
+    if (nearest && Phaser.Input.Keyboard.JustDown(this.eKey)) {
+      this.taskModalOpen = true;
+      this.interactPrompt.setVisible(false);
+      this.game.events.emit("task:open", nearest.task);
+    }
+  }
+
+  private findNearestTask(pos: Vec2): TaskMarker | undefined {
+    let best: TaskMarker | undefined;
+    let bestDistance = TASK_INTERACT_RADIUS;
+
+    for (const marker of this.taskMarkers.values()) {
+      const distance = Phaser.Math.Distance.Between(pos.x, pos.y, marker.task.x, marker.task.y);
+      if (distance <= bestDistance) {
+        best = marker;
+        bestDistance = distance;
+      }
+    }
+
+    return best;
   }
 
   private removePlayer(key: string): void {
@@ -288,7 +1525,11 @@ export class GameScene extends Phaser.Scene {
     for (const dispose of entity.disposers) {
       dispose();
     }
-    entity.circle.destroy();
+    if (entity.hasFootstepVoice) {
+      audioEngine.removeFootstepSource(key);
+    }
+    entity.sprite.destroy();
+    entity.badge.destroy();
     entity.label.destroy();
     this.entities.delete(key);
   }
@@ -305,6 +1546,31 @@ export class GameScene extends Phaser.Scene {
     for (const key of [...this.entities.keys()]) {
       this.removePlayer(key);
     }
+    for (const marker of this.taskMarkers.values()) {
+      marker.rect.destroy();
+      marker.label.destroy();
+    }
+    this.taskMarkers.clear();
+    for (const key of [...this.bodies.keys()]) {
+      this.removeBody(key);
+    }
+    this.interactPrompt?.destroy();
+    this.reportPrompt?.destroy();
+    this.bellPrompt?.destroy();
+    this.repairPrompt?.destroy();
+    for (const marker of this.repairMarkers.values()) {
+      marker.destroy();
+    }
+    this.repairMarkers.clear();
+    this.townHallRect?.destroy();
+    this.fogOverlay?.destroy();
+    this.fogBrush?.destroy();
+    this.atmosphere?.destroy();
+    this.tilemapLayer?.destroy();
+    for (const label of this.roomLabels) {
+      label.destroy();
+    }
+    this.roomLabels.length = 0;
   }
 
   private parseColor(hex: string): number {

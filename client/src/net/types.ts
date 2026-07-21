@@ -1,4 +1,4 @@
-import type { MapSchema, Schema } from "@colyseus/schema";
+import type { ArraySchema, MapSchema, Schema } from "@colyseus/schema";
 
 /**
  * Client-side view of the server's `Player` schema. Extending `Schema` gives
@@ -17,12 +17,90 @@ export interface PlayerState extends Schema {
   y: number;
   color: string;
   alive: boolean;
+  /** False while this player is inside their reconnection grace period. */
+  connected: boolean;
+  hasVoted: boolean;
   lastSeq: number;
 }
 
-/** Client-side view of the server's `GameState` schema. */
+/** Client-side view of the server's `VoteTally` schema. */
+export interface VoteTallyState extends Schema {
+  targetId: string;
+  targetName: string;
+  count: number;
+  /** Empty unless votes are configured public. */
+  voterNames: string;
+}
+
+/** Client-side view of the server's `Body` schema. */
+export interface BodyState extends Schema {
+  playerId: string;
+  name: string;
+  x: number;
+  y: number;
+  color: string;
+}
+
+/**
+ * Client-side view of the server's `GameState` schema.
+ *
+ * `players` is filtered per client on the server: a living client's copy
+ * simply does not contain dead players, so there is nothing here to hide in
+ * the renderer. See the `filterChildren` on the server's `GameState`.
+ */
 export interface GameState extends Schema {
   players: MapSchema<PlayerState>;
+  bodies: MapSchema<BodyState>;
   phase: string;
   hostId: string;
+  /**
+   * The lobby's role settings — which registry roles this game deals, and
+   * the preset they came from. Public game rules, not secrets; see the doc
+   * on the server schema for why this doesn't violate role secrecy.
+   */
+  enabledRoleIds: ArraySchema<string>;
+  rolePreset: string;
+  /**
+   * Balance settings (stranger count, kill cooldown, discussion/voting
+   * timers, task count, confirm-ejects), one stringified value per
+   * `SETTING_DEFINITIONS` entry — see `net/settings.ts`'s `readRoomSettings`
+   * for how these get parsed back into typed values.
+   */
+  settings: MapSchema<string>;
+  meetingReporterId: string;
+  meetingBodyId: string;
+  meetingBodyName: string;
+  meetingIsEmergency: boolean;
+  meetingStage: string;
+  deadPlayerIds: ArraySchema<string>;
+  voteResults: MapSchema<VoteTallyState>;
+  ejectedPlayerId: string;
+  ejectedPlayerName: string;
+  ejectedWasStranger: boolean;
+  ejectionConfirmed: boolean;
+  taskBarCompleted: number;
+  taskBarTotal: number;
+  /** Darkens vision town-wide while true — see the server schema's note on this field. */
+  sabotageActive: boolean;
+  /** Room slugs whose doors are currently locked by a Saboteur — see `applyInputWithLocks`. */
+  lockedRoomSlugs: ArraySchema<string>;
+  /** Whether the Saboteur's comms sabotage is blacking out the task list and room labels. */
+  commsSabotageActive: boolean;
+  /** Whether a critical sabotage (Lighthouse failure/flooding) is currently counting down. */
+  criticalSabotageActive: boolean;
+  /** Which of the two critical repair points have been fixed so far — see `CRITICAL_REPAIR_POINTS`. */
+  criticalRepairedPoints: ArraySchema<string>;
+  /** Whether the lamplighter's lamp is currently lit — see the fog bypass this drives in `GameScene`. */
+  lampLit: boolean;
+  winningFaction: string;
+  winReason: string;
+  /** Every player's name and true role, populated once `phase` is "game_over". */
+  finalRoster: MapSchema<RevealedPlayerState>;
+}
+
+/** Client-side view of the server's `RevealedPlayer` schema. */
+export interface RevealedPlayerState extends Schema {
+  id: string;
+  name: string;
+  role: string;
 }
