@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { Server, type Room as ServerRoom } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
-import { boot, type ColyseusTestServer } from "@colyseus/testing";
+import { ColyseusTestServer } from "@colyseus/testing";
 import {
   BELL_RANGE,
   CHAT_CHANNEL,
@@ -55,10 +55,7 @@ import {
   WIN_REASON,
   SABOTAGE_DURATION_MS,
   ADVANCED_SABOTAGE_DURATION_MS,
-  DOOR_LOCK_DURATION_MS,
   TUNNEL_ENDPOINTS,
-  SHAPESHIFT_DURATION_MS,
-  COMMS_SABOTAGE_DURATION_MS,
   CRITICAL_REPAIR_POINTS,
   SETTING_DEFINITIONS,
   settingById,
@@ -87,11 +84,28 @@ beforeAll(async () => {
   setAuthProvider(authProvider);
   const gameServer = new Server({ transport: new WebSocketTransport({}) });
   gameServer.define("game", GameRoom);
-  colyseus = await boot(gameServer);
+
+  // Port 0 binds an OS-assigned ephemeral port. `@colyseus/testing`'s
+  // `boot()` hardcodes port 2568 whenever it's handed a `Server` instance
+  // (its `port` argument is only honoured for its other, config-object
+  // overload), so a killed run's zombie process permanently EADDRINUSEs
+  // every later run. Listen directly instead, then read back the real port
+  // for `ColyseusTestServer`, which needs it to build the client's URL.
+  await gameServer.listen(0);
+  const address = (gameServer.transport.server as import("net").Server).address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+  (gameServer as unknown as { port: number }).port = port;
+
+  colyseus = new ColyseusTestServer(gameServer);
 });
 
 afterAll(async () => {
-  await colyseus.shutdown();
+  // beforeAll may have thrown before `colyseus` was assigned; shutting down
+  // an undefined server would mask that original failure behind a confusing
+  // "Cannot read properties of undefined (reading 'shutdown')".
+  if (colyseus) {
+    await colyseus.shutdown();
+  }
   setAuthProvider(null);
 });
 
@@ -661,11 +675,21 @@ describe("GameRoom role assignment", () => {
     // inputs identical for every client, carrying no player→role mapping.
     // Everything else must still be free of role strings — strip exactly
     // those two fields and scan the rest.
-    const { enabledRoleIds, rolePreset, ...rest } = room.state.toJSON() as Record<
+    //
+    // The balance `settings` map is the same story one level down: its keys
+    // are fixed, public tuning-parameter ids from `SETTING_DEFINITIONS` (e.g.
+    // "strangerCount"), not player data — a blind substring scan would trip
+    // on "stranger" inside that key name alone even though no role was ever
+    // leaked. Scan its values (always plain numbers/booleans, never a role
+    // id) but drop its key names before the substring check.
+    const { enabledRoleIds, rolePreset, settings, ...rest } = room.state.toJSON() as Record<
       string,
       unknown
     >;
-    const publicState = JSON.stringify(rest);
+    const publicState = JSON.stringify({
+      ...rest,
+      settingsValues: Object.values((settings ?? {}) as Record<string, unknown>),
+    });
     expect(publicState).not.toContain(ROLES.STRANGER);
     expect(publicState).not.toContain(ROLES.VILLAGER);
 
@@ -681,9 +705,16 @@ describe("GameRoom role assignment", () => {
     // And the same holds for the state a townsfolk actually decoded off the
     // wire — this object was built purely from bytes their socket received.
     const townsfolk = seats.find((s) => s.roleMessages[0]!.role === ROLES.VILLAGER)!;
-    const { enabledRoleIds: _ids, rolePreset: _preset, ...decodedRest } =
-      townsfolk.client.state.toJSON() as Record<string, unknown>;
-    const decoded = JSON.stringify(decodedRest);
+    const {
+      enabledRoleIds: _ids,
+      rolePreset: _preset,
+      settings: decodedSettings,
+      ...decodedRest
+    } = townsfolk.client.state.toJSON() as Record<string, unknown>;
+    const decoded = JSON.stringify({
+      ...decodedRest,
+      settingsValues: Object.values((decodedSettings ?? {}) as Record<string, unknown>),
+    });
     expect(decoded).not.toContain(ROLES.STRANGER);
     expect(decoded).not.toContain(ROLES.VILLAGER);
   });
@@ -916,6 +947,7 @@ describe("GameRoom tasks", () => {
         "players",
         "rolePreset",
         "sabotageActive",
+        "settings",
         "taskBarCompleted",
         "taskBarTotal",
         "voteResults",
@@ -3148,8 +3180,12 @@ describe("GameRoom balance settings", () => {
     for (let i = 0; i < 8; i++) {
       seats.push(await seat(room));
     }
-    seats[0]!.client.send("set_setting", { id: "killCooldownMs", value: 500 });
-    await tick(2);
+    // `set_setting` clamps to the production min (10s) — writing the setting
+    // directly bypasses that clamp, the same way `triggerSabotage`/
+    // `triggerCriticalSabotage` bypass their own ability plumbing for a short
+    // test-only duration. This test is about the cooldown lookup honoring the
+    // setting, not about `set_setting`'s validation, which has its own tests.
+    room.state.settings.set("killCooldownMs", "500");
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
 
@@ -3180,9 +3216,11 @@ describe("GameRoom balance settings", () => {
     for (let i = 0; i < MIN_PLAYERS; i++) {
       seats.push(await seat(room));
     }
-    seats[0]!.client.send("set_setting", { id: "discussionMs", value: 500 });
-    seats[0]!.client.send("set_setting", { id: "votingMs", value: 500 });
-    await tick(2);
+    // Same direct-write override as the killCooldownMs test above — both
+    // settings' production min (10s) is far longer than this test wants to
+    // wait, and `set_setting` would clamp up to it.
+    room.state.settings.set("discussionMs", "500");
+    room.state.settings.set("votingMs", "500");
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
 
@@ -3933,13 +3971,10 @@ describe("GameRoom constable (chaos preset)", () => {
 });
 
 describe("GameRoom sabotage (base Stranger)", () => {
-  it(
-    "darkens vision town-wide while active, and restores it after the duration",
-    async () => {
+  it("darkens vision town-wide while active, and restores it after the duration", async () => {
     const room = await colyseus.createRoom<GameState>("game");
     const seats = await seatAndPlay(room, MIN_PLAYERS);
-    const { strangers, townsfolk } = splitRoles(seats);
-    const stranger = strangers[0]!;
+    const { townsfolk } = splitRoles(seats);
     const [a, b] = townsfolk;
 
     // 120 units apart on open street — inside the normal outdoor radius
@@ -3952,9 +3987,12 @@ describe("GameRoom sabotage (base Stranger)", () => {
 
     expect(a!.client.state.players.get(b!.client.sessionId)).toBeDefined();
 
-    armAbility(room, stranger.client.sessionId, "sabotage");
-    stranger.client.send("ability", { abilityId: "sabotage" });
-    await tick(2);
+    // The same reference-counted timer the real "sabotage"/"advanced_sabotage"
+    // abilities drive, on a short duration — this test is about the vision
+    // effect of `sabotageActive`, not the ability message plumbing (which the
+    // "flips the shared flag" test below fires for real, on the real
+    // `SABOTAGE_DURATION_MS`).
+    (room as unknown as { triggerSabotage(durationMs: number): void }).triggerSabotage(600);
     expect(room.state.sabotageActive).toBe(true);
 
     // B moves; the fresh position must not reach A while the shrunk radius
@@ -3968,7 +4006,7 @@ describe("GameRoom sabotage (base Stranger)", () => {
       expect(Math.abs(duringSabotage.y - b!.player.y)).toBeGreaterThan(20);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, SABOTAGE_DURATION_MS + 2_000));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     expect(room.state.sabotageActive).toBe(false);
 
     // Vision resumes: a fresh move from B now reaches A.
@@ -3979,11 +4017,7 @@ describe("GameRoom sabotage (base Stranger)", () => {
     const afterSabotage = a!.client.state.players.get(b!.client.sessionId);
     expect(afterSabotage).toBeDefined();
     expect(afterSabotage!.y).toBeCloseTo(b!.player.y, 3);
-    },
-    // Waits out the full sabotage duration — longer than vitest's default
-    // 15s/test timeout once setup overhead is included.
-    SABOTAGE_DURATION_MS + 10_000,
-  );
+  });
 
   it(
     "has no target, and simply flips the shared flag on and back off",
@@ -4158,7 +4192,20 @@ describe("GameRoom shapeshifter (chaos preset)", () => {
       [...observer.client.state.players.values()].some((p) => p.name === shapeshifter.name),
     ).toBe(false);
 
-    await new Promise((resolve) => setTimeout(resolve, SHAPESHIFT_DURATION_MS + 300));
+    // Layers a short-duration restore on top of the real ability's own
+    // `SHAPESHIFT_DURATION_MS` timer. `disguiseAs` doesn't clobber an
+    // existing stash (see its own doc comment), so this reuses the exact
+    // pair the real fire above stashed and genuinely exercises the same
+    // restore path — just on a clock that doesn't make the test wait out the
+    // real duration. The real fire's own later timeout is a harmless no-op
+    // once this one has already restored.
+    (
+      room as unknown as {
+        disguiseAs(actorId: string, targetId: string, durationMs: number): void;
+      }
+    ).disguiseAs(shapeshifter.client.sessionId, target.client.sessionId, 400);
+
+    await new Promise((resolve) => setTimeout(resolve, 700));
     await tick(3);
 
     const after = observer.client.state.players.get(shapeshifter.client.sessionId);
@@ -4265,23 +4312,21 @@ describe("GameRoom saboteur (chaos preset)", () => {
     ADVANCED_SABOTAGE_DURATION_MS + 10_000,
   );
 
-  it(
-    "lock_door blocks movement through that room's door until it expires",
-    async () => {
+  it("lock_door blocks movement through that room's door until it expires", async () => {
     const room = await colyseus.createRoom<GameState>("game");
     const seats = await seatChaosAndPlay(room, 13);
     const saboteur = seatWithRole(seats, ROLES.SABOTEUR);
     const walker = seats.find((s) => s !== saboteur)!;
 
-    // Stand in the cellar to lock it (same "press the button while you're
-    // there" pattern as the watchman's camera).
-    saboteur.player.x = TASK_ROOM_ANCHOR.cellar.x;
-    saboteur.player.y = TASK_ROOM_ANCHOR.cellar.y;
-    await tick(2);
-
-    armAbility(room, saboteur.client.sessionId, "lock_door");
-    saboteur.client.send("ability", { abilityId: "lock_door", roomSlug: "cellar" });
-    await tick(2);
+    // The same reference-counted lock timer the real "lock_door" ability
+    // drives, on a short duration — the ability message itself (real
+    // `DOOR_LOCK_DURATION_MS`, real `targetRoom` resolution) is proven
+    // separately by the "fires advanced_sabotage and lock_door independently"
+    // test below, which checks the immediate lock without waiting it out.
+    (room as unknown as { lockDoor(room: string, durationMs: number): void }).lockDoor(
+      "cellar",
+      900,
+    );
     expect([...room.state.lockedRoomSlugs]).toContain("cellar");
 
     // Just inside the cellar, one tile north of its south door — push south,
@@ -4296,7 +4341,7 @@ describe("GameRoom saboteur (chaos preset)", () => {
     // Never reaches the door tile's row while it's locked.
     expect(walker.player.y).toBeLessThan(TUNNEL_ENDPOINTS.cellar.y - 8);
 
-    await new Promise((resolve) => setTimeout(resolve, DOOR_LOCK_DURATION_MS + 2_000));
+    await new Promise((resolve) => setTimeout(resolve, 700));
     expect([...room.state.lockedRoomSlugs]).not.toContain("cellar");
 
     for (let seq = 21; seq <= 40; seq++) {
@@ -4305,11 +4350,7 @@ describe("GameRoom saboteur (chaos preset)", () => {
     await tick(10);
     // Now passes clean through, well past the door.
     expect(walker.player.y).toBeGreaterThan(TUNNEL_ENDPOINTS.cellar.y + 8);
-    },
-    // Waits out the full door-lock duration — longer than vitest's default
-    // 15s/test timeout.
-    DOOR_LOCK_DURATION_MS + 10_000,
-  );
+  });
 
   it("fires advanced_sabotage and lock_door independently, each on its own cooldown", async () => {
     const room = await colyseus.createRoom<GameState>("game");
@@ -4349,9 +4390,14 @@ describe("GameRoom comms sabotage (Saboteur)", () => {
     await tick(2);
     expect(room.state.commsSabotageActive).toBe(true);
 
-    await new Promise((resolve) => setTimeout(resolve, COMMS_SABOTAGE_DURATION_MS + 2_000));
+    // Layers a short-duration restore on top of the real ability's own
+    // `COMMS_SABOTAGE_DURATION_MS` timer — `triggerComms` isn't reference
+    // counted (unlike `triggerSabotage`), so this alone flips the flag back
+    // off; the real fire's own later timeout is a harmless no-op by then.
+    (room as unknown as { triggerComms(durationMs: number): void }).triggerComms(400);
+    await new Promise((resolve) => setTimeout(resolve, 700));
     expect(room.state.commsSabotageActive).toBe(false);
-  }, COMMS_SABOTAGE_DURATION_MS + 10_000);
+  });
 });
 
 describe("GameRoom critical sabotage (Saboteur)", () => {

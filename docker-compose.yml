@@ -16,7 +16,7 @@ services:
       POSTGRES_PASSWORD: foghaven_dev
       POSTGRES_DB: foghaven
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - foghaven-pgdata:/var/lib/postgresql/data
     healthcheck:

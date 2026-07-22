@@ -2327,8 +2327,14 @@ export class GameRoom extends Room<GameState> {
    * Detective and Watchman tracking, one tick at a time: record every living
    * player's current room (the detective's raw material — see
    * `findWitness`), and feed any active watchman camera whose room matches.
-   * A sabotage blinds every camera for the tick instead of feeding it — the
-   * feed simply has a gap, which `startMeeting`'s reveal reports as `blinded`.
+   * A sabotage blinds every camera it catches mid-tick instead of feeding it,
+   * and that blindness is sticky for the rest of the round: once a camera has
+   * missed a tick to sabotage, its feed stays dark rather than opportunistically
+   * resuming the instant the sabotage ends. Without that, a camera could
+   * legitimately relearn a sighting seconds after the blackout — nothing was
+   * ever un-recorded, but it would read to the watchman as if the sabotage
+   * hadn't happened at all. `startMeeting`'s reveal reports the whole thing as
+   * `blinded`.
    */
   private updateRoomPresenceAndCameras(): void {
     const now = Date.now();
@@ -2351,7 +2357,7 @@ export class GameRoom extends Room<GameState> {
         if (camera.roomSlug !== room || ownerId === sessionId) {
           return;
         }
-        if (this.state.sabotageActive) {
+        if (this.state.sabotageActive || camera.blinded) {
           camera.blinded = true;
           return;
         }
