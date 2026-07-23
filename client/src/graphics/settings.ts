@@ -6,6 +6,8 @@
  * should be allowed to break the game over.
  */
 
+import { isTouchDevice } from "../device";
+
 const STORAGE_KEY = "foghaven.graphics";
 
 export interface GraphicsSettings {
@@ -17,29 +19,52 @@ export interface GraphicsSettings {
    * mobile hardware.
    */
   effectsEnabled: boolean;
+  /**
+   * Swaps `PLAYER_COLORS` for a color-blind-safe palette (see
+   * `characters/palette.ts`) wherever a player's color is rendered. This is
+   * only half of the actual color-blind fix — the accent badge glyph (see
+   * `GameScene.ts`) is unconditional and doesn't depend on this flag at all,
+   * since a flat color swap alone still leaves two colors that hash onto the
+   * same character archetype indistinguishable by hue alone.
+   */
+  colorBlindMode: boolean;
 }
 
 export const DEFAULT_GRAPHICS_SETTINGS: GraphicsSettings = {
   effectsEnabled: true,
+  colorBlindMode: false,
 };
 
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-/** The saved settings, defensively parsed — a corrupt or missing entry just falls back to the defaults field by field. */
+/**
+ * The saved settings, defensively parsed — a corrupt or missing entry just
+ * falls back to the defaults field by field. When there is no saved entry at
+ * all (first run) *and* the device is touch-capable, `effectsEnabled`
+ * defaults to off instead of the usual `true` — a touch device is the
+ * heuristic for "possibly low-end mobile hardware", and this toggle is
+ * documented above as safe to default off there. Still fully overridable in
+ * `GraphicsSettingsPanel` either way.
+ */
 export function loadGraphicsSettings(): GraphicsSettings {
+  const firstRunDefaults: GraphicsSettings = isTouchDevice()
+    ? { ...DEFAULT_GRAPHICS_SETTINGS, effectsEnabled: false }
+    : DEFAULT_GRAPHICS_SETTINGS;
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { ...DEFAULT_GRAPHICS_SETTINGS };
+      return { ...firstRunDefaults };
     }
     const parsed = JSON.parse(raw) as Partial<GraphicsSettings>;
     return {
-      effectsEnabled: bool(parsed.effectsEnabled, DEFAULT_GRAPHICS_SETTINGS.effectsEnabled),
+      effectsEnabled: bool(parsed.effectsEnabled, firstRunDefaults.effectsEnabled),
+      colorBlindMode: bool(parsed.colorBlindMode, firstRunDefaults.colorBlindMode),
     };
   } catch {
-    return { ...DEFAULT_GRAPHICS_SETTINGS };
+    return { ...firstRunDefaults };
   }
 }
 

@@ -5,6 +5,7 @@ export * from "./config/roles";
 export * from "./config/settings";
 export * from "./config/stats";
 export * from "./config/tasks";
+export * from "./config/voice";
 export * from "./game/chatFilter";
 export * from "./game/movement";
 export * from "./game/names";

@@ -1,0 +1,716 @@
+{
+  "app": {
+    "title": "Foghaven",
+    "loading": "Yükleniyor…",
+    "languageLabel": "Dil",
+    "crashFallback": "Bir şeyler ters gitti. Lütfen sayfayı yenileyin."
+  },
+  "nameEntry": {
+    "label": "Görünen ad",
+    "placeholder": "Adınızı girin",
+    "continueButton": "Devam et"
+  },
+  "mainMenu": {
+    "greeting": "Hoş geldin, {{name}}",
+    "guestTag": "misafir",
+    "createButton": "Oda Oluştur",
+    "creatingButton": "Oluşturuluyor…",
+    "createError": "Oda oluşturulamadı. Lütfen tekrar deneyin.",
+    "joinByCodeButton": "Kodla Katıl",
+    "joinHeading": "Bir odaya katıl",
+    "roomCodeLabel": "Oda kodu",
+    "roomCodePlaceholder": "Oda kodunu girin",
+    "joinButton": "Katıl",
+    "joiningButton": "Katılıyor…",
+    "joinError": "Bu oda kodu mevcut değil.",
+    "roomFullError": "Bu oda dolu.",
+    "inProgressError": "Bu oyun zaten başladı.",
+    "bannedError": "Hesabınız yasaklandı ve katılamıyor.",
+    "authError": "Oynamak için lütfen tekrar giriş yapın.",
+    "guestNoCreateError": "Misafirler oda oluşturamaz — misafir ağırlamak için giriş yapın.",
+    "guestNoCreateHint": "Misafirler kodla bir odaya katılabilir. Kendi odanızı oluşturmak için giriş yapın.",
+    "blockedError": "Bu odaya katılamazsınız.",
+    "friendsButton": "Arkadaşlar",
+    "signOutButton": "Çıkış yap",
+    "signInButton": "Giriş yap",
+    "backButton": "Geri",
+    "inventoryButton": "Kozmetikler",
+    "profileButton": "Profil"
+  },
+  "auth": {
+    "loginTab": "Giriş Yap",
+    "registerTab": "Kayıt Ol",
+    "guestTab": "Misafir",
+    "emailLabel": "E-posta",
+    "usernameLabel": "Kullanıcı adı",
+    "passwordLabel": "Şifre",
+    "identifierLabel": "E-posta veya kullanıcı adı",
+    "displayNameLabel": "Görünen ad",
+    "loginButton": "Giriş Yap",
+    "registerButton": "Hesap Oluştur",
+    "guestButton": "Misafir Olarak Oyna",
+    "guestNote": "Misafirler kodla bir odaya katılabilir ama oda oluşturamaz veya yasaklamaya karşı korumalı bir kimlik kazanamaz.",
+    "passwordHint": "En az 8 karakter.",
+    "busy": "…",
+    "ageConfirmLabel": "13 yaşında veya daha büyüğüm.",
+    "consentLabelPrefix": "Şunu kabul ediyorum:",
+    "consentLabelAnd": "ve",
+    "errors": {
+      "invalid_email": "Bu geçerli bir e-posta adresine benzemiyor.",
+      "invalid_username": "Kullanıcı adları 3-20 karakter olmalı: harf, rakam, boşluk, - veya _.",
+      "profanity": "Lütfen başka bir ad seçin.",
+      "weak_password": "Şifreler en az 8 karakter olmalı.",
+      "email_taken": "Bu e-posta zaten kayıtlı.",
+      "username_taken": "Bu kullanıcı adı zaten alınmış.",
+      "invalid_credentials": "Yanlış e-posta/kullanıcı adı veya şifre.",
+      "banned": "Bu hesap yasaklandı{{reason}}.",
+      "rate_limited": "Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.",
+      "age_confirmation_required": "Kayıt olmak için 13 yaşında veya daha büyük olduğunuzu onaylamalısınız.",
+      "consent_required": "Kayıt olmak için Hizmet Şartları ve Gizlilik Politikası'nı kabul etmelisiniz.",
+      "unknown": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    }
+  },
+  "onboarding": {
+    "task": "Parlayan bir görev işaretine gidip başlatmak için E'ye basın (veya Etkileşim'e dokunun).",
+    "meeting": "Gördüklerinizi tartışın, ardından şüphelendiğiniz kişiyi atmak için oy verin.",
+    "voting": "Oyunuzu vermek için bir oyuncunun adına dokunun — emin değilseniz atlayabilirsiniz."
+  },
+  "reconnect": {
+    "title": "Bağlantı koptu — geri bağlanıyorsunuz…",
+    "remaining": "Yeriniz {{seconds}}sn boyunca tutuluyor"
+  },
+  "audioSettings": {
+    "heading": "Ses",
+    "master": "Ana ses",
+    "music": "Müzik",
+    "sfx": "Ses efektleri",
+    "mute": "Sessize al",
+    "unmute": "Sesi aç",
+    "closeButton": "Kapat"
+  },
+  "graphicsSettings": {
+    "heading": "Grafikler",
+    "effects": "Atmosfer efektleri",
+    "on": "Açık",
+    "off": "Kapalı",
+    "hint": "Düşük donanımlı veya mobil cihazlarda daha iyi performans için kapatın.",
+    "colorBlindMode": "Renk körlüğü paleti",
+    "colorBlindHint": "Renk körlüğüne duyarlı bir oyuncu paleti kullanır. Bu ayardan bağımsız olarak her oyuncu rozetinde zaten bir numara gösterilir.",
+    "closeButton": "Kapat"
+  },
+  "keybindingSettings": {
+    "heading": "Kontroller",
+    "actions": {
+      "moveUp": "Yukarı hareket",
+      "moveDown": "Aşağı hareket",
+      "moveLeft": "Sola hareket",
+      "moveRight": "Sağa hareket",
+      "interact": "Etkileşim",
+      "report": "Cesedi bildir",
+      "bell": "Zili çal"
+    },
+    "pressAKey": "Bir tuşa basın…",
+    "conflict": "\"{{key}}\" zaten başka bir eyleme atanmış.",
+    "hint": "Yukarıda ne atanmış olursa olsun, ok tuşları hareket için her zaman çalışır.",
+    "resetButton": "Varsayılanlara sıfırla",
+    "closeButton": "Kapat"
+  },
+  "lobbyRoom": {
+    "heading": "Oyuncular bekleniyor",
+    "copyButton": "Kopyala",
+    "copied": "Kopyalandı!",
+    "hostTag": "Ev sahibi",
+    "disconnectedTag": "Uzakta",
+    "playerCount": "{{count}} / {{min}} oyuncu",
+    "startButton": "Oyunu Başlat",
+    "leaveButton": "Ayrıl",
+    "rolesHeading": "Roller",
+    "preset": {
+      "classic": "Klasik",
+      "chaos": "Kaos",
+      "pure": "Saf",
+      "custom": "Özel"
+    },
+    "balanceHeading": "Denge",
+    "settings": {
+      "strangerCountLabel": "Yabancı sayısı",
+      "killCooldownMsLabel": "Öldürme bekleme süresi",
+      "discussionMsLabel": "Tartışma süresi",
+      "votingMsLabel": "Oylama süresi",
+      "tasksPerPlayerLabel": "Oyuncu başına görev",
+      "confirmEjectsLabel": "Atılan oyuncunun tarafını göster",
+      "autoLabel": "Otomatik",
+      "secondsValue": "{{value}}sn"
+    },
+    "copyInviteLinkButton": "Davet Bağlantısını Kopyala",
+    "inviteFriendsButton": "Arkadaşları Davet Et"
+  },
+  "friendsPanel": {
+    "heading": "Arkadaşlar",
+    "closeButton": "Kapat",
+    "tabs": {
+      "friends": "Arkadaşlar ({{count}})",
+      "requests": "İstekler ({{count}})",
+      "blocked": "Engellenenler"
+    },
+    "addPlaceholder": "Kullanıcı adıyla ekle",
+    "addButton": "Ekle",
+    "pendingTag": "Beklemede",
+    "noFriends": "Henüz arkadaş yok — yukarıdan kullanıcı adıyla birini ekleyin.",
+    "noRequests": "Bekleyen istek yok.",
+    "noBlocked": "Kimse engellenmedi.",
+    "inviteButton": "Davet Et",
+    "invitedButton": "Davet edildi!",
+    "removeButton": "Kaldır",
+    "blockButton": "Engelle",
+    "unblockButton": "Engeli kaldır",
+    "blockPlaceholder": "Kullanıcı adıyla engelle",
+    "acceptButton": "Kabul et",
+    "declineButton": "Reddet",
+    "errors": {
+      "notFound": "Bu kullanıcı adına sahip oyuncu yok.",
+      "self": "Bu sizsiniz.",
+      "alreadyFriends": "Zaten arkadaşsınız.",
+      "alreadyPending": "Zaten bekleyen bir istek var.",
+      "blocked": "Bu işe yaramadı.",
+      "inviteOffline": "Şu anda çevrimdışılar.",
+      "inviteNotFriends": "Yalnızca arkadaşlarınızı davet edebilirsiniz.",
+      "unknown": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    }
+  },
+  "friendInvite": {
+    "message": "{{name}} sizi bir oyuna davet etti!",
+    "joinButton": "Katıl",
+    "joiningButton": "Katılıyor…",
+    "dismissButton": "Kapat"
+  },
+  "inviteLink": {
+    "joining": "Oyuna katılıyor…",
+    "error": "Bu davet bağlantısı çalışmadı — oda dolu veya zaten başlamış olabilir."
+  },
+  "factions": {
+    "townsfolk": "Kasaba",
+    "stranger": "Yabancı",
+    "neutral": "Tarafsız"
+  },
+  "roleInfo": {
+    "villager": {
+      "name": "Köylü",
+      "reveal": "KÖYLÜ",
+      "hint": "Burada biri göründüğü gibi değil. Onu bulun."
+    },
+    "stranger": {
+      "name": "Yabancı",
+      "reveal": "bir YABANCI",
+      "hint": "Aranıza karışın. Yakalanmayın."
+    },
+    "doctor": {
+      "name": "Doktor",
+      "reveal": "DOKTOR",
+      "hint": "Bir canı bıçaktan koruyabilirsin. İyi seç."
+    },
+    "detective": {
+      "name": "Dedektif",
+      "reveal": "DEDEKTİF",
+      "hint": "Bir cesedi incele — yakınlarda son görülen biri ortaya çıkabilir. Her zaman katil olmayabilir."
+    },
+    "lamplighter": {
+      "name": "Fenerci",
+      "reveal": "FENERCİ",
+      "hint": "Feneri yak ve tüm kasabayı birkaç saniyeliğine açığa çıkar. Akıllıca kullan — yalnızca iki hakkın var."
+    },
+    "watchman": {
+      "name": "Bekçi",
+      "reveal": "BEKÇİ",
+      "hint": "Bir odaya böcek yerleştir. Oradan geçen herkesi bir sonraki toplantıda görürsün."
+    },
+    "medium": {
+      "name": "Medyum",
+      "reveal": "MEDYUM",
+      "hint": "Ölülerin söyleyecek sözü var. Onları duyabilen tek kişi sensin."
+    },
+    "alderman": {
+      "name": "Meclis Üyesi",
+      "reveal": "MECLİS ÜYESİ",
+      "hint": "Bir kez, en çok önem taşıdığı anda, oyun iki kişilik sayılacak."
+    },
+    "constable": {
+      "name": "Polis Memuru",
+      "reveal": "POLİS MEMURU",
+      "hint": "Bir toplantı sırasında birini infaz edebilirsin. Yanlış tahmin edersen, onunla birlikte sen de düşersin."
+    },
+    "shapeshifter": {
+      "name": "Şekil Değiştiren",
+      "reveal": "bir ŞEKİL DEĞİŞTİREN",
+      "hint": "Kısa süreliğine başka bir yüz tak. Seni son gören, yanlış olanı hatırlayacak."
+    },
+    "saboteur": {
+      "name": "Sabotajcı",
+      "reveal": "bir SABOTAJCI",
+      "hint": "Işıkları çoğundan daha uzun ve derin söndür. Bir kapıyı kilitle, iletişimi kes veya Deniz Feneri'ni su bastır ve kasabanın yenmesi gereken bir saat başlat."
+    },
+    "assassin": {
+      "name": "Suikastçı",
+      "reveal": "bir SUİKASTÇI",
+      "hint": "Bir toplantı sırasında birinin gerçek rolünü söyle. Doğru bilirsen düşer. Yanlış bilirsen sen düşersin."
+    },
+    "silencer": {
+      "name": "Susturucu",
+      "reveal": "bir SUSTURUCU",
+      "hint": "Bir sonraki toplantı başlamadan önce bir dili sustur."
+    },
+    "decoy": {
+      "name": "Yem",
+      "reveal": "bir YEM",
+      "hint": "Her türlü soruşturmada masum görünürsün. Bakmalarına izin ver."
+    }
+  },
+  "abilities": {
+    "cooldown": "{{seconds}}sn",
+    "spent": "Kullanıldı",
+    "kill": {
+      "button": "Öldür",
+      "target": "{{name}} adlı oyuncuyu öldür"
+    },
+    "protect": {
+      "button": "Koru",
+      "target": "{{name}} adlı oyuncuyu koru",
+      "hintShielded": "{{name}} adlı oyuncuyu korudun."
+    },
+    "investigate": {
+      "button": "Soruştur",
+      "target": "{{name}} adlı oyuncunun cesedini soruştur",
+      "hintWitness": "Bir iz bulundu: {{name}} yakınlarda görülmüş. {{faction}} gibi görünüyor.",
+      "hintNone": "Hiçbir iz bulunamadı. Burada kim varsa çoktan gitmiş."
+    },
+    "light_lamp": {
+      "button": "Feneri Yak"
+    },
+    "place_camera": {
+      "button": "Kamera Yerleştir",
+      "target": "{{name}} bölümüne böcek yerleştir",
+      "revealHeading": "{{room}} bölümündeki kameranız şunu gördü:",
+      "revealEmpty": "Kimse geçmedi.",
+      "revealBlinded": "Görüntü bir süreliğine kesildi — bir sabotaj etkindi."
+    },
+    "commune": {
+      "button": "Ruh Çağır",
+      "hintFact": "{{name}}, {{room}} bölümünde, {{faction}} üyesi biri tarafından öldürüldü.",
+      "hintNone": "Ölülerin bu gece söyleyecek yeni bir sözü yok.",
+      "unknownFaction": "belirli biri değil"
+    },
+    "double_vote": {
+      "button": "Çift Oy Kullan",
+      "armed": "Çift oy hazır"
+    },
+    "execute_shot": {
+      "heading": "Polis Memurunun Kararı",
+      "button": "{{name}} adlı oyuncuyu infaz et",
+      "confirmPrompt": "{{name}} infaz edilsin mi? Yabancı değillerse sen de ölürsün.",
+      "confirmButton": "Onayla",
+      "cancelButton": "İptal"
+    },
+    "sabotage": {
+      "button": "Sabotaj"
+    },
+    "advanced_sabotage": {
+      "button": "Sabotaj"
+    },
+    "lock_door": {
+      "button": "Kapıyı Kilitle",
+      "target": "{{name}} bölümünü kilitle"
+    },
+    "tunnel": {
+      "button": "Tünel"
+    },
+    "shapeshift": {
+      "button": "Şekil Değiştir",
+      "target": "{{name}} adlı oyuncunun görünümünü al"
+    },
+    "silence": {
+      "button": "Sustur",
+      "target": "{{name}} adlı oyuncuyu sustur",
+      "notifyTarget": "Bu toplantı için susturuldunuz."
+    },
+    "assassinate": {
+      "heading": "Rolünü Söyle",
+      "button": "{{name}} adlı oyuncuyu suçla",
+      "pickRole": "Bir rol seçin…",
+      "confirmPrompt": "{{name}} suçlansın mı? Yanlış bilirsen bunun yerine sen atılırsın.",
+      "confirmButton": "Onayla",
+      "cancelButton": "İptal"
+    },
+    "comms": {
+      "button": "İletişimi Kes"
+    },
+    "critical_sabotage": {
+      "button": "Deniz Fenerini Su Bastır"
+    }
+  },
+  "sabotage": {
+    "comms": {
+      "taskListOffline": "Sinyal kayboldu — iletişim onarılana kadar görev listeniz karanlık."
+    },
+    "critical": {
+      "heading": "DENİZ FENERİ SU ALIYOR",
+      "point": {
+        "north": "Kuzey rölesi",
+        "south": "Güney rölesi"
+      },
+      "broken": "hâlâ su alıyor",
+      "fixed": "onarıldı"
+    }
+  },
+  "roleReveal": {
+    "waiting": "Roller dağıtılıyor…",
+    "intro": "Sen",
+    "fellowStrangers": "Diğer yabancılar:",
+    "soloStranger": "Tek yabancı sensin.",
+    "strangerTally_one": "{{total}} oyuncu arasında {{count}} yabancı gizleniyor.",
+    "strangerTally_other": "{{total}} oyuncu arasında {{count}} yabancı gizleniyor."
+  },
+  "game": {
+    "roomCodeLabel": "Oda kodu",
+    "playersLabel": "Oyuncular",
+    "leaveButton": "Ayrıl",
+    "interactPrompt": "E'ye bas",
+    "reportPrompt": "Bildirmek için R'ye bas",
+    "bellPrompt": "Zili çalmak için B'ye bas",
+    "repairPrompt": "Onarmak için E'ye bas",
+    "ghostBanner": "Öldünüz — yaşayanlar sizi göremez",
+    "touchInteractLabel": "Etkileşim",
+    "touchReportLabel": "Bildir",
+    "touchBellLabel": "Zil",
+    "fullscreenToggle": "Tam ekran",
+    "rotateDevicePrompt": "En iyi deneyim için cihazınızı yatay çevirin"
+  },
+  "voice": {
+    "heading": "Ses",
+    "join": "Sese katıl",
+    "joining": "Katılıyor…",
+    "leave": "Sesten ayrıl",
+    "unsupported": "Sesli sohbet bu tarayıcıda desteklenmiyor",
+    "permissionDenied": "Mikrofon erişimi reddedildi",
+    "failed": "Sesli sohbet başlatılamadı",
+    "proximity": "Yakınlık",
+    "equal": "Toplantı",
+    "channelLiving": "Ses",
+    "channelDead": "Mezarlık sesi",
+    "muteSelf": "Mikrofonu kapat",
+    "unmuteSelf": "Mikrofonu aç",
+    "silenced": "Susturuldunuz — bu toplantıda mikrofonunuz kapalı",
+    "pushToTalk": "Bas-konuş (V)",
+    "openMic": "Açık mikrofon",
+    "speaking": "Konuşuyor",
+    "muted": "Sessiz",
+    "mutePeer": "Sessize al",
+    "unmutePeer": "Sesi aç",
+    "peersHeading": "Seste olanlar",
+    "noPeers": "Ses menzilinde başka kimse yok",
+    "unknownPlayer": "Oyuncu"
+  },
+  "rooms": {
+    "docks": "Rıhtım",
+    "lighthouse": "Deniz Feneri",
+    "tavern": "Meyhane",
+    "fishMarket": "Balık Pazarı",
+    "warehouse": "Depo",
+    "cellar": "Mahzen",
+    "infirmary": "Revir",
+    "townHall": "Belediye Binası",
+    "lampRoom": "Fener Odası",
+    "streets": "Sokaklar"
+  },
+  "meeting": {
+    "heading": "Acil Toplantı",
+    "bodyContext": "{{reporter}}, {{victim}} adlı oyuncunun cesedini buldu.",
+    "emergencyContext": "{{reporter}} acil bir toplantı çağırdı.",
+    "discussion": "Tartışma",
+    "voting": "Şimdi oy ver",
+    "results": "Sonuçlar",
+    "nobodyEjected": "Kimse atılmadı.",
+    "ejectedPlain": "{{name}} atıldı.",
+    "ejectedWasStranger": "{{name}} atıldı. Bir Yabancı'ymış.",
+    "ejectedWasNotStranger": "{{name}} atıldı. Yabancı değilmiş."
+  },
+  "gameOver": {
+    "intro": "Oyun Bitti",
+    "townsfolkWin": "KASABA KAZANDI",
+    "strangersWin": "YABANCILAR KAZANDI",
+    "reasonTasks": "Tüm görevler tamamlandı.",
+    "reasonStrangersEjected": "Tüm Yabancılar atıldı.",
+    "reasonStrangersLeft": "Son Yabancı oyundan ayrıldı.",
+    "reasonParity": "Yabancılar kasabayla eşit sayıya ulaştı.",
+    "reasonCriticalSabotage": "Deniz Feneri onarılamadan su bastı.",
+    "backToLobby": "Lobiye Dön",
+    "waitingForHost": "Ev sahibinin lobiye dönmesi bekleniyor…",
+    "summary": {
+      "heading": "Tur Özeti",
+      "survived": "Hayatta kaldı",
+      "eliminated": "Elendi",
+      "tasks": "{{completed}}/{{total}} görev",
+      "voteHistory": "Oylama Geçmişi",
+      "meetingNumber": "Toplantı {{number}}",
+      "voteCount": "{{name}} — {{count}} oy",
+      "voteCountSkip": "Atla — {{count}} oy",
+      "skipVote": "atla",
+      "ballotLine": "{{voter}}, {{target}} için oy verdi"
+    }
+  },
+  "vote": {
+    "skip": "Oyu atla",
+    "hasVoted": "oy verdi",
+    "locked": "Oyunuz kesinleşti.",
+    "ghostCannotVote": "Ölüler izleyebilir ama oy veremez."
+  },
+  "chat": {
+    "heading": "Tartışma",
+    "deadHeading": "Hayalet sohbeti",
+    "empty": "Henüz mesaj yok.",
+    "placeholder": "Bir şeyler yaz…",
+    "closed": "Sohbet kapalı.",
+    "sendButton": "Gönder"
+  },
+  "taskBar": {
+    "label": "Görevler"
+  },
+  "taskList": {
+    "heading": "Görevleriniz"
+  },
+  "minigame": {
+    "cancel": "İptal",
+    "wires": {
+      "instructions": "Her kabloyu aynı renkteki sokete sürükleyin.",
+      "plugLabel": "Kablo"
+    },
+    "code": {
+      "instructions": "Yukarıda gösterilen kodu girin."
+    },
+    "calibration": {
+      "instructions": "Göstergeyi vurgulanan bölgenin içinde durdurun.",
+      "stopButton": "Durdur"
+    },
+    "pattern": {
+      "watching": "Sırayı izleyin…",
+      "yourTurn": "Sırayı tekrarlayın.",
+      "wrong": "Tam değil — tekrar izleyin."
+    },
+    "ordering": {
+      "instructions": "Öğeleri artan sıraya göre sürükleyin."
+    },
+    "rotation": {
+      "instructions": "Her kadranı hedefiyle hizalamak için tıklayın.",
+      "dialLabel": "Kadran {{index}}"
+    }
+  },
+  "moderation": {
+    "reportTitle": "Bu oyuncuyu bildir",
+    "reportLabel": "{{name}} adlı oyuncuyu bildir",
+    "voteMuteTitle": "Bu oyuncuyu susturmak için oy ver",
+    "voteMuteLabel": "{{name}} adlı oyuncuyu susturmak için oy ver",
+    "reportFiled": "Bildirim gönderildi. Teşekkürler — bir moderatör inceleyecek.",
+    "reportFailed": "Bu bildirim gönderilemedi.",
+    "reportRateLimited": "Çok fazla bildirim gönderdiniz. Lütfen biraz bekleyin.",
+    "messageBlocked": "Bu mesaj gönderilmedi. Lütfen nazik olun.",
+    "youAreMuted": "Susturuldunuz ve şu anda sohbet edemezsiniz.",
+    "slowDown": "Mesajları çok hızlı gönderiyorsunuz."
+  },
+  "report": {
+    "heading": "{{name}} adlı oyuncuyu bildir",
+    "noteLabel": "Eklemek istediğiniz bir şey var mı? (isteğe bağlı)",
+    "notePlaceholder": "Ne oldu?",
+    "submitButton": "Bildirimi gönder",
+    "cancelButton": "İptal",
+    "disclaimer": "Bildirimler moderatörler tarafından incelenir. Asılsız bildirimler kendi hesabınıza mal olabilir.",
+    "reasons": {
+      "harassment": "Taciz veya zorbalık",
+      "hate_speech": "Nefret söylemi veya küfür",
+      "spam": "Spam veya mesaj bombardımanı",
+      "cheating": "Hile yapma",
+      "inappropriate_name": "Uygunsuz ad",
+      "griefing": "Rahatsız etme veya oyunu bilerek kaybetme",
+      "other": "Başka bir şey"
+    }
+  },
+  "admin": {
+    "heading": "Moderasyon",
+    "closeButton": "Kapat",
+    "tabs": {
+      "reports": "Bildirimler ({{count}})",
+      "users": "Kullanıcılar"
+    },
+    "observability": {
+      "sendClientTestError": "İstemci test hatası gönder",
+      "sendServerTestError": "Sunucu test hatası gönder",
+      "testErrorSent": "Gönderildi — yeni bir hata için Sentry'yi kontrol edin."
+    },
+    "roles": {
+      "player": "Oyuncu",
+      "moderator": "Moderatör",
+      "admin": "Yönetici"
+    },
+    "status": {
+      "open": "Açık",
+      "actioned": "İşlem yapıldı",
+      "dismissed": "Reddedildi"
+    },
+    "showResolved": "Çözülmüş bildirimleri de göster",
+    "noReports": "Kuyrukta hiçbir şey yok.",
+    "reportedBy": "{{name}} tarafından {{room}} odasında bildirildi · {{when}}",
+    "viewEvidence": "Sohbet kaydı ({{count}} satır)",
+    "noEvidence": "Bu bildirimle birlikte sohbet kaydedilmedi.",
+    "openUser": "Hesabı aç",
+    "resolutionPlaceholder": "Bu konuda ne yaptınız?",
+    "markActioned": "İşlem yapıldı olarak işaretle",
+    "dismiss": "Reddet",
+    "resolvedNote": "Çözüm: {{note}}",
+    "searchPlaceholder": "Kullanıcı adı, e-posta veya kimlik ile ara",
+    "searchButton": "Ara",
+    "noUsers": "Hiçbir hesap bulunamadı.",
+    "bannedTag": "Yasaklı",
+    "reportCount": "{{count}} bildirim",
+    "backToResults": "← Sonuçlara dön",
+    "currentlyBanned": "Şu anda yasaklı: {{reason}} ({{until}} tarihine kadar)",
+    "permanent": "kalıcı",
+    "lifted": "kaldırıldı",
+    "unbanButton": "Yasağı kaldır",
+    "banReasonLabel": "Sebep",
+    "banUntilLabel": "Tarihe kadar (kalıcı için boş bırakın)",
+    "banPermanentButton": "Kalıcı olarak yasakla",
+    "banTemporaryButton": "Geçici olarak yasakla",
+    "roleLabel": "Rol:",
+    "banHistoryHeading": "Yasaklama geçmişi",
+    "noBanHistory": "Kayıtlı yasaklama yok.",
+    "chatRoomPrompt": "Sohbetin çekileceği oda kodu:",
+    "fetchChatButton": "Oda sohbetine bak",
+    "errors": {
+      "forbidden": "Bunu yapma izniniz yok.",
+      "auth_invalid": "Lütfen tekrar giriş yapın.",
+      "not_found": "Bulunamadı.",
+      "reason_required": "Bir sebep gerekli.",
+      "invalid_until": "Bu tarih anlamlı değildi.",
+      "invalid_role": "Bu geçerli bir rol değil.",
+      "invalid_status": "Bu geçerli bir durum değil.",
+      "rate_limited": "Biraz yavaşlayın.",
+      "unavailable": "Moderasyon şu anda kullanılamıyor.",
+      "unknown": "Bir şeyler ters gitti."
+    }
+  },
+  "cosmetics": {
+    "types": {
+      "hat": "Şapkalar",
+      "accessory": "Aksesuarlar",
+      "pet": "Evcil Hayvanlar",
+      "outfit": "Kıyafetler",
+      "victory_pose": "Zafer Pozları",
+      "death_effect": "Ölüm Efektleri"
+    },
+    "items": {
+      "top_hat": "Silindir Şapka",
+      "straw_boater": "Hasır Şapka",
+      "feathered_cap": "Tüylü Kep",
+      "spectacles": "Yuvarlak Gözlük",
+      "red_scarf": "Kırmızı Eşarp",
+      "eye_patch": "Göz Bandı",
+      "harbor_gull": "Liman Martısı",
+      "tabby_cat": "Tekir Kedi",
+      "hermit_crab": "Münzevi Yengeç",
+      "brass_pin": "Pirinç İğne",
+      "golden_sash": "Altın Kuşak",
+      "silver_sash": "Gümüş Kuşak",
+      "triumphant_wave": "Zafer El Sallama",
+      "bow": "Fiyonk",
+      "dust_puff": "Toz Bulutu",
+      "spark_burst": "Kıvılcım Patlaması",
+      "feather_scatter": "Tüy Saçılması"
+    }
+  },
+  "inventory": {
+    "heading": "Kozmetikler",
+    "closeButton": "Kapat",
+    "coins": "{{count}} jeton",
+    "previewHint": "Ekipmanınız oyun içinde böyle görünür.",
+    "equippedTag": "Kuşanıldı",
+    "equipButton": "Kuşan",
+    "unequipButton": "Çıkar",
+    "buyButton": "Satın al — {{price}} jeton",
+    "errors": {
+      "notFound": "Bu öğe mevcut değil.",
+      "alreadyOwned": "Buna zaten sahipsiniz.",
+      "insufficientCoins": "Yeterli jetonunuz yok.",
+      "notOwned": "Buna henüz sahip değilsiniz.",
+      "unknown": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    }
+  },
+  "profile": {
+    "heading": "Profil",
+    "closeButton": "Kapat",
+    "loading": "Yükleniyor…",
+    "loadError": "Profiliniz yüklenemedi. Lütfen tekrar deneyin.",
+    "stats": {
+      "gamesPlayed": "Oynanan Oyunlar",
+      "winRate": "Kazanma Oranı",
+      "tasksCompleted": "Tamamlanan Görevler",
+      "avgSurvival": "Ort. Hayatta Kalma Süresi"
+    },
+    "roleStats": {
+      "heading": "Oynanan Roller",
+      "record": "{{wins}}G / {{games}}O"
+    },
+    "badges": {
+      "heading": "Rozetler",
+      "first_win": {
+        "name": "İlk Zafer",
+        "description": "Bir oyun kazan."
+      },
+      "regular": {
+        "name": "Müdavim",
+        "description": "10 oyun oyna."
+      },
+      "veteran": {
+        "name": "Gazi",
+        "description": "50 oyun oyna."
+      },
+      "task_master": {
+        "name": "Görev Ustası",
+        "description": "100 görev adımı tamamla."
+      },
+      "survivor": {
+        "name": "Hayatta Kalan",
+        "description": "10 turu sonuna kadar hayatta kal."
+      },
+      "sharpshooter": {
+        "name": "Keskin Nişancı",
+        "description": "Son 10+ oyununun en az %60'ını kazan."
+      }
+    },
+    "deleteAccount": {
+      "heading": "Tehlikeli Bölge",
+      "description": "Hesabınızı ve ona bağlı her şeyi — kozmetikler, arkadaşlar, istatistikler, sohbet geçmişi — kalıcı olarak silin. Bu geri alınamaz.",
+      "startButton": "Hesabı Sil",
+      "passwordLabel": "Şifrenizi onaylayın",
+      "confirmButton": "Kalıcı Olarak Sil",
+      "cancelButton": "İptal",
+      "busy": "Siliniyor…",
+      "wrongPassword": "Bu şifre yanlış.",
+      "error": "Bir şeyler ters gitti. Hesabınız silinmedi."
+    }
+  },
+  "legal": {
+    "closeButton": "Kapat",
+    "lastUpdated": "Son güncelleme: {{date}}",
+    "privacy": {
+      "title": "Gizlilik Politikası",
+      "updated": "23 Temmuz 2026"
+    },
+    "terms": {
+      "title": "Hizmet Şartları",
+      "updated": "23 Temmuz 2026"
+    }
+  },
+  "cookieNotice": {
+    "text": "Foghaven, sizi oturum açık tutmak, koptuğunuz bir oyuna yeniden bağlamak ve ses/grafik ayarlarınızı hatırlamak için tarayıcınızın yerel depolamasını kullanır. Takip çerezleri veya üçüncü taraf analitik araçları kullanmıyoruz.",
+    "learnMore": "Daha fazla bilgi",
+    "dismissButton": "Anladım"
+  }
+}

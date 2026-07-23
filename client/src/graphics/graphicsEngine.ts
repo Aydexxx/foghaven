@@ -40,7 +40,19 @@ class GraphicsEngine {
     }
   }
 
-  /** Subscribe to settings changes (for the React panel and `PhaseAtmosphere`); returns an unsubscribe function. */
+  setColorBlindMode(enabled: boolean): void {
+    if (enabled === this.settings.colorBlindMode) {
+      return;
+    }
+    this.settings = { ...this.settings, colorBlindMode: enabled };
+    saveGraphicsSettings(this.settings);
+    this.applyDomAttribute();
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+
+  /** Subscribe to settings changes (for the React panel, `PhaseAtmosphere`, and `GameScene`'s badge/palette rendering); returns an unsubscribe function. */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -51,6 +63,7 @@ class GraphicsEngine {
       return;
     }
     document.documentElement.dataset.effects = this.settings.effectsEnabled ? "on" : "off";
+    document.documentElement.dataset.colorBlind = this.settings.colorBlindMode ? "on" : "off";
   }
 }
 

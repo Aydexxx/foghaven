@@ -55,6 +55,41 @@ body {
   justify-content: center;
 }
 
+/* Suspense fallback for lazy-loaded screens (currently just GameView/Phaser
+   — see App.tsx) and the static pre-React splash in index.html share this
+   look, so there's no visual flash swapping from one to the other. */
+.loading-screen {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  color: var(--ink-dim);
+}
+
+.loading-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  border: 3px solid var(--timber-light);
+  border-top-color: var(--brass);
+  animation: loading-spin 0.9s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+  }
+}
+
 /* Every parchment-like surface shares the same grain wash and timber frame. */
 .panel,
 .minigame-panel,
@@ -463,8 +498,7 @@ button.secondary {
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  width: 800px;
-  max-width: 90vw;
+  width: min(800px, 100%);
   color: var(--ink-dim);
 }
 
@@ -473,6 +507,11 @@ button.secondary {
 }
 
 .game-canvas canvas {
+  /* Sizing itself is owned by Phaser's Scale.FIT config (see GameCanvas.tsx),
+     which fits the canvas to `.game-stage`'s box while preserving aspect
+     ratio — these are cosmetic only. */
+  max-width: 100%;
+  height: auto;
   border-radius: 6px;
   border: 1px solid var(--timber-light);
   box-shadow: 0 10px 24px var(--shadow-deep);
@@ -484,8 +523,7 @@ button.secondary {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  width: 800px;
-  max-width: 90vw;
+  width: min(800px, 100%);
 }
 
 .task-bar-label {
@@ -517,12 +555,16 @@ button.secondary {
 }
 
 /* Wraps the canvas so the task list can overlay its top-left corner.
-   Matches GameCanvas's VIEWPORT_WIDTH — the window onto the map, not the
-   map itself, which is considerably larger and scrolls under the camera. */
+   Matches GameCanvas's VIEWPORT_WIDTH:VIEWPORT_HEIGHT aspect ratio (960:640,
+   i.e. 3:2) — the window onto the map, not the map itself, which is
+   considerably larger and scrolls under the camera. Sized fluidly (rather
+   than a fixed 960px) so Phaser's Scale.FIT has a real box to fit the canvas
+   into on narrower phone viewports. */
 .game-stage {
   position: relative;
-  width: 960px;
-  max-width: 90vw;
+  width: min(960px, 100%);
+  aspect-ratio: 3 / 2;
+  margin: 0 auto;
 }
 
 /* Local player's own task list */
@@ -531,7 +573,7 @@ button.secondary {
   top: 8px;
   left: 8px;
   z-index: 1;
-  width: 200px;
+  width: min(200px, 42vw);
   padding: 0.75rem 0.85rem;
   background: rgba(23, 18, 11, 0.82);
   background-image: var(--grain), none;
@@ -572,7 +614,7 @@ button.secondary {
   top: 8px;
   left: 8px;
   z-index: 1;
-  width: 200px;
+  width: min(200px, 42vw);
   margin: 0;
   padding: 0.75rem 0.85rem;
   background: rgba(23, 18, 11, 0.82);
@@ -585,8 +627,7 @@ button.secondary {
 
 /* Critical sabotage: the one screen-wide alarm banner. */
 .critical-sabotage-banner {
-  width: 960px;
-  max-width: 90vw;
+  width: min(960px, 100%);
   margin: 0 auto 0.5rem;
   padding: 0.6rem 1rem;
   background: var(--danger-well);
@@ -714,8 +755,11 @@ button.secondary {
 .wire-plug,
 .wire-socket {
   position: absolute;
-  width: 24px;
-  height: 24px;
+  /* 36px rather than a true 44px touch-target minimum — the board is only
+     300x200 (see WireConnectingGame.tsx's BOARD_WIDTH/HEIGHT), so going
+     further would start crowding the plug/socket columns together. */
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   padding: 0;
@@ -907,10 +951,6 @@ button.secondary {
   opacity: 0.4;
 }
 
-.ordering-item-over {
-  border-color: var(--brass);
-}
-
 /* Rotation puzzle */
 .rotation-dials {
   display: flex;
@@ -1010,12 +1050,109 @@ button.secondary {
   position: relative;
 }
 
+/* Touch controls — virtual joystick + action buttons, mounted only on touch
+   devices (see TouchControls.tsx / useIsTouchDevice). Both are `.game-stage`
+   overlays, same absolute-positioning idiom as `.kill-button`. The wrapper
+   itself ignores pointer events so it never blocks taps on the canvas
+   underneath it outside the joystick/buttons themselves. */
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.touch-joystick-base {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: rgba(23, 18, 11, 0.55);
+  border: 2px solid var(--timber-light);
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.touch-joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: var(--brass-dim);
+  border: 2px solid var(--brass);
+  pointer-events: none;
+}
+
+.touch-action-buttons {
+  position: absolute;
+  right: 16px;
+  /* Stacked above the ability/kill button's 92px circle (right:16px;
+     bottom:16px — see .kill-button) so the two clusters never overlap,
+     whether or not the local role has an ability. */
+  bottom: 124px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.touch-action-button {
+  min-width: 64px;
+  min-height: 44px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: var(--paper-raised);
+  border: 2px solid var(--brass-dim);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: 0 4px 10px var(--shadow-deep);
+}
+
+.touch-action-button:disabled {
+  opacity: 0.4;
+}
+
+.touch-action-button:not(:disabled) {
+  background: var(--brass-dim);
+  border-color: var(--brass-bright);
+  color: var(--paper-void);
+}
+
 /* Ability hint toast — the detective's trace, the medium's commune, the
    doctor's shield confirmation. Transient: GameView clears it after a delay. */
 .ability-hint-toast {
   position: absolute;
   left: 50%;
   bottom: 16px;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 0.6rem 1rem;
+  background: var(--paper-base);
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--brass-dim);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.85rem;
+  text-align: center;
+  box-shadow: 0 6px 16px var(--shadow-deep);
+  z-index: 3;
+}
+
+/* First-time contextual hints (see onboarding/useOnboardingHint.ts) — same
+   look as .ability-hint-toast, anchored to the top instead of the bottom so
+   the two never overlap if both ever land at once. Used inside .game-stage
+   and .meeting-layout, both position:relative. */
+.onboarding-hint-toast {
+  position: absolute;
+  left: 50%;
+  top: 16px;
   transform: translateX(-50%);
   max-width: 90%;
   padding: 0.6rem 1rem;
@@ -1503,6 +1640,38 @@ button.secondary {
   cursor: pointer;
 }
 
+.keybinding-settings-toggle {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 90;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--timber-light);
+  background: var(--paper-base);
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.language-switcher {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  padding: 0.4rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--timber-light);
+  background: var(--paper-base);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
 .audio-settings-overlay {
   position: fixed;
   inset: 0;
@@ -1859,6 +2028,14 @@ button.secondary {
   border-radius: 3px;
   border: 1px solid var(--brass-dim);
   color: var(--brass);
+}
+
+.admin-observability {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
 }
 
 .admin-tabs {
@@ -2585,4 +2762,246 @@ button.danger {
   padding-top: 0.3rem;
   border-top: 1px dashed var(--timber-light);
   color: var(--ink-faint);
+}
+
+/* --- Proximity voice HUD --------------------------------------------------
+   Pinned above the audio-settings toggle in the bottom-right corner; a compact
+   panel while voice is live, a single button before the player opts in. */
+.voice-hud {
+  position: fixed;
+  right: 1rem;
+  bottom: 4rem;
+  z-index: 91;
+  width: min(240px, 80vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 8px;
+  background: var(--paper-base);
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow: 0 6px 16px var(--shadow-deep);
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.voice-hud-collapsed {
+  width: auto;
+  align-items: stretch;
+}
+
+.voice-join {
+  cursor: pointer;
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--brass-dim);
+  background: linear-gradient(180deg, var(--brass-bright), var(--brass) 55%, var(--brass-dim));
+  color: var(--ink-well, #201810);
+  font-weight: 600;
+}
+
+.voice-join:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.voice-error {
+  margin: 0.4rem 0 0;
+  color: var(--danger-bright);
+  font-size: 0.78rem;
+}
+
+.voice-hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.voice-channel {
+  font-weight: 600;
+  color: var(--brass-bright);
+}
+
+.voice-mode {
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.voice-silenced {
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 5px;
+  background: var(--danger-well);
+  color: var(--danger-bright);
+  font-size: 0.76rem;
+}
+
+.voice-self {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.voice-meter {
+  flex: 1;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--paper-raised);
+  border: 1px solid var(--timber-light);
+  overflow: hidden;
+}
+
+.voice-meter-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ink-dim);
+  transition: width 90ms linear;
+}
+
+.voice-meter.is-live .voice-meter-fill {
+  background: linear-gradient(90deg, var(--success), var(--success-bright));
+}
+
+.voice-mic-toggle,
+.voice-peer-mute,
+.voice-leave {
+  cursor: pointer;
+  padding: 0.3rem 0.55rem;
+  border-radius: 5px;
+  border: 1px solid var(--timber-light);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-size: 0.76rem;
+}
+
+.voice-mic-toggle.is-muted,
+.voice-peer-mute.is-muted {
+  border-color: var(--danger);
+  color: var(--danger-bright);
+}
+
+.voice-ptt {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.voice-peers {
+  border-top: 1px solid var(--timber-light);
+  padding-top: 0.4rem;
+}
+
+.voice-peers-heading {
+  margin: 0 0 0.3rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-dim);
+}
+
+.voice-peers-empty {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.voice-peers ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.voice-peers li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.voice-peers li.is-connecting .voice-peer-name {
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.voice-peer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-leave {
+  align-self: flex-start;
+}
+
+/* Narrow (phone-width) viewports: the HUD's room-code/players/leave-button
+   row is the one element in the whole layout still liable to overflow once
+   `.hud`/`.task-bar`/`.game-stage` are fluid (see their `min(...)` widths
+   above) — everything else already wraps or shrinks with its container. */
+@media (max-width: 700px) {
+  .hud {
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    justify-content: center;
+  }
+
+  .hud button {
+    margin-left: 0;
+  }
+}
+
+/* Fullscreen/landscape-lock fallback for touch devices that can't or won't
+   grant either (notably iOS Safari, which has no orientation-lock API at
+   all) — see useFullscreenLandscape.ts. App.tsx only renders this element at
+   all during actual gameplay screens (game/meeting), so the media query only
+   needs to gate on device shape, not on which screen is showing. */
+.rotate-device-overlay {
+  display: none;
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-device-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    background: var(--paper-void);
+    color: var(--ink);
+    font-size: 1.1rem;
+  }
+}
+
+/* Manual fullscreen retry/exit — top-right, since both bottom corners are
+   already the audio/graphics settings toggles (see .audio-settings-toggle /
+   .graphics-settings-toggle below). */
+.fullscreen-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 90;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--timber-light);
+  background: var(--paper-base);
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
 }

@@ -1,0 +1,8 @@
+# Serves the built Vite SPA on the port Railway injects ($PORT), falling back
+# to index.html for any unknown path so client-side routing / deep links work.
+:{$PORT:80} {
+	root * /srv
+	encode gzip zstd
+	try_files {path} /index.html
+	file_server
+}

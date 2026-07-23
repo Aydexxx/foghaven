@@ -11,6 +11,7 @@ import { graphicsEngine, type GraphicsSettings } from "./graphicsEngine";
 export function useGraphicsSettings(): {
   settings: GraphicsSettings;
   setEffectsEnabled: (enabled: boolean) => void;
+  setColorBlindMode: (enabled: boolean) => void;
 } {
   const settings = useSyncExternalStore(
     useCallback((onChange) => graphicsEngine.subscribe(onChange), []),
@@ -21,6 +22,10 @@ export function useGraphicsSettings(): {
     settings,
     setEffectsEnabled: useCallback(
       (enabled: boolean) => graphicsEngine.setEffectsEnabled(enabled),
+      [],
+    ),
+    setColorBlindMode: useCallback(
+      (enabled: boolean) => graphicsEngine.setColorBlindMode(enabled),
       [],
     ),
   };

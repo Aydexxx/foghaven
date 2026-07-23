@@ -147,6 +147,21 @@ export function createAdminRouter(options: { limiter?: RateLimiter } = {}): Rout
     res.status(200).json({ userId: admin.userId, role: admin.role });
   });
 
+  // --- Observability ---------------------------------------------------------
+
+  /**
+   * Deliberately throws, for the one thing that's otherwise hard to verify:
+   * "did Sentry actually wire up correctly in this environment?" Admin-only
+   * (stricter than this router's moderator floor) since it's an infra check,
+   * not a moderation action. `Sentry.setupExpressErrorHandler` (index.ts)
+   * reports whatever reaches it unhandled — this route relies on exactly that
+   * rather than calling `Sentry.captureException` itself, so the test is
+   * honest about what a *real* unhandled bug would look like.
+   */
+  router.get("/debug/test-error", requireRole(USER_ROLE.ADMIN), () => {
+    throw new Error("Foghaven Sentry test error — triggered deliberately via /admin/debug/test-error");
+  });
+
   // --- Report queue --------------------------------------------------------
 
   router.get("/reports", async (req: Request, res: Response) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { Room } from "colyseus.js";
 import {
@@ -30,12 +30,13 @@ import { AuthScreen } from "./ui/AuthScreen";
 import { MainMenu } from "./ui/MainMenu";
 import { LobbyRoom } from "./ui/LobbyRoom";
 import { RoleReveal } from "./ui/RoleReveal";
-import { GameView } from "./ui/GameView";
 import { MeetingScreen } from "./ui/MeetingScreen";
 import { GameOverScreen } from "./ui/GameOverScreen";
 import { ReconnectOverlay } from "./ui/ReconnectOverlay";
 import { AudioSettingsPanel } from "./ui/AudioSettingsPanel";
 import { GraphicsSettingsPanel } from "./ui/GraphicsSettingsPanel";
+import { KeybindingSettingsPanel } from "./ui/KeybindingSettingsPanel";
+import { LanguageSwitcher } from "./ui/LanguageSwitcher";
 import { FriendsPanel } from "./ui/FriendsPanel";
 import { FriendInviteToast } from "./ui/FriendInviteToast";
 import { ReportDialog } from "./ui/ReportDialog";
@@ -45,6 +46,17 @@ import { InventoryPanel } from "./ui/InventoryPanel";
 import { ProfilePanel } from "./ui/ProfilePanel";
 import { LegalPage } from "./ui/LegalPage";
 import { CookieNotice } from "./ui/CookieNotice";
+import { VoiceHud } from "./ui/VoiceHud";
+import { useVoice } from "./voice/useVoice";
+import { useIsTouchDevice } from "./ui/useIsTouchDevice";
+import { useFullscreenLandscape } from "./ui/useFullscreenLandscape";
+import { LoadingScreen } from "./ui/LoadingScreen";
+
+// Lazy: GameView pulls in GameCanvas, which pulls in Phaser (~1.2MB minified
+// on its own) — deferring it until a player actually reaches the game screen
+// keeps auth/menu/lobby free of that cost entirely. MeetingScreen has no
+// Phaser dependency and stays a static import above.
+const GameView = lazy(() => import("./ui/GameView").then((m) => ({ default: m.GameView })));
 
 type Screen =
   | "resuming"
@@ -70,7 +82,36 @@ const CONSENTED_LEAVE = 4000;
 /** Set once the storage-disclosure banner (`CookieNotice`) has been dismissed, so it shows exactly once per browser. */
 const COOKIE_NOTICE_SEEN_KEY = "foghaven.cookieNoticeSeen";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Client-only retry cadence for `resumeSession`'s early attempts — quick
+ * enough that a mobile connection which recovers within a second or two
+ * doesn't sit through a full `RECONNECT_RETRY_MS` wait for no reason, then
+ * settling to the steady shared interval. Doesn't touch what
+ * `RECONNECT_RETRY_MS` means anywhere else.
+ */
+const RECONNECT_BACKOFF_MS = [500, 1000, 2000];
+
+/**
+ * Resolves after `ms`, or immediately if `wakeRef.current()` is invoked first
+ * — lets `resumeSession`'s retry loop be cut short by a `visibilitychange`/
+ * `online` signal instead of always waiting out its current backoff step.
+ */
+function waitForWakeOrTimeout(
+  ms: number,
+  wakeRef: MutableRefObject<(() => void) | null>,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      wakeRef.current = null;
+      resolve();
+    }, ms);
+    wakeRef.current = () => {
+      clearTimeout(timer);
+      wakeRef.current = null;
+      resolve();
+    };
+  });
+}
 
 function App() {
   const { t } = useTranslation();
@@ -109,6 +150,14 @@ function App() {
    */
   const resumeInFlight = useRef<Promise<boolean> | null>(null);
   /**
+   * Resolves whichever `waitForWakeOrTimeout` call is currently pending in
+   * `resumeSession`'s retry loop, if any — set by the `visibilitychange`/
+   * `online` listeners below so a backgrounded phone that regains focus or
+   * network retries immediately instead of waiting out its current backoff
+   * step. Null whenever no retry wait is in flight.
+   */
+  const wakeResumeRef = useRef<(() => void) | null>(null);
+  /**
    * Chat lives here rather than in the meeting screen because a ghost's
    * channel stays open during play too — the log has to survive the meeting
    * screen mounting and unmounting.
@@ -130,6 +179,7 @@ function App() {
   const [silenced, setSilenced] = useState(false);
   const [showAudioSettings, setShowAudioSettings] = useState(false);
   const [showGraphicsSettings, setShowGraphicsSettings] = useState(false);
+  const [showKeybindingSettings, setShowKeybindingSettings] = useState(false);
 
   // --- Friend system: presence/invites channel, the friends panel, and an
   // invite link's straight-into-the-room join. See `net/hub.ts` and
@@ -190,6 +240,18 @@ function App() {
   // see the hook's own doc for why this is the one place both live,
   // independent of whichever screen the phase currently has on display.
   useGameAudio(room, assignment?.role ?? null);
+
+  // Proximity voice — lives at the app root so the WebRTC mesh survives the
+  // game↔meeting screen swaps below rather than being torn down and rebuilt
+  // each time. Opt-in: nothing touches the mic until the player joins voice.
+  const voice = useVoice(room);
+
+  // Fullscreen + landscape lock, touch devices only, gameplay screens only —
+  // see the hook's own doc for why it waits for the player's next tap rather
+  // than requesting fullscreen the instant the screen changes.
+  const isTouchDevice = useIsTouchDevice();
+  const wantsFullscreenLandscape = isTouchDevice && (screen === "game" || screen === "meeting");
+  const { toggle: toggleFullscreen } = useFullscreenLandscape(wantsFullscreenLandscape);
 
   const handleAuthenticated = useCallback((session: AuthSession) => {
     // The earliest real click in the app — browsers refuse to start audio
@@ -477,6 +539,7 @@ function App() {
     const attempt = (async () => {
       setReconnecting(true);
       const deadline = Date.now() + RECONNECT_GRACE_MS;
+      let attemptNumber = 0;
 
       for (;;) {
         const stored = loadSession(RECONNECT_GRACE_MS);
@@ -494,7 +557,9 @@ function App() {
           if (Date.now() >= deadline) {
             break;
           }
-          await sleep(RECONNECT_RETRY_MS);
+          const delay = RECONNECT_BACKOFF_MS[attemptNumber] ?? RECONNECT_RETRY_MS;
+          attemptNumber++;
+          await waitForWakeOrTimeout(delay, wakeResumeRef);
         }
       }
 
@@ -509,6 +574,25 @@ function App() {
     });
     return attempt;
   }, [handleJoined]);
+
+  // Mobile connections drop and recover in bursts (a tab backgrounded while
+  // switching apps, wifi handing off to cellular) — nudge a paused retry
+  // wait awake the instant the tab regains focus or the network comes back,
+  // rather than leaving it to sit out its current backoff step.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        wakeResumeRef.current?.();
+      }
+    };
+    const onOnline = () => wakeResumeRef.current?.();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", onOnline);
+    };
+  }, []);
 
   // Resume on load. This is what makes closing and reopening the tab a
   // reconnection rather than a fresh start: the seat is still held server-side
@@ -732,12 +816,14 @@ function App() {
         />
       )}
       {screen === "game" && room && (
-        <GameView
-          room={room}
-          tasks={tasks}
-          role={assignment?.role ?? null}
-          onLeave={leaveRoom}
-        />
+        <Suspense fallback={<LoadingScreen />}>
+          <GameView
+            room={room}
+            tasks={tasks}
+            role={assignment?.role ?? null}
+            onLeave={leaveRoom}
+          />
+        </Suspense>
       )}
       {screen === "meeting" && room && (
         <MeetingScreen
@@ -757,6 +843,31 @@ function App() {
           summary={gameSummary}
           onReport={auth ? (id, name) => setReportTarget({ id, name }) : undefined}
         />
+      )}
+
+      {/* Proximity voice controls, shown only while voice is live server-side
+          (open play and meetings). The mesh itself is driven by `useVoice`
+          above, independent of this panel being mounted. */}
+      {(screen === "game" || screen === "meeting") && room && (
+        <VoiceHud room={room} voice={voice} />
+      )}
+
+      {/* Fullscreen/landscape lock — touch devices only, gameplay screens
+          only. The rotate overlay's own CSS media query only shows it in
+          portrait on a coarse pointer, so it's harmless to always mount here
+          rather than threading it through GameView/MeetingScreen. */}
+      {wantsFullscreenLandscape && (
+        <>
+          <div className="rotate-device-overlay">{t("game.rotateDevicePrompt")}</div>
+          <button
+            type="button"
+            className="fullscreen-toggle"
+            onClick={toggleFullscreen}
+            title={t("game.fullscreenToggle")}
+          >
+            ⛶
+          </button>
+        </>
       )}
 
       {/* Reachable from every screen past the name prompt, not just the game itself. */}
@@ -780,11 +891,25 @@ function App() {
           🎨
         </button>
       )}
+      {screen !== "auth" && screen !== "resuming" && (
+        <button
+          type="button"
+          className="keybinding-settings-toggle"
+          onClick={() => setShowKeybindingSettings(true)}
+          aria-label={t("keybindingSettings.heading")}
+        >
+          ⌨️
+        </button>
+      )}
+      <LanguageSwitcher />
       {showAudioSettings && (
         <AudioSettingsPanel onClose={() => setShowAudioSettings(false)} />
       )}
       {showGraphicsSettings && (
         <GraphicsSettingsPanel onClose={() => setShowGraphicsSettings(false)} />
+      )}
+      {showKeybindingSettings && (
+        <KeybindingSettingsPanel onClose={() => setShowKeybindingSettings(false)} />
       )}
 
       {showFriends && auth && (

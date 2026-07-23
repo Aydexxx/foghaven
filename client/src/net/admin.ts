@@ -109,6 +109,15 @@ export async function fetchAdminIdentity(
   }
 }
 
+/**
+ * Deliberately throws server-side (`GET /admin/debug/test-error`) — the
+ * repeatable "does Sentry actually work here?" check alongside
+ * `AdminPanel`'s client-side test-error button. Admin-only.
+ */
+export async function sendServerTestError(token: string): Promise<void> {
+  await call(token, "GET", "/debug/test-error");
+}
+
 export async function listReports(token: string, status: ReportStatus | null): Promise<AdminReport[]> {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   const data = (await call(token, "GET", `/reports${query}`)) as { reports: AdminReport[] };

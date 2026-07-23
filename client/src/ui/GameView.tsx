@@ -21,6 +21,8 @@ import { MinigameModal } from "./MinigameModal";
 import { AbilityButton } from "./AbilityButton";
 import { AbilityHintToast } from "./AbilityHintToast";
 import { CriticalSabotageBanner } from "./CriticalSabotageBanner";
+import { OnboardingHintToast } from "./OnboardingHintToast";
+import { useOnboardingHint } from "../onboarding/useOnboardingHint";
 
 interface GameViewProps {
   room: Room<GameState>;
@@ -66,6 +68,10 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
   const [abilityTargets, setAbilityTargets] = useState<Record<string, AbilityTargetInfo | null>>(
     {},
   );
+  // First-time-only, per browser — see onboarding/seenHints.ts. Fires as soon
+  // as the local player actually has a task to do, which is the moment the
+  // "walk up and press E" instruction becomes relevant.
+  const taskHint = useOnboardingHint("task", tasks.length > 0, "onboarding.task");
   // Seeded from what the connection has already been told, so a player who
   // reconnects mid-cooldown (or with their one use already spent) comes back
   // to the truth rather than to a button that claims to be ready. Keyed by
@@ -299,6 +305,7 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
             );
           })}
         <AbilityHintToast text={hint?.text ?? null} />
+        <OnboardingHintToast text={taskHint} />
       </div>
 
       {activeTask && (

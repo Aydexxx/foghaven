@@ -39,9 +39,13 @@ export const LAMP_DURATION_MS = 3_000;
  * When it expires they are removed as if they had left deliberately.
  *
  * This is the server's grace period; the client retries for the same window,
- * which is why it is shared rather than duplicated on each side.
+ * which is why it is shared rather than duplicated on each side. Set with
+ * mobile networks in mind — a wifi-to-cellular handoff can plausibly eat
+ * 10-20s before a socket recovers, and a still-connected town already plays
+ * around a disconnected player rather than blocking on them, so holding the
+ * seat a bit longer costs little.
  */
-export const RECONNECT_GRACE_MS = 30_000;
+export const RECONNECT_GRACE_MS = 45_000;
 
 /** How long the client waits between reconnection attempts. */
 export const RECONNECT_RETRY_MS = 2_000;

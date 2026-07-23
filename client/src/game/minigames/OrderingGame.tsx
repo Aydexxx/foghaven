@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MinigameProps } from "./types";
 
@@ -18,12 +18,18 @@ function shuffledOrder(count: number): number[] {
  * Drag numbered items into ascending order. The only mini-game whose
  * interaction is reordering a single list, rather than matching two things
  * or hitting a timed target.
+ *
+ * Built on Pointer Events rather than HTML5 drag-and-drop (`draggable`,
+ * `onDragStart`/`onDragOver`/`onDrop`) because the native DnD API never
+ * fires from touch input on mobile browsers. `document.elementFromPoint`
+ * finds whichever item the pointer is currently over, mirroring
+ * `WireConnectingGame`'s pointer-drag pattern, and reorders live as the drag
+ * passes over each item — the same feel the previous HTML5 version had.
  */
 export function OrderingGame({ onComplete }: MinigameProps) {
   const { t } = useTranslation();
   const [items, setItems] = useState<number[]>(() => shuffledOrder(ITEM_COUNT));
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [overIndex, setOverIndex] = useState<number | null>(null);
 
   const reorder = (from: number, to: number) => {
     if (from === to) {
@@ -41,6 +47,40 @@ export function OrderingGame({ onComplete }: MinigameProps) {
     });
   };
 
+  useEffect(() => {
+    if (draggedIndex === null) {
+      return;
+    }
+
+    const onMove = (e: PointerEvent) => {
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const itemEl = target?.closest<HTMLElement>("[data-item-index]");
+      const hoverIndex = itemEl ? Number(itemEl.dataset.itemIndex) : null;
+      if (hoverIndex === null || Number.isNaN(hoverIndex)) {
+        return;
+      }
+      setDraggedIndex((current) => {
+        if (current === null || current === hoverIndex) {
+          return current;
+        }
+        reorder(current, hoverIndex);
+        return hoverIndex;
+      });
+    };
+
+    const onUp = () => setDraggedIndex(null);
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggedIndex]);
+
   return (
     <div className="minigame minigame-ordering" data-minigame="ordering">
       <p className="minigame-instructions">{t("minigame.ordering.instructions")}</p>
@@ -49,27 +89,10 @@ export function OrderingGame({ onComplete }: MinigameProps) {
         {items.map((value, index) => (
           <li
             key={value}
-            draggable
-            className={`ordering-item ${draggedIndex === index ? "ordering-item-dragging" : ""} ${
-              overIndex === index ? "ordering-item-over" : ""
-            }`}
-            onDragStart={() => setDraggedIndex(index)}
-            onDragEnd={() => {
-              setDraggedIndex(null);
-              setOverIndex(null);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setOverIndex(index);
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (draggedIndex !== null) {
-                reorder(draggedIndex, index);
-              }
-              setDraggedIndex(null);
-              setOverIndex(null);
-            }}
+            data-item-index={index}
+            className={`ordering-item ${draggedIndex === index ? "ordering-item-dragging" : ""}`}
+            style={{ touchAction: "none" }}
+            onPointerDown={() => setDraggedIndex(index)}
           >
             {value}
           </li>

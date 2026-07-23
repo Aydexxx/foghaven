@@ -1,6 +1,9 @@
 {
   "app": {
-    "title": "Foghaven"
+    "title": "Foghaven",
+    "loading": "Loading…",
+    "languageLabel": "Language",
+    "crashFallback": "Something went wrong. Please reload."
   },
   "nameEntry": {
     "label": "Display name",
@@ -67,6 +70,11 @@
       "unknown": "Something went wrong. Please try again."
     }
   },
+  "onboarding": {
+    "task": "Walk up to a glowing task marker and press E (or tap Interact) to start it.",
+    "meeting": "Discuss what you saw, then vote to eject whoever you suspect.",
+    "voting": "Tap a player's name to cast your vote — or skip if you're not sure."
+  },
   "reconnect": {
     "title": "Connection lost — getting you back in…",
     "remaining": "Holding your place for {{seconds}}s"
@@ -86,6 +94,25 @@
     "on": "On",
     "off": "Off",
     "hint": "Turn off for better performance on low-end or mobile devices.",
+    "colorBlindMode": "Color-blind palette",
+    "colorBlindHint": "Uses a color-blind-safe player palette. Every player badge already shows a number regardless of this setting.",
+    "closeButton": "Close"
+  },
+  "keybindingSettings": {
+    "heading": "Controls",
+    "actions": {
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "moveLeft": "Move left",
+      "moveRight": "Move right",
+      "interact": "Interact",
+      "report": "Report body",
+      "bell": "Ring bell"
+    },
+    "pressAKey": "Press a key…",
+    "conflict": "\"{{key}}\" is already bound to another action.",
+    "hint": "Arrow keys always work for movement too, no matter what's bound above.",
+    "resetButton": "Reset to defaults",
     "closeButton": "Close"
   },
   "lobbyRoom": {
@@ -350,7 +377,37 @@
     "reportPrompt": "Press R to report",
     "bellPrompt": "Press B to ring the bell",
     "repairPrompt": "Press E to repair",
-    "ghostBanner": "You are dead — the living cannot see you"
+    "ghostBanner": "You are dead — the living cannot see you",
+    "touchInteractLabel": "Interact",
+    "touchReportLabel": "Report",
+    "touchBellLabel": "Bell",
+    "fullscreenToggle": "Fullscreen",
+    "rotateDevicePrompt": "Rotate your device to landscape for the best experience"
+  },
+  "voice": {
+    "heading": "Voice",
+    "join": "Join voice",
+    "joining": "Joining…",
+    "leave": "Leave voice",
+    "unsupported": "Voice chat isn't supported in this browser",
+    "permissionDenied": "Microphone access was denied",
+    "failed": "Couldn't start voice chat",
+    "proximity": "Proximity",
+    "equal": "Meeting",
+    "channelLiving": "Voice",
+    "channelDead": "Graveyard voice",
+    "muteSelf": "Mute mic",
+    "unmuteSelf": "Unmute mic",
+    "silenced": "Silenced — your mic is off this meeting",
+    "pushToTalk": "Push to talk (V)",
+    "openMic": "Open mic",
+    "speaking": "Speaking",
+    "muted": "Muted",
+    "mutePeer": "Mute",
+    "unmutePeer": "Unmute",
+    "peersHeading": "In voice",
+    "noPeers": "No one else in voice range",
+    "unknownPlayer": "Player"
   },
   "rooms": {
     "docks": "Docks",
@@ -481,6 +538,11 @@
     "tabs": {
       "reports": "Reports ({{count}})",
       "users": "Users"
+    },
+    "observability": {
+      "sendClientTestError": "Send client test error",
+      "sendServerTestError": "Send server test error",
+      "testErrorSent": "Sent — check Sentry for a new issue."
     },
     "roles": {
       "player": "Player",

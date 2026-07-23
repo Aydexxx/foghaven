@@ -17,6 +17,8 @@ import { privateStateFor } from "../net/client";
 import { ChatPanel } from "./ChatPanel";
 import { VotePanel, type Candidate } from "./VotePanel";
 import { useCountdown } from "./useCountdown";
+import { OnboardingHintToast } from "./OnboardingHintToast";
+import { useOnboardingHint } from "../onboarding/useOnboardingHint";
 
 interface MeetingScreenProps {
   room: Room<GameState>;
@@ -165,6 +167,17 @@ export function MeetingScreen({
   const remainingMs = useCountdown(stageDurationMs, stageStartedAt);
   const seconds = Math.ceil(remainingMs / 1000);
 
+  // First-time-only, per browser — see onboarding/seenHints.ts. Every mount
+  // of this component IS a meeting, so `active` is unconditionally true; the
+  // hook itself is what makes sure this only ever fires once.
+  const meetingHint = useOnboardingHint("meeting", true, "onboarding.meeting");
+  const votingHint = useOnboardingHint(
+    "voting",
+    snapshot.stage === MEETING_STAGE.VOTING,
+    "onboarding.voting",
+  );
+  const onboardingHint = votingHint ?? meetingHint;
+
   const handleVote = useCallback(
     (targetId: string) => {
       // Optimistic only for the local "you picked this" highlight; the server
@@ -233,6 +246,7 @@ export function MeetingScreen({
 
   return (
     <div className="meeting-layout">
+      <OnboardingHintToast text={onboardingHint} />
       <div className="panel meeting">
         <h1>{t("meeting.heading")}</h1>
         <p className="hint">{contextLine}</p>

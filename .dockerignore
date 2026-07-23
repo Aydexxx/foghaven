@@ -1,0 +1,23 @@
+# Never ship dependencies (reinstalled in the image), build output, VCS, local
+# env/secrets, tests, or agent scratch into the build context.
+node_modules
+**/node_modules
+client/dist
+server/dist
+**/*.tsbuildinfo
+
+.git
+.gitignore
+
+# Local env files — production config comes from the platform's environment,
+# never a committed/shipped file.
+.env
+**/.env
+!**/.env.example
+!**/.env.production.example
+
+# Tests aren't needed at runtime.
+**/*.test.ts
+
+.claude
+**/.DS_Store

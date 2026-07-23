@@ -1,21 +1,19 @@
-import { useEffect, type ComponentType } from "react";
+import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import type { ClientTask, MinigameType } from "@foghaven/shared";
 import type { MinigameProps } from "../game/minigames/types";
-import { WireConnectingGame } from "../game/minigames/WireConnectingGame";
-import { CodeEntryGame } from "../game/minigames/CodeEntryGame";
-import { CalibrationGame } from "../game/minigames/CalibrationGame";
-import { PatternMemoryGame } from "../game/minigames/PatternMemoryGame";
-import { OrderingGame } from "../game/minigames/OrderingGame";
-import { RotationGame } from "../game/minigames/RotationGame";
 
+// Lazy so none of the six mini-games' code ships in the initial bundle —
+// only one is ever shown at a time, and a given session may never open some
+// of them at all. Each becomes its own chunk, fetched the first time a task
+// of that type is opened.
 const MINIGAMES: Record<MinigameType, ComponentType<MinigameProps>> = {
-  wires: WireConnectingGame,
-  code: CodeEntryGame,
-  calibration: CalibrationGame,
-  pattern: PatternMemoryGame,
-  ordering: OrderingGame,
-  rotation: RotationGame,
+  wires: lazy(() => import("../game/minigames/WireConnectingGame").then((m) => ({ default: m.WireConnectingGame }))),
+  code: lazy(() => import("../game/minigames/CodeEntryGame").then((m) => ({ default: m.CodeEntryGame }))),
+  calibration: lazy(() => import("../game/minigames/CalibrationGame").then((m) => ({ default: m.CalibrationGame }))),
+  pattern: lazy(() => import("../game/minigames/PatternMemoryGame").then((m) => ({ default: m.PatternMemoryGame }))),
+  ordering: lazy(() => import("../game/minigames/OrderingGame").then((m) => ({ default: m.OrderingGame }))),
+  rotation: lazy(() => import("../game/minigames/RotationGame").then((m) => ({ default: m.RotationGame }))),
 };
 
 interface MinigameModalProps {
@@ -58,7 +56,9 @@ export function MinigameModal({ task, onComplete, onCancel }: MinigameModalProps
             ✕
           </button>
         </header>
-        <Minigame onComplete={onComplete} onCancel={onCancel} />
+        <Suspense fallback={<p className="minigame-instructions">{t("app.loading")}</p>}>
+          <Minigame onComplete={onComplete} onCancel={onCancel} />
+        </Suspense>
       </div>
     </div>
   );

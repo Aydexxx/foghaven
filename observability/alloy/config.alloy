@@ -1,0 +1,44 @@
+// Grafana Alloy config: scrapes the Foghaven game server's Prometheus
+// exposition (`GET /metrics`, see server/src/index.ts + server/src/metrics.ts)
+// and forwards every series to Grafana Cloud's hosted Prometheus via
+// remote_write. Deployed as its own small Railway service — see
+// observability/alloy/Dockerfile and docs/DEPLOYMENT.md's Observability
+// section for the full setup.
+//
+// Nothing secret lives in this file: every endpoint/credential is read from
+// an environment variable set on the Alloy service itself.
+//
+// NOTE: Grafana Cloud generates a ready-to-use `prometheus.remote_write`
+// block (with the correct endpoint URL and instructions for the access
+// policy token) when you add a "Hosted Prometheus metrics" connection in
+// its UI — Connections → Add new connection → Hosted Prometheus metrics.
+// That generated block is the authoritative source for the remote_write
+// section below; this file's version is a best-effort starting point using
+// Alloy's documented `env()` config function, current as of Alloy's stable
+// config syntax at the time this was written — confirm both blocks still
+// match Alloy's current docs (grafana.com/docs/alloy) when you deploy this,
+// since config-language details do shift between releases.
+
+prometheus.scrape "foghaven_server" {
+  targets = [
+    {"__address__" = env("FOGHAVEN_METRICS_HOST")},
+  ]
+  metrics_path    = "/metrics"
+  scheme          = "https"
+  scrape_interval = "30s"
+
+  bearer_token = env("FOGHAVEN_METRICS_TOKEN")
+
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_CLOUD_PROMETHEUS_URL")
+
+    basic_auth {
+      username = env("GRAFANA_CLOUD_PROMETHEUS_USER")
+      password = env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}

@@ -1,0 +1,19 @@
+# Netlify/Vercel-style static hosting for the Foghaven client — the
+# lower-friction alternative to the Railway + Caddy Docker service
+# (client/Dockerfile). Netlify builds from the repo root.
+#
+# Set VITE_SERVER_URL (and optionally VITE_AUTH_URL) as a build environment
+# variable in the Netlify UI, pointing at the deployed server's public domain,
+# e.g. VITE_SERVER_URL=wss://foghaven-server.up.railway.app
+
+[build]
+  base = "."
+  command = "npm ci && npm run build -w client"
+  publish = "client/dist"
+
+# SPA history-API fallback: every unknown path serves index.html so deep links
+# and client-side navigation resolve.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

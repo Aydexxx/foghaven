@@ -18,17 +18,22 @@
   "dependencies": {
     "@colyseus/core": "^0.15.0",
     "@colyseus/monitor": "^0.15.0",
+    "@colyseus/redis-driver": "^0.15.6",
+    "@colyseus/redis-presence": "^0.15.6",
     "@colyseus/schema": "^2.0.0",
     "@colyseus/ws-transport": "^0.15.0",
     "@foghaven/shared": "*",
     "@prisma/client": "^6.19.3",
+    "@sentry/node": "^10.0.0",
     "bcryptjs": "^3.0.3",
     "colyseus": "^0.15.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.0",
     "express": "^4.19.0",
     "ioredis": "^5.11.1",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "pino": "^9.0.0",
+    "prom-client": "^15.1.0"
   },
   "devDependencies": {
     "@colyseus/testing": "^0.15.4",

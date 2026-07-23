@@ -14,7 +14,7 @@ interface GraphicsSettingsPanelProps {
  */
 export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
   const { t } = useTranslation();
-  const { settings, setEffectsEnabled } = useGraphicsSettings();
+  const { settings, setEffectsEnabled, setColorBlindMode } = useGraphicsSettings();
 
   return (
     <div className="audio-settings-overlay" role="dialog" aria-label={t("graphicsSettings.heading")}>
@@ -37,6 +37,23 @@ export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
           </button>
         </div>
         <p className="hint">{t("graphicsSettings.hint")}</p>
+
+        <div className="audio-settings-row">
+          <label className="audio-settings-label" htmlFor="graphics-colorblind-toggle">
+            {t("graphicsSettings.colorBlindMode")}
+          </label>
+          <span />
+          <button
+            type="button"
+            id="graphics-colorblind-toggle"
+            className={settings.colorBlindMode ? "audio-mute-button audio-mute-active" : "audio-mute-button"}
+            onClick={() => setColorBlindMode(!settings.colorBlindMode)}
+            aria-pressed={settings.colorBlindMode}
+          >
+            {settings.colorBlindMode ? t("graphicsSettings.on") : t("graphicsSettings.off")}
+          </button>
+        </div>
+        <p className="hint">{t("graphicsSettings.colorBlindHint")}</p>
 
         <button type="button" className="secondary" onClick={onClose}>
           {t("graphicsSettings.closeButton")}

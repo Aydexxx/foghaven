@@ -42,6 +42,9 @@ import {
 } from "./characters/cosmeticVisuals";
 import { audioEngine } from "../audio/audioEngine";
 import { PhaseAtmosphere } from "./atmosphere/PhaseAtmosphere";
+import { inputEngine } from "../input/inputEngine";
+import { graphicsEngine } from "../graphics/graphicsEngine";
+import { displayColorFor, playerColorIndex } from "../graphics/colorBlindPalette";
 
 /**
  * The sprite's anchor point, as a fraction of the frame — where the rig's
@@ -57,8 +60,14 @@ const CHARACTER_ORIGIN_Y = RIG_ORIGIN.y / FRAME_SIZE;
 
 /** How far below the character's name sits above their head — clears even the alderman's top hat. */
 const LABEL_OFFSET_Y = 54;
-/** The small player-colour badge that rides beside the sprite for at-a-glance identity — see `createAccentBadge`. */
-const BADGE_RADIUS = 4;
+/**
+ * The small player-colour badge that rides beside the sprite for at-a-glance
+ * identity — see `createAccentBadge`. Large enough (8, not the original 4)
+ * to fit the legible number glyph every badge now carries regardless of
+ * color-blind mode — see that setting's doc comment on why color alone,
+ * even a well-chosen palette, isn't sufficient on its own.
+ */
+const BADGE_RADIUS = 8;
 /** Chest height — clear of every archetype's head (which sits above y ≈ -30) and low enough to read as a pin, not a growth on the neck. */
 const BADGE_OFFSET: Vec2 = { x: 9, y: -18 };
 /** Below this speed (world units/frame-independent — see usage) a player reads as standing still. */
@@ -160,6 +169,8 @@ interface PlayerEntity {
   label: Phaser.GameObjects.Text;
   /** The small player-colour badge riding along beside the sprite — see `createAccentBadge`. */
   badge: Phaser.GameObjects.Arc;
+  /** The badge's number glyph — always shown, regardless of color-blind mode; see that setting's doc comment. */
+  badgeNumber: Phaser.GameObjects.Text;
   /**
    * Cosmetic overlays — each one a small `Graphics` object drawn once at
    * creation (equipped cosmetics never change mid-room, same as `name`) and
@@ -237,8 +248,30 @@ export interface AbilityTargetInfo {
   room?: string;
 }
 
+/** A one-shot action a touch button can trigger — see `"touch:action"` on the game event emitter. */
+export type TouchActionKind = "interact" | "report" | "bell";
+
+/**
+ * Whether each proximity prompt is currently showing, published every frame
+ * (change-detected) so on-screen touch buttons know when to enable/highlight
+ * themselves — the touch equivalent of the "press E/R/B" text prompts already
+ * drawn in the world. Keyed the same as the four `update*Prompt` methods.
+ */
+export interface PromptVisibility {
+  interact: boolean;
+  report: boolean;
+  bell: boolean;
+  repair: boolean;
+}
+
+/**
+ * Keyed by logical direction rather than literal key name, since `up`/`down`/
+ * `left`/`right` are rebindable (see `input/inputEngine.ts`) — only
+ * `altUp`/`altDown`/`altLeft`/`altRight` (the arrow keys) are a fixed,
+ * always-on alternate, never part of the rebindable settings surface at all.
+ */
 type MoveKeys = Record<
-  "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT",
+  "up" | "down" | "left" | "right" | "altUp" | "altDown" | "altLeft" | "altRight",
   Phaser.Input.Keyboard.Key
 >;
 
@@ -261,6 +294,21 @@ export class GameScene extends Phaser.Scene {
   private inputAccumulator = 0;
   private seq = 0;
   private pending: InputCommand[] = [];
+
+  /**
+   * The virtual joystick's current direction, set via the `"touch:move"`
+   * game event, already quantized to the same -1/0/1-per-axis shape as
+   * `sampleInput()`'s keyboard output — the server's `sanitizeDirection`
+   * collapses anything else to that shape anyway (see shared/game/movement.ts),
+   * so sending a true free-angle vector would only desync client prediction
+   * from what the server actually resolves. Null means "no touch input
+   * active", in which case keyboard state is used instead.
+   */
+  private touchDirection: Direction | null = null;
+  /** A queued touch tap, consumed at most once by whichever prompt is showing — see `consumeTouchAction`. */
+  private pendingTouchAction: TouchActionKind | null = null;
+  /** Last prompt visibility emitted to React, so `"prompts:update"` only fires on change — same pattern as `lastPublishedAbilityTargetKey`. */
+  private lastPublishedPromptKey: string | null = null;
 
   private readonly taskMarkers = new Map<string, TaskMarker>();
   private initialTasks: ClientTask[] = [];
@@ -320,15 +368,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    const keyboard = this.input.keyboard;
-    if (keyboard) {
-      this.keys = keyboard.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT") as MoveKeys;
-      this.eKey = keyboard.addKey("E");
-      this.rKey = keyboard.addKey("R");
-      this.bKey = keyboard.addKey("B");
-      // Stop arrow keys from scrolling the page while playing.
-      keyboard.addCapture(["W", "A", "S", "D", "UP", "DOWN", "LEFT", "RIGHT", "E", "R", "B"]);
-    }
+    this.bindKeys();
+    // Live rebind: the settings panel writes straight through `inputEngine`
+    // while this scene may already be running, so picking up a change
+    // without waiting for the next room join means actually re-running key
+    // setup, not just re-reading fields that were only ever assigned once.
+    this.disposers.push(inputEngine.subscribe(() => this.bindKeys()));
+    // Live re-tint: same reasoning, for the color-blind palette toggle.
+    this.disposers.push(graphicsEngine.subscribe(() => this.applyColorBlindPalette()));
 
     // Drawn first so every other game object (players, task markers, the
     // town hall marker) naturally layers on top of it — Phaser stacks same-
@@ -387,6 +434,20 @@ export class GameScene extends Phaser.Scene {
     };
     this.game.events.on("task:close", onTaskClose);
     this.disposers.push(() => this.game.events.off("task:close", onTaskClose));
+
+    // Touch input bridge: `TouchControls` (React) emits these on the same
+    // game-level emitter used for the mini-game bridge above. See the
+    // `touchDirection`/`pendingTouchAction` field docs.
+    const onTouchMove = (dir: Direction | null) => {
+      this.touchDirection = dir;
+    };
+    const onTouchAction = (action: TouchActionKind) => {
+      this.pendingTouchAction = action;
+    };
+    this.game.events.on("touch:move", onTouchMove);
+    this.game.events.on("touch:action", onTouchAction);
+    this.disposers.push(() => this.game.events.off("touch:move", onTouchMove));
+    this.disposers.push(() => this.game.events.off("touch:action", onTouchAction));
 
     const players = this.room.state.players;
 
@@ -477,11 +538,13 @@ export class GameScene extends Phaser.Scene {
       this.reportPrompt?.setVisible(false);
       this.bellPrompt?.setVisible(false);
       this.repairPrompt?.setVisible(false);
+      this.publishPromptVisibility({ interact: false, report: false, bell: false, repair: false });
     } else {
-      this.updateTaskInteraction();
-      this.updateReportPrompt();
-      this.updateBellPrompt();
-      this.updateRepairPrompt();
+      const interact = this.updateTaskInteraction();
+      const report = this.updateReportPrompt();
+      const bell = this.updateBellPrompt();
+      const repair = this.updateRepairPrompt();
+      this.publishPromptVisibility({ interact, report, bell, repair });
     }
 
     this.updateCommsVisibility();
@@ -538,19 +601,113 @@ export class GameScene extends Phaser.Scene {
     this.room.send("input", { seq: this.seq, dir });
   }
 
+  /**
+   * (Re-)binds every keyboard control from `inputEngine`'s current settings.
+   * Called once from `create()` and again on every live rebind (see the
+   * `inputEngine.subscribe` call there) — `removeAllKeys(true, true)`
+   * destroys and un-captures whatever was bound before, so a rebind can
+   * never leave a stale key object listening or double-capture a key that
+   * moved from one action to another.
+   */
+  private bindKeys(): void {
+    const keyboard = this.input.keyboard;
+    if (!keyboard) {
+      return;
+    }
+    keyboard.removeAllKeys(true, true);
+
+    const bindings = inputEngine.getSettings();
+    this.keys = {
+      up: keyboard.addKey(bindings.moveUp),
+      down: keyboard.addKey(bindings.moveDown),
+      left: keyboard.addKey(bindings.moveLeft),
+      right: keyboard.addKey(bindings.moveRight),
+      // Always-on alternate, independent of the rebindable settings above.
+      altUp: keyboard.addKey("UP"),
+      altDown: keyboard.addKey("DOWN"),
+      altLeft: keyboard.addKey("LEFT"),
+      altRight: keyboard.addKey("RIGHT"),
+    };
+    this.eKey = keyboard.addKey(bindings.interact);
+    this.rKey = keyboard.addKey(bindings.report);
+    this.bKey = keyboard.addKey(bindings.bell);
+
+    // Stop these keys from scrolling/otherwise acting on the page while playing.
+    keyboard.addCapture([
+      bindings.moveUp,
+      bindings.moveDown,
+      bindings.moveLeft,
+      bindings.moveRight,
+      "UP",
+      "DOWN",
+      "LEFT",
+      "RIGHT",
+      bindings.interact,
+      bindings.report,
+      bindings.bell,
+    ]);
+  }
+
+  /** Re-tints every already-created badge and corpse marker after the color-blind palette toggle changes — new entities already pick it up at creation. */
+  private applyColorBlindPalette(): void {
+    const colorBlindMode = graphicsEngine.getSettings().colorBlindMode;
+    this.entities.forEach((entity, key) => {
+      const player = this.room.state.players.get(key);
+      if (player) {
+        entity.badge.setFillStyle(this.parseColor(displayColorFor(player.color, colorBlindMode)));
+      }
+    });
+    this.bodies.forEach((bodyEntity, key) => {
+      const body = this.room.state.bodies.get(key);
+      if (body) {
+        bodyEntity.circle.setFillStyle(this.parseColor(displayColorFor(body.color, colorBlindMode)));
+      }
+    });
+  }
+
   private sampleInput(): Direction {
+    if (this.touchDirection) {
+      return this.touchDirection;
+    }
     const k = this.keys;
     if (!k) {
       return { x: 0, y: 0 };
     }
-    const left = k.A.isDown || k.LEFT.isDown;
-    const right = k.D.isDown || k.RIGHT.isDown;
-    const up = k.W.isDown || k.UP.isDown;
-    const down = k.S.isDown || k.DOWN.isDown;
+    const left = k.left.isDown || k.altLeft.isDown;
+    const right = k.right.isDown || k.altRight.isDown;
+    const up = k.up.isDown || k.altUp.isDown;
+    const down = k.down.isDown || k.altDown.isDown;
     return {
       x: (right ? 1 : 0) - (left ? 1 : 0),
       y: (down ? 1 : 0) - (up ? 1 : 0),
     };
+  }
+
+  /**
+   * Consume a queued touch tap for `kind`, at most once. Called alongside
+   * `Phaser.Input.Keyboard.JustDown(...)` in each proximity prompt so a touch
+   * button and its keyboard shortcut trigger the exact same code path.
+   */
+  private consumeTouchAction(kind: TouchActionKind): boolean {
+    if (this.pendingTouchAction !== kind) {
+      return false;
+    }
+    this.pendingTouchAction = null;
+    return true;
+  }
+
+  /**
+   * Push current prompt visibility to React (for `TouchControls`' button
+   * enabled/highlight state), but only when something changed — same
+   * change-detection shape as `publishAbilityTarget`.
+   */
+  private publishPromptVisibility(visibility: PromptVisibility): void {
+    const key = `${visibility.interact}|${visibility.report}|${visibility.bell}|${visibility.repair}`;
+    if (key === this.lastPublishedPromptKey) {
+      return;
+    }
+    this.lastPublishedPromptKey = key;
+    this.game.events.emit("prompts:update", visibility);
   }
 
   private render(): void {
@@ -582,6 +739,7 @@ export class GameScene extends Phaser.Scene {
         entity.fogVisible = fresh;
         entity.sprite.setVisible(fresh);
         entity.badge.setVisible(fresh);
+        entity.badgeNumber.setVisible(fresh);
         entity.label.setVisible(fresh);
         entity.hat?.setVisible(fresh);
         entity.accessory?.setVisible(fresh);
@@ -606,6 +764,7 @@ export class GameScene extends Phaser.Scene {
       }
       entity.sprite.setPosition(pos.x, pos.y);
       entity.badge.setPosition(pos.x + BADGE_OFFSET.x, pos.y + BADGE_OFFSET.y);
+      entity.badgeNumber.setPosition(pos.x + BADGE_OFFSET.x, pos.y + BADGE_OFFSET.y);
       entity.label.setPosition(pos.x, pos.y - LABEL_OFFSET_Y);
       // Cosmetic shapes are authored in rig-local space already offset from
       // the feet (a hat's points already sit up near y=-48, a pet's out near
@@ -764,9 +923,24 @@ export class GameScene extends Phaser.Scene {
       player.x + BADGE_OFFSET.x,
       player.y + BADGE_OFFSET.y,
       BADGE_RADIUS,
-      this.parseColor(player.color),
+      this.parseColor(displayColorFor(player.color, graphicsEngine.getSettings().colorBlindMode)),
     );
     badge.setStrokeStyle(1.5, 0x000000, 0.5);
+
+    // Always shown, regardless of color-blind mode: the same number always
+    // pairs with the same color for a given player (their stable index into
+    // PLAYER_COLORS), reinforcing rather than replacing the color cue — this
+    // is what actually disambiguates two players whose colors happen to hash
+    // onto the same character archetype shape, which a palette swap alone
+    // cannot fix. See graphics/colorBlindPalette.ts.
+    const badgeNumber = this.add
+      .text(player.x + BADGE_OFFSET.x, player.y + BADGE_OFFSET.y, String(playerColorIndex(player.color) + 1), {
+        fontFamily: "sans-serif",
+        fontSize: "9px",
+        fontStyle: "bold",
+        color: "#000000",
+      })
+      .setOrigin(0.5, 0.5);
 
     const label = this.add
       .text(player.x, player.y - LABEL_OFFSET_Y, player.name, {
@@ -781,6 +955,7 @@ export class GameScene extends Phaser.Scene {
       sprite,
       label,
       badge,
+      badgeNumber,
       anims,
       disposers: [],
       isLocal,
@@ -805,6 +980,7 @@ export class GameScene extends Phaser.Scene {
       // state map is not proof of presence — a fresh update is.
       sprite.setVisible(false);
       badge.setVisible(false);
+      badgeNumber.setVisible(false);
       label.setVisible(false);
       entity.buffer = [{ t: performance.now(), x: player.x, y: player.y }];
       entity.disposers.push(
@@ -823,7 +999,10 @@ export class GameScene extends Phaser.Scene {
       // change — which never happens today, but the schema allows it —
       // only ever needs to move the identity badge, not re-derive an
       // archetype for an already-animating sprite.
-      player.listen("color", (value) => badge.setFillStyle(this.parseColor(value))),
+      player.listen("color", (value) => {
+        badge.setFillStyle(this.parseColor(displayColorFor(value, graphicsEngine.getSettings().colorBlindMode)));
+        badgeNumber.setText(String(playerColorIndex(value) + 1));
+      }),
     );
 
     // Cosmetics arrive slightly after the player itself: `GameRoom.onJoin`
@@ -990,7 +1169,12 @@ export class GameScene extends Phaser.Scene {
     if (this.torndown || this.bodies.has(key)) {
       return;
     }
-    const circle = this.add.circle(body.x, body.y, PLAYER_RADIUS, this.parseColor(body.color));
+    const circle = this.add.circle(
+      body.x,
+      body.y,
+      PLAYER_RADIUS,
+      this.parseColor(displayColorFor(body.color, graphicsEngine.getSettings().colorBlindMode)),
+    );
     circle.setStrokeStyle(3, 0x000000, 0.6);
     circle.setAlpha(0.75);
     const cross = this.add
@@ -1348,16 +1532,16 @@ export class GameScene extends Phaser.Scene {
    * re-checks the reporter's distance to that exact body before anything
    * happens — see `GameRoom.handleReportBody`.
    */
-  private updateReportPrompt(): void {
+  private updateReportPrompt(): boolean {
     if (this.localIsGhost) {
       this.reportPrompt?.setVisible(false);
-      return;
+      return false;
     }
     const local = this.entities.get(this.room.sessionId);
     const pos = local?.predicted;
     if (!pos) {
       this.reportPrompt?.setVisible(false);
-      return;
+      return false;
     }
 
     const nearestBodyId = this.findNearestBody(pos);
@@ -1381,9 +1565,11 @@ export class GameScene extends Phaser.Scene {
       this.reportPrompt.setVisible(false);
     }
 
-    if (nearestBodyId && Phaser.Input.Keyboard.JustDown(this.rKey)) {
+    if (nearestBodyId && (Phaser.Input.Keyboard.JustDown(this.rKey) || this.consumeTouchAction("report"))) {
       this.room.send("report_body", { bodyId: nearestBodyId });
     }
+
+    return Boolean(nearestBodyId);
   }
 
   /** The nearest body's key (== the dead player's session id) in range, if any. */
@@ -1414,16 +1600,16 @@ export class GameScene extends Phaser.Scene {
    * sabotage lock — is decided entirely server-side; a rejected ring is
    * silent here, the same as every other rejected interaction in this scene.
    */
-  private updateBellPrompt(): void {
+  private updateBellPrompt(): boolean {
     if (this.localIsGhost) {
       this.bellPrompt?.setVisible(false);
-      return;
+      return false;
     }
     const local = this.entities.get(this.room.sessionId);
     const pos = local?.predicted;
     if (!pos) {
       this.bellPrompt?.setVisible(false);
-      return;
+      return false;
     }
 
     const inRange = Phaser.Math.Distance.Between(pos.x, pos.y, TOWN_HALL.x, TOWN_HALL.y) <= BELL_RANGE;
@@ -1447,9 +1633,11 @@ export class GameScene extends Phaser.Scene {
       this.bellPrompt.setVisible(false);
     }
 
-    if (inRange && Phaser.Input.Keyboard.JustDown(this.bKey)) {
+    if (inRange && (Phaser.Input.Keyboard.JustDown(this.bKey) || this.consumeTouchAction("bell"))) {
       this.room.send("call_meeting");
     }
+
+    return inRange;
   }
 
   /**
@@ -1472,7 +1660,7 @@ export class GameScene extends Phaser.Scene {
    * sabotage is even running — is re-checked entirely server-side; this is
    * only the hint.
    */
-  private updateRepairPrompt(): void {
+  private updateRepairPrompt(): boolean {
     const active = this.room.state.criticalSabotageActive;
     for (const [id, marker] of this.repairMarkers) {
       if (!active) {
@@ -1486,13 +1674,13 @@ export class GameScene extends Phaser.Scene {
 
     if (!active || this.localIsGhost) {
       this.repairPrompt?.setVisible(false);
-      return;
+      return false;
     }
     const local = this.entities.get(this.room.sessionId);
     const pos = local?.predicted;
     if (!pos) {
       this.repairPrompt?.setVisible(false);
-      return;
+      return false;
     }
 
     let nearestId: CriticalRepairPointId | undefined;
@@ -1529,9 +1717,11 @@ export class GameScene extends Phaser.Scene {
       this.repairPrompt.setVisible(false);
     }
 
-    if (nearestId && Phaser.Input.Keyboard.JustDown(this.eKey)) {
+    if (nearestId && (Phaser.Input.Keyboard.JustDown(this.eKey) || this.consumeTouchAction("interact"))) {
       this.room.send("repair_critical", { pointId: nearestId });
     }
+
+    return Boolean(nearestId);
   }
 
   /**
@@ -1608,12 +1798,12 @@ export class GameScene extends Phaser.Scene {
    * itself at that point and is the only thing that actually grants the
    * completion — see `GameRoom.handleTaskInteract`.
    */
-  private updateTaskInteraction(): void {
+  private updateTaskInteraction(): boolean {
     const local = this.entities.get(this.room.sessionId);
     const pos = local?.predicted;
     if (!pos) {
       this.interactPrompt?.setVisible(false);
-      return;
+      return false;
     }
 
     const nearest = this.findNearestTask(pos);
@@ -1637,11 +1827,13 @@ export class GameScene extends Phaser.Scene {
       this.interactPrompt.setVisible(false);
     }
 
-    if (nearest && Phaser.Input.Keyboard.JustDown(this.eKey)) {
+    if (nearest && (Phaser.Input.Keyboard.JustDown(this.eKey) || this.consumeTouchAction("interact"))) {
       this.taskModalOpen = true;
       this.interactPrompt.setVisible(false);
       this.game.events.emit("task:open", nearest.task);
     }
+
+    return Boolean(nearest);
   }
 
   private findNearestTask(pos: Vec2): TaskMarker | undefined {
@@ -1672,6 +1864,7 @@ export class GameScene extends Phaser.Scene {
     }
     entity.sprite.destroy();
     entity.badge.destroy();
+    entity.badgeNumber.destroy();
     entity.label.destroy();
     entity.hat?.destroy();
     entity.accessory?.destroy();

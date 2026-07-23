@@ -4,6 +4,8 @@ import { getAuthProvider, type Identity } from "../auth/provider";
 import { getFriendProvider } from "../friends/provider";
 import { getPresenceStore } from "../presence/presenceStore";
 import { hubEvents } from "../presence/hubEvents";
+import * as Sentry from "@sentry/node";
+import { logger } from "../logger";
 
 export interface HubJoinOptions {
   /** Auth token from login/register — required; guests have no account to be social with. */
@@ -87,6 +89,12 @@ export class HubRoom extends Room {
   override onDispose(): void {
     hubEvents.off("friendRequest", this.onFriendRequest);
     hubEvents.off("friendAccepted", this.onFriendAccepted);
+  }
+
+  /** Same tap point as `GameRoom`'s override — see its doc comment. */
+  override onUncaughtException(error: Error, methodName: string): void {
+    logger.error({ err: error, methodName, room: "hub" }, "uncaught exception in room lifecycle method");
+    Sentry.captureException(error, { tags: { methodName, room: "hub" } });
   }
 
   override async onAuth(_client: Client, options: HubJoinOptions = {}): Promise<Identity> {

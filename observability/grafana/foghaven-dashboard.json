@@ -1,0 +1,133 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "The Grafana Cloud hosted Prometheus data source that Alloy remote_writes Foghaven's metrics into — see observability/alloy/.",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
+  "title": "Foghaven — Live Ops",
+  "uid": "foghaven-live-ops",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Concurrent players",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "foghaven_concurrent_players", "legendFormat": "players" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Active rooms",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "foghaven_active_rooms", "legendFormat": "rooms" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Anti-cheat rejections / min, by reason",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(foghaven_anticheat_rejections_total[5m])) * 60",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Match duration (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(foghaven_match_duration_seconds_bucket[30m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(foghaven_match_duration_seconds_bucket[30m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tick duration (p50 / p95 / p99) — 50ms budget at 20 ticks/sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(foghaven_tick_duration_ms_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(foghaven_tick_duration_ms_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(foghaven_tick_duration_ms_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Process memory (RSS + heap used)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "process_resident_memory_bytes", "legendFormat": "RSS" },
+        { "expr": "nodejs_heap_size_used_bytes", "legendFormat": "heap used" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Event loop lag",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "nodejs_eventloop_lag_seconds", "legendFormat": "lag" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "CPU time / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_user_seconds_total[5m])",
+          "legendFormat": "user"
+        },
+        {
+          "expr": "rate(process_cpu_system_seconds_total[5m])",
+          "legendFormat": "system"
+        }
+      ]
+    }
+  ]
+}

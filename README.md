@@ -55,6 +55,11 @@ deleted by a sweep that runs at boot and every six hours. Reports snapshot
 their own chat evidence at filing time, so they stay reviewable after the logs
 behind them have aged out.
 
+## Deployment
+
+Production deploys to Railway (stateful Colyseus server + static client, backed
+by managed Postgres and Redis). See the runbook: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

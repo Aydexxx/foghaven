@@ -1,9 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import { type ClientTask } from "@foghaven/shared";
 import type { GameState } from "../net/types";
 import { GameScene, type AbilitySlotInfo, type AbilityTargetInfo } from "./GameScene";
+import { TouchControls } from "../ui/TouchControls";
+import { useIsTouchDevice } from "../ui/useIsTouchDevice";
 
 /**
  * The canvas element's own size. The *world* (the town map — see
@@ -65,6 +67,10 @@ export function GameCanvas({
 }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
+  const isTouchDevice = useIsTouchDevice();
+  // Exposed to `TouchControls` once the game exists — a ref alone wouldn't
+  // trigger the re-render needed to mount it.
+  const [gameEvents, setGameEvents] = useState<Phaser.Events.EventEmitter | null>(null);
 
   // Kept fresh every render so the one-time listeners below never close over
   // a stale callback without having to reattach themselves.
@@ -86,8 +92,19 @@ export function GameCanvas({
       height: VIEWPORT_HEIGHT,
       backgroundColor: "#16120c",
       scene: [],
+      // Keeps the internal simulation/render resolution fixed at
+      // VIEWPORT_WIDTH x VIEWPORT_HEIGHT (no gameplay/camera math changes)
+      // while letting Phaser scale the canvas's CSS box to fit `.game-stage`
+      // — see that class's `aspect-ratio` sizing in index.css.
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: VIEWPORT_WIDTH,
+        height: VIEWPORT_HEIGHT,
+      },
     });
     gameRef.current = game;
+    setGameEvents(game.events);
 
     game.scene.add("game", GameScene, true, { room, tasks, abilitySlots });
     game.events.on("task:open", (task: ClientTask) => onTaskTriggerRef.current(task));
@@ -95,9 +112,19 @@ export function GameCanvas({
       onAbilityTargetsChangeRef.current(targets),
     );
 
+    // Belt-and-suspenders: `Scale.FIT` already observes its parent's size,
+    // but an explicit refresh on orientation change avoids stale-size edge
+    // cases some mobile browsers (notably iOS Safari) are known for.
+    const onOrientationChange = () => game.scale.refresh();
+    window.addEventListener("orientationchange", onOrientationChange);
+    window.addEventListener("resize", onOrientationChange);
+
     return () => {
+      window.removeEventListener("orientationchange", onOrientationChange);
+      window.removeEventListener("resize", onOrientationChange);
       game.destroy(true);
       gameRef.current = null;
+      setGameEvents(null);
     };
   }, [room]);
 
@@ -107,5 +134,10 @@ export function GameCanvas({
     }
   }, [activeTaskId]);
 
-  return <div ref={containerRef} className="game-canvas" />;
+  return (
+    <>
+      <div ref={containerRef} className="game-canvas" />
+      {isTouchDevice && gameEvents && <TouchControls gameEvents={gameEvents} />}
+    </>
+  );
 }

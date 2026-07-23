@@ -4,9 +4,54 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Foghaven</title>
+    <style>
+      /* Minimal splash shown before the JS bundle (and index.css) has loaded
+         — inlined rather than relying on the stylesheet, which is imported
+         by main.tsx and so only applies once JS has already executed.
+         React's first render replaces #root's children, so this never has
+         to be removed by hand. Colors match index.css's --paper-void/--ink/
+         --timber-light/--brass so there's no visible flash handing off to
+         the real app. */
+      body {
+        margin: 0;
+        background: #16120c;
+        color: #ece1c8;
+        font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      }
+      #splash {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+      }
+      #splash-spinner {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 50%;
+        border: 3px solid #5c4527;
+        border-top-color: #c99a4c;
+        animation: splash-spin 0.9s linear infinite;
+      }
+      @keyframes splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash-spinner {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="splash">
+        <div id="splash-spinner"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

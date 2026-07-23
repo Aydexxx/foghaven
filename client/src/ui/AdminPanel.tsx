@@ -9,6 +9,7 @@ import {
   listReports,
   resolveReport,
   searchUsers,
+  sendServerTestError,
   setUserRole,
   unbanUser,
   type AdminChatEntry,
@@ -58,6 +59,7 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
   const [banReason, setBanReason] = useState("");
   const [banUntil, setBanUntil] = useState("");
   const [chatLog, setChatLog] = useState<AdminChatEntry[] | null>(null);
+  const [testErrorNotice, setTestErrorNotice] = useState<string | null>(null);
 
   const run = useCallback((action: () => Promise<void>) => {
     setBusy(true);
@@ -94,6 +96,33 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
     });
   };
 
+  /**
+   * The repeatable "does Sentry actually work?" check — one button throws
+   * here in the browser, the other hits the server's dedicated debug route
+   * (`GET /admin/debug/test-error`). Both are expected to "fail" from this
+   * component's point of view; reaching either Sentry project at all is the
+   * success condition, not a clean response.
+   *
+   * A React error boundary (`Sentry.ErrorBoundary` in main.tsx) only catches
+   * render/lifecycle errors, never one thrown inside an event handler like
+   * this `onClick` — but an uncaught throw here still propagates out as a
+   * genuine unhandled exception, which Sentry's default `GlobalHandlers`
+   * integration (window.onerror) reports regardless of the boundary.
+   */
+  const sendClientTestError = () => {
+    throw new Error("Foghaven Sentry test error — triggered deliberately via AdminPanel");
+  };
+
+  const sendTestErrorToServer = () => {
+    setTestErrorNotice(null);
+    void sendServerTestError(token)
+      .catch(() => {
+        // Expected — the route deliberately throws. Any response at all
+        // confirms the round trip (and Sentry's Express error handler) worked.
+      })
+      .finally(() => setTestErrorNotice(t("admin.observability.testErrorSent")));
+  };
+
   return (
     <div className="admin-overlay" role="dialog" aria-label={t("admin.heading")}>
       <div className="admin-panel">
@@ -105,6 +134,20 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
             {t("admin.closeButton")}
           </button>
         </div>
+
+        {/* Infra check, not a moderation action — admin-only (matches the
+            server route's own stricter gate; see net/admin.ts). */}
+        {role === USER_ROLE.ADMIN && (
+          <div className="admin-observability">
+            <button type="button" className="secondary" onClick={sendClientTestError}>
+              {t("admin.observability.sendClientTestError")}
+            </button>
+            <button type="button" className="secondary" onClick={sendTestErrorToServer}>
+              {t("admin.observability.sendServerTestError")}
+            </button>
+            {testErrorNotice && <span className="hint">{testErrorNotice}</span>}
+          </div>
+        )}
 
         <div className="admin-tabs">
           <button
