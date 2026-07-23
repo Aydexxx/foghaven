@@ -28,6 +28,10 @@ interface MeetingScreenProps {
   cameraReveal: CameraRevealMessage | null;
   /** Whether the Silencer gagged the local player for this meeting — captured in App. */
   silenced: boolean;
+  /** Open the report dialog for a player. Absent for guests, who cannot report. */
+  onReport?: (playerId: string, playerName: string) => void;
+  /** Cast a vote to mute someone. Absent when the host has turned vote-mute off. */
+  onVoteMute?: (playerId: string) => void;
 }
 
 interface MeetingSnapshot {
@@ -99,6 +103,8 @@ export function MeetingScreen({
   role,
   cameraReveal,
   silenced,
+  onReport,
+  onVoteMute,
 }: MeetingScreenProps) {
   const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState(() => readSnapshot(room));
@@ -260,9 +266,40 @@ export function MeetingScreen({
             <p className="meeting-timer" data-countdown="discussion">
               {seconds}
             </p>
+            {/* The discussion roster doubles as the moderation surface: this is
+                when someone is actually being abusive, and the moment they will
+                bother to do something about it. Never offered against oneself. */}
             <ul className="roster">
               {snapshot.candidates.map((candidate) => (
-                <li key={candidate.id}>{candidate.name}</li>
+                <li key={candidate.id}>
+                  <span>{candidate.name}</span>
+                  {candidate.id !== room.sessionId && (
+                    <span className="roster-moderation">
+                      {onVoteMute && (
+                        <button
+                          type="button"
+                          className="moderation-button"
+                          title={t("moderation.voteMuteTitle")}
+                          aria-label={t("moderation.voteMuteLabel", { name: candidate.name })}
+                          onClick={() => onVoteMute(candidate.id)}
+                        >
+                          🔇
+                        </button>
+                      )}
+                      {onReport && (
+                        <button
+                          type="button"
+                          className="moderation-button"
+                          title={t("moderation.reportTitle")}
+                          aria-label={t("moderation.reportLabel", { name: candidate.name })}
+                          onClick={() => onReport(candidate.id, candidate.name)}
+                        >
+                          ⚑
+                        </button>
+                      )}
+                    </span>
+                  )}
+                </li>
               ))}
             </ul>
           </>

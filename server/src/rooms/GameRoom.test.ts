@@ -64,6 +64,7 @@ import { GameRoom } from "./GameRoom";
 import { Body } from "./schema/GameState";
 import type { GameState, Player } from "./schema/GameState";
 import { InMemoryAuthProvider, setAuthProvider } from "../auth/provider";
+import { InMemoryFriendProvider, setFriendProvider } from "../friends/provider";
 
 /** Distance a single legitimate input command is allowed to move a player. */
 const STEP = PLAYER_SPEED * SIM_DT;
@@ -79,9 +80,19 @@ let colyseus: ColyseusTestServer;
  */
 let authProvider: InMemoryAuthProvider;
 
+/**
+ * Backs `onAuth`'s block check (see `GameRoom.onAuth`'s "avoid matching them
+ * where possible" comment) — installed for the same no-database reason
+ * `authProvider` is. Most tests never touch it; the block-specific tests
+ * below seed it directly via `seedBlock`/`seedFriendship`.
+ */
+let friendProvider: InMemoryFriendProvider;
+
 beforeAll(async () => {
   authProvider = new InMemoryAuthProvider();
   setAuthProvider(authProvider);
+  friendProvider = new InMemoryFriendProvider();
+  setFriendProvider(friendProvider);
   const gameServer = new Server({ transport: new WebSocketTransport({}) });
   gameServer.define("game", GameRoom);
 
@@ -107,11 +118,13 @@ afterAll(async () => {
     await colyseus.shutdown();
   }
   setAuthProvider(null);
+  setFriendProvider(null);
 });
 
 afterEach(async () => {
   await colyseus.cleanup();
   authProvider.reset();
+  friendProvider.reset();
 });
 
 /**
@@ -4776,5 +4789,73 @@ describe("GameRoom account auth + bans", () => {
     const client = await colyseus.connectTo(room, { name: "Guesty", intent: "join" });
     await tick(2);
     expect(room.state.players.get(client.sessionId)!.name).toBe("Guesty");
+  });
+
+  it("refuses a join from someone the host has blocked", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const host = await authProvider.seedUser({ username: "Host", email: "host@example.com" });
+    const blocked = await authProvider.seedUser({
+      username: "Blocked",
+      email: "blocked@example.com",
+    });
+    await colyseus.connectTo(room, { token: authProvider.tokenFor(host.id), intent: "create" });
+
+    friendProvider.seedBlock(host.id, blocked.id);
+
+    await expect(
+      colyseus.connectTo(room, { token: authProvider.tokenFor(blocked.id), intent: "join" }),
+    ).rejects.toMatchObject({ code: JOIN_ERROR.BLOCKED });
+    expect(room.state.players.size).toBe(1);
+  });
+
+  it("refuses a join from someone who blocked the host, not just the reverse", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const host = await authProvider.seedUser({ username: "Host2", email: "host2@example.com" });
+    const blocker = await authProvider.seedUser({
+      username: "Blocker",
+      email: "blocker@example.com",
+    });
+    await colyseus.connectTo(room, { token: authProvider.tokenFor(host.id), intent: "create" });
+
+    // The blocking direction is the other way round from the previous test.
+    friendProvider.seedBlock(blocker.id, host.id);
+
+    await expect(
+      colyseus.connectTo(room, { token: authProvider.tokenFor(blocker.id), intent: "join" }),
+    ).rejects.toMatchObject({ code: JOIN_ERROR.BLOCKED });
+  });
+
+  it("lets an unrelated account join a room a block exists elsewhere in", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const host = await authProvider.seedUser({ username: "Host3", email: "host3@example.com" });
+    const stranger = await authProvider.seedUser({
+      username: "Stranger1",
+      email: "stranger1@example.com",
+    });
+    const somebodyElse = await authProvider.seedUser({
+      username: "Elsewhere",
+      email: "elsewhere@example.com",
+    });
+    await colyseus.connectTo(room, { token: authProvider.tokenFor(host.id), intent: "create" });
+
+    // A block between two accounts that has nothing to do with this room.
+    friendProvider.seedBlock(stranger.id, somebodyElse.id);
+
+    const client = await colyseus.connectTo(room, {
+      token: authProvider.tokenFor(somebodyElse.id),
+      intent: "join",
+    });
+    await tick(2);
+    expect(room.state.players.has(client.sessionId)).toBe(true);
+  });
+
+  it("guests are exempt from the host block check on both sides", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const host = await authProvider.seedUser({ username: "Host4", email: "host4@example.com" });
+    await colyseus.connectTo(room, { token: authProvider.tokenFor(host.id), intent: "create" });
+
+    const guest = await colyseus.connectTo(room, { name: "Passerby", intent: "join" });
+    await tick(2);
+    expect(room.state.players.has(guest.sessionId)).toBe(true);
   });
 });

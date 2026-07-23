@@ -10,6 +10,8 @@
  * schema); this module only judges a single name in isolation.
  */
 
+import { containsProfanity } from "./chatFilter";
+
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 20;
 
@@ -48,58 +50,10 @@ export function isValidName(raw: string): boolean {
   return validateName(raw) === null;
 }
 
-/**
- * A small, deliberately conservative slur/obscenity list. Not exhaustive —
- * exhaustive is impossible and not the point; this stops the obvious cases at
- * registration, and a real deployment would layer a maintained service on top.
- * Kept as roots so simple suffixing ("...s", "...er") is caught by substring.
+/*
+ * Name profanity is the chat filter's word lists and evasion handling, reused
+ * wholesale — see `chatFilter.ts`, which is where `containsProfanity` lives
+ * and is exported from. There is deliberately only one list in the codebase: a
+ * word that would be masked in chat must not be wearable as an identity, and
+ * two lists would inevitably drift apart.
  */
-const PROFANITY_ROOTS = [
-  "fuck",
-  "shit",
-  "cunt",
-  "nigger",
-  "nigga",
-  "faggot",
-  "retard",
-  "bitch",
-  "whore",
-  "rape",
-  "slut",
-  "dick",
-  "pussy",
-  "asshole",
-  "bastard",
-];
-
-/**
- * Fold common evasions down to plain lowercase letters before matching, so
- * "sh1t", "f_u_c_k" and "F.U.C.K" all collapse onto their root. Digits map to
- * the letters they imitate; every non-letter is dropped, which also closes the
- * "spaces between letters" trick.
- */
-function normalizeForProfanity(name: string): string {
-  const leet: Record<string, string> = {
-    "0": "o",
-    "1": "i",
-    "3": "e",
-    "4": "a",
-    "5": "s",
-    "7": "t",
-    "8": "b",
-    "@": "a",
-    $: "s",
-  };
-  return name
-    .toLowerCase()
-    .split("")
-    .map((ch) => leet[ch] ?? ch)
-    .filter((ch) => ch >= "a" && ch <= "z")
-    .join("");
-}
-
-/** Whether a name contains a blocked root once evasions are normalized away. */
-export function containsProfanity(name: string): boolean {
-  const normalized = normalizeForProfanity(name);
-  return PROFANITY_ROOTS.some((root) => normalized.includes(root));
-}

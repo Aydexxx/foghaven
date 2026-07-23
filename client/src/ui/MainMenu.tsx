@@ -12,6 +12,14 @@ interface MainMenuProps {
   isGuest: boolean;
   onJoined: (room: Room<GameState>) => void;
   onSignOut: () => void;
+  /** Opens the friends panel — hidden for guests, who have no account to befriend anyone with. */
+  onOpenFriends?: () => void;
+  /** Opens the cosmetics inventory/shop — hidden for guests, who have no account to own anything with. */
+  onOpenInventory?: () => void;
+  /** Opens the profile screen (stats, badges, account deletion) — hidden for guests, who have no account to have stats attached to. */
+  onOpenProfile?: () => void;
+  /** A transient message from outside the normal join flow (e.g. a stale invite link). */
+  notice?: string | null;
 }
 
 type Mode = "menu" | "join";
@@ -22,7 +30,8 @@ type ErrorKey =
   | "mainMenu.inProgressError"
   | "mainMenu.bannedError"
   | "mainMenu.authError"
-  | "mainMenu.guestNoCreateError";
+  | "mainMenu.guestNoCreateError"
+  | "mainMenu.blockedError";
 
 /**
  * The server refuses joins with codes of its own — full, started, banned,
@@ -36,10 +45,21 @@ const JOIN_ERROR_KEY: Record<string, ErrorKey> = {
   banned: "mainMenu.bannedError",
   authInvalid: "mainMenu.authError",
   guestNoCreate: "mainMenu.guestNoCreateError",
+  blocked: "mainMenu.blockedError",
   unknown: "mainMenu.joinError",
 };
 
-export function MainMenu({ name, token, isGuest, onJoined, onSignOut }: MainMenuProps) {
+export function MainMenu({
+  name,
+  token,
+  isGuest,
+  onJoined,
+  onSignOut,
+  onOpenFriends,
+  onOpenInventory,
+  onOpenProfile,
+  notice,
+}: MainMenuProps) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("menu");
   const [code, setCode] = useState("");
@@ -120,6 +140,8 @@ export function MainMenu({ name, token, isGuest, onJoined, onSignOut }: MainMenu
         {isGuest && <span className="guest-tag"> · {t("mainMenu.guestTag")}</span>}
       </p>
 
+      {notice && <p className="error">{notice}</p>}
+
       {/* Guests may only join a friend's room, never create one — the server
           enforces this at onAuth, so hiding it here is just matching UX. */}
       {!isGuest && (
@@ -137,6 +159,22 @@ export function MainMenu({ name, token, isGuest, onJoined, onSignOut }: MainMenu
       </button>
 
       {isGuest && <p className="hint">{t("mainMenu.guestNoCreateHint")}</p>}
+
+      {!isGuest && onOpenFriends && (
+        <button type="button" className="secondary" onClick={onOpenFriends} disabled={busy}>
+          {t("mainMenu.friendsButton")}
+        </button>
+      )}
+      {!isGuest && onOpenInventory && (
+        <button type="button" className="secondary" onClick={onOpenInventory} disabled={busy}>
+          {t("mainMenu.inventoryButton")}
+        </button>
+      )}
+      {!isGuest && onOpenProfile && (
+        <button type="button" className="secondary" onClick={onOpenProfile} disabled={busy}>
+          {t("mainMenu.profileButton")}
+        </button>
+      )}
 
       <button type="button" className="link-button" onClick={onSignOut} disabled={busy}>
         {isGuest ? t("mainMenu.signInButton") : t("mainMenu.signOutButton")}

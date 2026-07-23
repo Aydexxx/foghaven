@@ -21,6 +21,13 @@ export interface PlayerState extends Schema {
   connected: boolean;
   hasVoted: boolean;
   lastSeq: number;
+  /** The six cosmetic slots — a catalog id or empty string. See the server `Player` schema's own doc. */
+  hatId: string;
+  accessoryId: string;
+  petId: string;
+  outfitId: string;
+  victoryPoseId: string;
+  deathEffectId: string;
 }
 
 /** Client-side view of the server's `VoteTally` schema. */
@@ -103,4 +110,11 @@ export interface RevealedPlayerState extends Schema {
   id: string;
   name: string;
   role: string;
+  color: string;
+  hatId: string;
+  accessoryId: string;
+  petId: string;
+  outfitId: string;
+  victoryPoseId: string;
+  deathEffectId: string;
 }

@@ -1556,3 +1556,1033 @@ button.secondary {
   border-color: var(--danger);
   color: #e8b3a5;
 }
+
+/*
+ * Friend system: the "Copy Invite Link" / "Invite Friends" row under the
+ * lobby's room code, the friends panel itself, and the invite toast.
+ */
+.invite-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.invite-row button {
+  flex: 1;
+}
+
+.friends-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.friends-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 6px;
+  width: min(420px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 10px 24px var(--shadow-deep);
+}
+
+.friends-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.friends-panel-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--brass-bright);
+}
+
+.friends-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--timber-light);
+  padding-bottom: 0.6rem;
+}
+
+.friends-tab {
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.friends-tab-active {
+  border-color: var(--brass-dim);
+  color: var(--brass-bright);
+  background: var(--paper-sunken);
+}
+
+.friends-add-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.friends-add-form input {
+  flex: 1;
+}
+
+.friends-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.friends-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.friends-list-pending li {
+  opacity: 0.7;
+}
+
+.friend-name {
+  flex: 1;
+  color: var(--ink);
+}
+
+.friend-status {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.friend-status-online {
+  background: var(--success-bright);
+  box-shadow: 0 0 4px var(--success-bright);
+}
+
+/* A friend's invite, delivered live — see `HubRoom` and `App.tsx`. */
+.friend-invite-toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 97;
+  max-width: min(360px, 90vw);
+  padding: 1rem 1.25rem;
+  border-radius: 6px;
+  text-align: center;
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--brass-dim);
+  box-shadow: 0 10px 24px var(--shadow-deep);
+  color: var(--ink);
+}
+
+.friend-invite-toast p {
+  margin: 0 0 0.75rem;
+}
+
+.friend-invite-toast-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+/*
+ * Moderation: the report flag on rosters, the transient notice, the report
+ * dialog and the admin panel.
+ */
+.moderation-button {
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.moderation-button:hover {
+  border-color: var(--timber-light);
+  color: var(--ink);
+}
+
+.roster-moderation {
+  display: inline-flex;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+
+/* Sits above the game but below the reconnect overlay — it is information,
+   never something to interact with. */
+.moderation-notice {
+  position: fixed;
+  bottom: 4.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 94;
+  max-width: min(420px, 90vw);
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.85rem;
+  background: var(--paper-base);
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--brass-dim);
+  color: var(--ink);
+  box-shadow: 0 6px 16px var(--shadow-deep);
+}
+
+.report-overlay,
+.admin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 98;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.75);
+  backdrop-filter: blur(2px);
+}
+
+.report-panel,
+.admin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 6px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 10px 24px var(--shadow-deep);
+}
+
+.report-panel {
+  width: min(420px, 92vw);
+}
+
+.report-panel h2,
+.admin-panel h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--brass-bright);
+}
+
+.report-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.report-reasons label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.report-reasons label:hover {
+  background: var(--paper-sunken);
+}
+
+.report-panel textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--timber);
+  background: var(--paper-sunken);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.report-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.report-actions button {
+  flex: 1;
+}
+
+/* Admin panel */
+.admin-panel {
+  width: min(680px, 94vw);
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-role-tag {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid var(--brass-dim);
+  color: var(--brass);
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--timber-light);
+  padding-bottom: 0.6rem;
+}
+
+.admin-tab {
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.admin-tab-active {
+  border-color: var(--brass-dim);
+  color: var(--brass-bright);
+  background: var(--paper-sunken);
+}
+
+.admin-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+.admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-report,
+.admin-user-row {
+  padding: 0.6rem 0.7rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.admin-user-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-user-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.admin-report-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-report-target {
+  flex: 1;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.admin-reason,
+.admin-status,
+.admin-banned-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid var(--timber-light);
+  color: var(--ink-dim);
+}
+
+/* The two reasons that mean someone is being hurt read hotter than the rest. */
+.admin-reason-hate_speech,
+.admin-reason-harassment,
+.admin-banned-tag {
+  border-color: var(--danger);
+  background: var(--danger-well);
+  color: #e8b3a5;
+}
+
+.admin-status-open {
+  border-color: var(--brass-dim);
+  color: var(--brass);
+}
+
+.admin-report-note {
+  margin: 0.3rem 0;
+  font-style: italic;
+  color: var(--ink-dim);
+}
+
+.admin-report-actions,
+.admin-resolve,
+.admin-search,
+.admin-role-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-search input,
+.admin-resolve input {
+  flex: 1;
+}
+
+.admin-evidence {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--paper-void);
+  border: 1px solid var(--timber);
+  border-radius: 4px;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.admin-chat-line {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-chat-sender {
+  color: var(--brass);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* A line the filter already acted on, so a moderator can tell at a glance
+   that it was masked or refused rather than delivered as written. */
+.admin-chat-filtered {
+  color: var(--danger-bright);
+}
+
+.admin-user-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.admin-user-detail h3,
+.admin-user-detail h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--brass-bright);
+}
+
+.admin-ban-form,
+.admin-ban-state {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+}
+
+.admin-ban-button {
+  background: var(--danger);
+  border-color: var(--danger-bright);
+  color: #fff3ee;
+}
+
+.admin-ban-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.admin-toggle {
+  position: fixed;
+  left: 4.5rem;
+  bottom: 1rem;
+  z-index: 90;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--brass-dim);
+  background: var(--paper-base);
+  color: var(--ink);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/*
+ * Cosmetics: the equip/shop panel and its rig preview canvases. Modelled on
+ * `.friends-panel`/`.admin-panel` — same overlay, same tabbed layout.
+ */
+.rig-preview-canvas {
+  image-rendering: pixelated;
+  display: block;
+}
+
+.inventory-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.inventory-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 6px;
+  width: min(560px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 10px 24px var(--shadow-deep);
+}
+
+.inventory-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.inventory-header h2 {
+  margin: 0;
+  flex: 1;
+  font-family: var(--font-display);
+  color: var(--brass-bright);
+}
+
+.inventory-coins {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--brass);
+}
+
+.inventory-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.75rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+}
+
+.inventory-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--timber-light);
+  padding-bottom: 0.6rem;
+}
+
+.inventory-tab {
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.inventory-tab-active {
+  border-color: var(--brass-dim);
+  color: var(--brass-bright);
+  background: var(--paper-sunken);
+}
+
+.inventory-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+
+.inventory-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.inventory-item-equipped {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 1px var(--brass-dim) inset;
+}
+
+.inventory-item-name {
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.inventory-equipped-tag {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--brass);
+}
+
+.inventory-item button {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+/* The victory-pose mini portrait on the results roster. */
+.game-over-roster li {
+  gap: 0.5rem;
+}
+
+/* A destructive primary action — account deletion. Same shape as an ordinary
+   button, but built from the danger palette instead of brass so it never
+   reads as "just another button" in a list of them. */
+button.danger {
+  background: linear-gradient(180deg, var(--danger-bright), var(--danger) 55%, var(--danger-well));
+  color: var(--ink);
+  border-color: var(--danger-well);
+}
+
+/* A labelled checkbox row — the age/consent boxes on the register form. */
+.checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  line-height: 1.4;
+}
+
+.checkbox-field input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+/* Profile screen */
+.profile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 6px;
+  width: min(520px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 10px 24px var(--shadow-deep);
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.profile-header h2 {
+  margin: 0;
+  flex: 1;
+  font-family: var(--font-display);
+  color: var(--brass-bright);
+}
+
+.profile-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.75rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+}
+
+.profile-username {
+  margin: 0;
+  color: var(--brass);
+  font-weight: 600;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+
+.profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.profile-stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--brass-bright);
+}
+
+.profile-stat-label {
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.profile-section h3 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--brass);
+}
+
+.profile-role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.profile-role-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.profile-role-record {
+  font-family: var(--font-mono);
+  color: var(--ink-dim);
+}
+
+.profile-badge-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.5rem;
+}
+
+.profile-badge {
+  padding: 0.5rem;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.75rem;
+  border: 1px solid var(--timber-light);
+}
+
+.profile-badge-earned {
+  background: var(--paper-sunken);
+  border-color: var(--brass-dim);
+  color: var(--brass-bright);
+}
+
+.profile-badge-locked {
+  background: transparent;
+  color: var(--ink-faint);
+  opacity: 0.6;
+}
+
+.profile-legal-links {
+  display: flex;
+  gap: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--timber-light);
+}
+
+.profile-danger-zone {
+  padding: 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  background: var(--danger-well);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.profile-danger-zone h3 {
+  margin: 0;
+  color: var(--danger-bright);
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.profile-delete-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.profile-delete-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Legal pages (Privacy Policy / Terms of Service) */
+.legal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 98;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.legal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 6px;
+  width: min(640px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 10px 24px var(--shadow-deep);
+}
+
+.legal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.legal-header h2 {
+  margin: 0;
+  flex: 1;
+  font-family: var(--font-display);
+  color: var(--brass-bright);
+}
+
+.legal-updated {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.legal-body {
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
+
+/* Cookie/localStorage disclosure banner */
+.cookie-notice {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 99;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 6px;
+  max-width: 640px;
+  margin: 0 auto;
+  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
+  border: 1px solid var(--timber-light);
+  box-shadow:
+    0 1px 0 var(--highlight) inset,
+    0 10px 24px var(--shadow-deep);
+}
+
+.cookie-notice p {
+  margin: 0;
+  flex: 1;
+  min-width: 220px;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+}
+
+/* End-of-game summary (GameOverScreen) */
+.game-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--timber-light);
+}
+
+.game-summary-heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--brass);
+}
+
+.game-summary-players {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.game-summary-player-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.game-summary-survived {
+  color: var(--success-bright);
+}
+
+.game-summary-eliminated {
+  color: var(--danger-bright);
+}
+
+.game-summary-tasks {
+  font-family: var(--font-mono);
+  color: var(--ink-dim);
+}
+
+.game-summary-votes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.game-summary-vote-round {
+  padding: 0.5rem 0.6rem;
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+}
+
+.game-summary-vote-round-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.75rem;
+  color: var(--brass);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.game-summary-vote-results,
+.game-summary-vote-ballots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.game-summary-vote-ballots {
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px dashed var(--timber-light);
+  color: var(--ink-faint);
+}

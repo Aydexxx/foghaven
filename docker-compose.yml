@@ -1,10 +1,11 @@
-# Local Postgres for the Foghaven account system.
+# Local Postgres + Redis for the Foghaven account and friend systems.
 #
 # `docker compose up -d` gives you a database matching the DATABASE_URL in
-# server/.env.example. These credentials are DEV-ONLY and intentionally weak —
-# production must supply its own DATABASE_URL (never this file) via the
-# environment. Nothing here is a secret worth guarding; the real secret is
-# JWT_SECRET, which lives only in an un-committed server/.env.
+# server/.env.example, and a Redis matching REDIS_URL. These credentials are
+# DEV-ONLY and intentionally weak — production must supply its own
+# DATABASE_URL/REDIS_URL (never this file) via the environment. Nothing here
+# is a secret worth guarding; the real secret is JWT_SECRET, which lives only
+# in an un-committed server/.env.
 
 services:
   postgres:
@@ -21,6 +22,23 @@ services:
       - foghaven-pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U foghaven -d foghaven"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Online presence for the friend system (`server/src/presence/`) — who's
+  # online, delivered to `HubRoom` so it can tell a player's friends without a
+  # database round trip on every heartbeat. Not used for anything durable, so
+  # it carries no volume: a restart simply means everyone re-announces
+  # themselves online on their next reconnect.
+  redis:
+    image: redis:7-alpine
+    container_name: foghaven-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10

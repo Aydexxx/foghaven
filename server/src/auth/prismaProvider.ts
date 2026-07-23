@@ -31,4 +31,13 @@ export class PrismaAuthProvider extends BaseAuthProvider {
     // real arbiter of uniqueness against a concurrent registration.
     return this.prisma.user.create({ data: user });
   }
+
+  protected async remove(id: string): Promise<void> {
+    // Everything else this account owns — cosmetics, friendships, blocks,
+    // stats, ban history — goes with it via the schema's own `onDelete`
+    // rules; a report *filed by* this account survives with `reporterId` set
+    // null (see `Report.reporter`), and a report *against* it is cascaded
+    // away along with the account it was about.
+    await this.prisma.user.delete({ where: { id } });
+  }
 }

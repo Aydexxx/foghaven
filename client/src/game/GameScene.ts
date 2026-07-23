@@ -30,8 +30,16 @@ import {
 import type { BodyState, GameState, PlayerState } from "../net/types";
 import i18n from "../i18n";
 import { archetypeForColor } from "./characters/assign";
-import { RIG_ORIGIN, FRAME_SIZE } from "./characters/rig";
+import { PALETTE } from "./characters/palette";
+import { RIG_ORIGIN, FRAME_SIZE, type Shape } from "./characters/rig";
 import { buildCharacterSpriteSheet, type CharacterAnimSet } from "./characters/spriteSheet";
+import {
+  ACCESSORY_VISUALS,
+  DEATH_EFFECT_VISUALS,
+  HAT_VISUALS,
+  OUTFIT_VISUALS,
+  PET_VISUALS,
+} from "./characters/cosmeticVisuals";
 import { audioEngine } from "../audio/audioEngine";
 import { PhaseAtmosphere } from "./atmosphere/PhaseAtmosphere";
 
@@ -152,6 +160,20 @@ interface PlayerEntity {
   label: Phaser.GameObjects.Text;
   /** The small player-colour badge riding along beside the sprite — see `createAccentBadge`. */
   badge: Phaser.GameObjects.Arc;
+  /**
+   * Cosmetic overlays — each one a small `Graphics` object drawn once at
+   * creation (equipped cosmetics never change mid-room, same as `name`) and
+   * repositioned every frame at a fixed offset from `pos`, the exact
+   * mechanism `badge` already uses. Undefined when that slot is empty; see
+   * `characters/cosmeticVisuals.ts` for why the offsets are fixed rather than
+   * tracking the current animation frame's bone transform.
+   */
+  hat?: Phaser.GameObjects.Graphics;
+  accessory?: Phaser.GameObjects.Graphics;
+  outfit?: Phaser.GameObjects.Graphics;
+  pet?: Phaser.GameObjects.Graphics;
+  /** The equipped death-effect catalog id, if any — captured for `playDeathTransition` to read at the moment it fires. */
+  deathEffectId?: string;
   /** Which of the six costumes this player is wearing — see `characters/assign.ts`. */
   anims: CharacterAnimSet;
   disposers: Array<() => void>;
@@ -561,6 +583,10 @@ export class GameScene extends Phaser.Scene {
         entity.sprite.setVisible(fresh);
         entity.badge.setVisible(fresh);
         entity.label.setVisible(fresh);
+        entity.hat?.setVisible(fresh);
+        entity.accessory?.setVisible(fresh);
+        entity.outfit?.setVisible(fresh);
+        entity.pet?.setVisible(fresh);
         if (!fresh) {
           // Leaving fog is exactly leaving earshot too — same principle as
           // the position sync itself never sending what's out of range.
@@ -581,6 +607,15 @@ export class GameScene extends Phaser.Scene {
       entity.sprite.setPosition(pos.x, pos.y);
       entity.badge.setPosition(pos.x + BADGE_OFFSET.x, pos.y + BADGE_OFFSET.y);
       entity.label.setPosition(pos.x, pos.y - LABEL_OFFSET_Y);
+      // Cosmetic shapes are authored in rig-local space already offset from
+      // the feet (a hat's points already sit up near y=-48, a pet's out near
+      // x=-20) — see `cosmeticVisuals.ts` — so positioning the overlay at
+      // `pos` directly, with no further offset, reproduces exactly the same
+      // placement the baked atlas would have if these were archetype props.
+      entity.hat?.setPosition(pos.x, pos.y);
+      entity.accessory?.setPosition(pos.x, pos.y);
+      entity.outfit?.setPosition(pos.x, pos.y);
+      entity.pet?.setPosition(pos.x, pos.y);
       // Read before `updateCharacterAnimation` overwrites `entity.lastPos`
       // to `pos` at its end.
       this.updateFootstepAudio(id, entity, pos, localPos);
@@ -790,6 +825,42 @@ export class GameScene extends Phaser.Scene {
       // archetype for an already-animating sprite.
       player.listen("color", (value) => badge.setFillStyle(this.parseColor(value))),
     );
+
+    // Cosmetics arrive slightly after the player itself: `GameRoom.onJoin`
+    // snapshots the account's equipped loadout onto these fields
+    // fire-and-forget (see its own doc), so they are very often still empty
+    // strings at the exact moment this entity is created. `listen` is what
+    // catches the patch once it lands — there is no reactive "changed mid-
+    // room" case to handle beyond that, since a loadout is fixed for the
+    // room's lifetime the same way `name` is.
+    entity.disposers.push(
+      player.listen("hatId", (value) =>
+        this.setCosmeticOverlay(entity, "hat", value ? HAT_VISUALS[value] : undefined),
+      ),
+    );
+    entity.disposers.push(
+      player.listen("accessoryId", (value) =>
+        this.setCosmeticOverlay(entity, "accessory", value ? ACCESSORY_VISUALS[value] : undefined),
+      ),
+    );
+    entity.disposers.push(
+      player.listen("outfitId", (value) =>
+        this.setCosmeticOverlay(entity, "outfit", value ? OUTFIT_VISUALS[value] : undefined),
+      ),
+    );
+    entity.disposers.push(
+      player.listen("petId", (value) =>
+        this.setCosmeticOverlay(entity, "pet", value ? PET_VISUALS[value] : undefined),
+      ),
+    );
+    // Not an overlay — read at the moment `playDeathTransition` fires, so it
+    // only needs capturing, not rendering.
+    entity.disposers.push(
+      player.listen("deathEffectId", (value) => {
+        entity.deathEffectId = value;
+      }),
+    );
+
     this.entities.set(key, entity);
     // Liveness comes from the bodies map, not `player.alive` — see
     // `isDeadPlayer` for why that flag is unreliable on living clients.
@@ -806,6 +877,41 @@ export class GameScene extends Phaser.Scene {
     entity.sprite.setAlpha(alpha);
     entity.badge.setAlpha(alive ? 1 : 0);
     entity.label.setAlpha(alpha);
+    entity.hat?.setAlpha(alpha);
+    entity.accessory?.setAlpha(alpha);
+    entity.outfit?.setAlpha(alpha);
+    entity.pet?.setAlpha(alpha);
+  }
+
+  /**
+   * Create (or replace) one cosmetic slot's overlay. A flat-shaded polygon
+   * drawn once — equipped cosmetics never change mid-room — then repositioned
+   * every frame in `render()` at a fixed offset from the player, the same
+   * mechanism the identity badge uses. `undefined` clears the slot, which is
+   * how an empty loadout field (no cosmetic equipped) is represented: nothing
+   * drawn, nothing to reposition.
+   */
+  private setCosmeticOverlay(
+    entity: PlayerEntity,
+    slot: "hat" | "accessory" | "outfit" | "pet",
+    shape: Shape | undefined,
+  ): void {
+    entity[slot]?.destroy();
+    if (!shape) {
+      entity[slot] = undefined;
+      return;
+    }
+    const g = this.add.graphics();
+    g.fillStyle(shape.fill);
+    g.fillPoints(shape.points, true);
+    g.lineStyle(1.5, shape.stroke ?? PALETTE.ink, 1);
+    g.strokePoints(shape.points, true, true);
+    // Cosmetics can arrive (via `listen`) well after the entity itself, at
+    // which point a remote player may already be fog-hidden — match that
+    // now rather than flashing visible for one frame until `render` next
+    // corrects it.
+    g.setVisible(entity.fogVisible);
+    entity[slot] = g;
   }
 
   /**
@@ -822,10 +928,46 @@ export class GameScene extends Phaser.Scene {
     }
     entity.deathPlaying = true;
     entity.sprite.play(entity.anims.death);
+    if (entity.deathEffectId) {
+      this.spawnDeathEffect(entity.deathEffectId, entity.sprite.x, entity.sprite.y);
+    }
     entity.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       entity.deathPlaying = false;
       entity.sprite.play(entity.anims.ghost, true);
     });
+  }
+
+  /**
+   * A one-shot cosmetic flourish at the moment a death fall starts —
+   * whatever the dying player has equipped in the death-effect slot. Purely
+   * decorative timing: by the time this fires, the server has already
+   * resolved the kill and told this client about it (via `addBody` /
+   * `onPlayerConfirmedDead` / `becomeGhost`, the three call sites of
+   * `playDeathTransition`), so nothing here can affect who died or when.
+   * A handful of small circles tweened outward and faded — deliberately not
+   * a real `ParticleEmitter`: one short burst doesn't need pooling, and this
+   * avoids depending on Phaser's particle API shape across versions.
+   */
+  private spawnDeathEffect(cosmeticId: string, x: number, y: number): void {
+    const visual = DEATH_EFFECT_VISUALS[cosmeticId];
+    if (!visual) {
+      return;
+    }
+    for (let i = 0; i < visual.particleCount; i += 1) {
+      const angle = (i / visual.particleCount) * Math.PI * 2 + Math.random() * 0.6;
+      const distance = visual.spread * (0.6 + Math.random() * 0.4);
+      const particle = this.add.circle(x, y - 10, 1.5 + Math.random(), visual.color, 0.9);
+      this.tweens.add({
+        targets: particle,
+        x: x + Math.cos(angle) * distance,
+        y: y - 10 + Math.sin(angle) * distance,
+        alpha: 0,
+        scale: 0.3,
+        duration: 450 + Math.random() * 200,
+        ease: "Cubic.easeOut",
+        onComplete: () => particle.destroy(),
+      });
+    }
   }
 
   /**
@@ -1531,6 +1673,10 @@ export class GameScene extends Phaser.Scene {
     entity.sprite.destroy();
     entity.badge.destroy();
     entity.label.destroy();
+    entity.hat?.destroy();
+    entity.accessory?.destroy();
+    entity.outfit?.destroy();
+    entity.pet?.destroy();
     this.entities.delete(key);
   }
 

@@ -74,8 +74,12 @@ export async function register(
   email: string,
   username: string,
   password: string,
+  ageConfirmed: boolean,
+  consentAccepted: boolean,
 ): Promise<AuthSession> {
-  return toSession(await post("/auth/register", { email, username, password }));
+  return toSession(
+    await post("/auth/register", { email, username, password, ageConfirmed, consentAccepted }),
+  );
 }
 
 export async function login(identifier: string, password: string): Promise<AuthSession> {
@@ -95,6 +99,23 @@ export async function fetchMe(token: string): Promise<PublicUser | null> {
     return data.user ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The GDPR/KVKK "right to erasure" call. Requires the current password —
+ * same reasoning as the server route it hits: a bearer token alone isn't
+ * enough authority for something this irreversible.
+ */
+export async function deleteAccount(token: string, password: string): Promise<void> {
+  const res = await fetch(`${authBaseUrl()}/auth/account`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new AuthError((data as { error?: string }).error ?? "unknown", res.status);
   }
 }
 

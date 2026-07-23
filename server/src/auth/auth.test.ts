@@ -193,6 +193,49 @@ describe("InMemoryAuthProvider (same logic as the real Postgres one)", () => {
     });
   });
 
+  it("deleteAccount removes the row on a correct password, refuses on a wrong one", async () => {
+    const p = provider();
+    const reg = await p.register({ email: "z@x.com", username: "Zed", password: "longenough1" });
+    if (!reg.ok) throw new Error("setup");
+    const userId = reg.value.user.id;
+
+    const wrong = await p.deleteAccount(userId, "not-the-password");
+    expect(wrong).toMatchObject({ ok: false, error: "invalid_password" });
+    // Still there — a wrong password must not touch the account.
+    expect(await p.getPublicUser(userId)).not.toBeNull();
+
+    const ok = await p.deleteAccount(userId, "longenough1");
+    expect(ok).toMatchObject({ ok: true, value: true });
+    expect(await p.getPublicUser(userId)).toBeNull();
+
+    // Deleting an id that no longer exists (or never did) reports "not_found".
+    expect(await p.deleteAccount(userId, "longenough1")).toMatchObject({
+      ok: false,
+      error: "not_found",
+    });
+  });
+
+  it("register succeeds regardless of the consent flags — that gate lives at the HTTP layer", async () => {
+    const p = provider();
+    const withConsent = await p.register({
+      email: "a@a.com",
+      username: "Aya",
+      password: "longenough1",
+      ageConfirmed: true,
+      consentAccepted: true,
+    });
+    expect(withConsent.ok).toBe(true);
+
+    const withoutConsent = await p.register({
+      email: "b@b.com",
+      username: "Bea",
+      password: "longenough1",
+    });
+    // `register()` itself never refuses on missing consent — see the doc on
+    // `RegisterInput.ageConfirmed`. Enforcing that is `authRoutes.ts`'s job.
+    expect(withoutConsent.ok).toBe(true);
+  });
+
   it("authenticates a valid token, a guest, and refuses junk", async () => {
     const p = provider();
     const reg = await p.register({ email: "z@x.com", username: "Zed", password: "longenough1" });

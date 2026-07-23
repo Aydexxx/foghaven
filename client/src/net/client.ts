@@ -75,6 +75,7 @@ export type JoinFailure =
   | "banned"
   | "authInvalid"
   | "guestNoCreate"
+  | "blocked"
   | "unknown";
 
 /**
@@ -99,6 +100,9 @@ export function classifyJoinError(error: unknown): JoinFailure {
   }
   if (code === JOIN_ERROR.GUEST_NO_CREATE) {
     return "guestNoCreate";
+  }
+  if (code === JOIN_ERROR.BLOCKED) {
+    return "blocked";
   }
   return "unknown";
 }

@@ -37,5 +37,300 @@ model User {
   /// a past date means the ban has effectively expired (see `isBanActive`).
   banUntil  DateTime?
 
+  /// Moderation privilege. Read fresh from this row on every admin request —
+  /// never taken from the auth token, which carries only a user id precisely so
+  /// that a privilege change (or a demotion) takes effect immediately rather
+  /// than whenever the holder's week-long token happens to expire.
+  role UserRole @default(PLAYER)
+
+  sentFriendRequests     FriendRequest[] @relation("SentFriendRequests")
+  receivedFriendRequests FriendRequest[] @relation("ReceivedFriendRequests")
+  blocksMade             Block[]         @relation("BlocksMade")
+  blocksReceived         Block[]         @relation("BlocksReceived")
+
+  reportsFiled    Report[]    @relation("ReportsFiled")
+  reportsAgainst  Report[]    @relation("ReportsAgainst")
+  reportsReviewed Report[]    @relation("ReportsReviewed")
+  chatLogs        ChatLog[]
+  bansReceived    BanRecord[] @relation("BansReceived")
+  bansIssued      BanRecord[] @relation("BansIssued")
+
+  /// Soft currency, earned by playing rounds (see `GameRoom.declareGameOver`)
+  /// and spent on cosmetics. Purely cosmetic economy — nothing purchasable
+  /// with it ever touches gameplay, so there is no real-money angle to guard
+  /// here the way `banned` guards account access.
+  coins Int @default(0)
+
+  cosmetics UserCosmetic[]
+
+  stats     UserStats?
+  roleStats UserRoleStats[]
+
+  /// Whether this account confirmed the minimum-age declaration at
+  /// registration. Enforced at the HTTP boundary, not here — see
+  /// `server/src/http/authRoutes.ts`'s `/register` handler — so this column is
+  /// simply the durable record of what was confirmed, for the same reason
+  /// `consentAcceptedAt` is a timestamp rather than a bare boolean.
+  ageConfirmed Boolean @default(false)
+  /// When this account accepted the Terms of Service / Privacy Policy at
+  /// registration; null for an account that predates the requirement. Kept as
+  /// a timestamp rather than a boolean so consent is provable, not just
+  /// asserted — the kind of evidence GDPR/KVKK actually ask for.
+  consentAcceptedAt DateTime?
+
   @@map("users")
+}
+
+/// Lifetime aggregate stats for one account, batch-written once per game (see
+/// `GameRoom.recordGameStats`) rather than touched on every task step or
+/// kill — the whole point being that a round generates one write here, not
+/// dozens. `winRate` and `averageSurvivalTimeMs` are deliberately NOT stored:
+/// they're one division away from the counters that are, and storing them
+/// would just be a second place they could drift out of sync — see
+/// `StatsProvider.getStats`, which derives both fresh on every read.
+model UserStats {
+  userId              String   @id
+  gamesPlayed         Int      @default(0)
+  gamesWon            Int      @default(0)
+  /// Games this account was still alive when the round ended, win or lose —
+  /// distinct from `gamesWon`, since the town can win a round with this
+  /// player already dead.
+  gamesSurvived       Int      @default(0)
+  /// Total task steps completed across every game — a stranger's fake list
+  /// counts too; this is a measure of this player's own activity, not the
+  /// town's shared task bar (`GameState.taskBarCompleted`).
+  tasksCompleted      Int      @default(0)
+  totalSurvivalTimeMs Int      @default(0)
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_stats")
+}
+
+/// Per-role lifetime record, one row per `(userId, role)` pair ever played.
+/// Kept apart from `UserStats` rather than as a JSON blob on it so a profile
+/// screen can query "what has this account actually played" without parsing
+/// anything — see `StatsProvider.getStats`.
+model UserRoleStats {
+  id          String @id @default(cuid())
+  userId      String
+  /// A `ROLES` id from the shared role registry (`shared/game/roles.ts`) — a
+  /// plain string, not an enum, because the registry (and therefore the set
+  /// of valid ids) is config, not schema; a new role needs no migration here.
+  role        String
+  gamesPlayed Int    @default(0)
+  gamesWon    Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([userId])
+  @@map("user_role_stats")
+}
+
+enum UserRole {
+  PLAYER
+  MODERATOR
+  ADMIN
+}
+
+enum CosmeticType {
+  HAT
+  ACCESSORY
+  PET
+  OUTFIT
+  VICTORY_POSE
+  DEATH_EFFECT
+}
+
+/// The purchasable/ownable catalog entry for a cosmetic. The *authoring*
+/// data — what it actually looks like (polygon geometry, anchor offsets,
+/// pose frames) — lives in code at `shared/config/cosmetics.ts`, the same
+/// registry pattern `shared/config/roles.ts` and `settings.ts` already use;
+/// this table exists only so ownership (`UserCosmetic`) has something with
+/// real referential integrity to point at, and so price/availability can be
+/// queried without loading the whole client bundle's worth of shape data.
+/// Kept in sync with the shared registry by an idempotent upsert at boot —
+/// see `server/src/index.ts`.
+model Cosmetic {
+  id         String       @id @default(cuid())
+  /// The stable catalog key — matches the shared registry's own `id` field
+  /// exactly, and is what every other reference to a cosmetic (ownership,
+  /// equip slots, the wire format) actually uses. The Prisma `id` above only
+  /// exists because every model here has one; nothing joins on it.
+  slug       String       @unique
+  type       CosmeticType
+  name       String
+  /// Coins to purchase. 0 means free/starter — owned by everyone without a
+  /// `UserCosmetic` row at all (see `CosmeticProvider.isOwned`) — never null,
+  /// since every cosmetic in this system is purchasable by design; there is
+  /// no earn-a-specific-item path, only earn-currency-then-buy.
+  priceCoins Int          @default(0)
+  createdAt  DateTime     @default(now())
+
+  owners UserCosmetic[]
+
+  @@map("cosmetics")
+}
+
+/// Ownership plus which *one* cosmetic of each type a player currently has
+/// equipped. `equipped` living here rather than as separate columns on
+/// `User` means "equipped" can never point at something unowned — there's
+/// nothing to point at until the row exists. At most one row per
+/// `(userId, type)` may have `equipped = true`; `CosmeticProvider.equip`
+/// enforces that transactionally rather than with a DB constraint, since
+/// Postgres has no native "unique among rows matching a joined column."
+model UserCosmetic {
+  id         String   @id @default(cuid())
+  userId     String
+  cosmeticId String
+  equipped   Boolean  @default(false)
+  acquiredAt DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmetic Cosmetic @relation(fields: [cosmeticId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cosmeticId])
+  @@index([userId, equipped])
+  @@map("user_cosmetics")
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+/// One player reporting another. The reporter may be a guest (no account), so
+/// `reporterId` is nullable and `reporterName` records who they appeared as;
+/// the *reported* player must be a real account, since there is nothing a
+/// moderator could act on otherwise.
+model Report {
+  id           String       @id @default(cuid())
+  reporterId   String?
+  reporterName String
+  reportedId   String
+  reportedName String
+  reason       String
+  /// Optional free text from the reporter, length-capped at the route.
+  note         String?
+  /// The room the report was filed from, so the chat log can be pulled up.
+  roomCode     String
+  status       ReportStatus @default(OPEN)
+  createdAt    DateTime     @default(now())
+
+  /// The surrounding chat, snapshotted at filing time as a JSON array of
+  /// `{ senderName, text, sentAt }`. Denormalised on purpose: `ChatLog` rows
+  /// are deleted on a retention schedule, and evidence attached to a report
+  /// must outlive that sweep or the queue fills with unreviewable reports.
+  chatExcerpt Json?
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  /// The moderator's own note on what they decided and why.
+  resolution   String?
+
+  reporter   User? @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: SetNull)
+  reported   User  @relation("ReportsAgainst", fields: [reportedId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("ReportsReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([reportedId])
+  @@map("reports")
+}
+
+/// Retained chat, for reviewing reports. Deleted wholesale once past
+/// `CHAT_LOG_RETENTION_DAYS` — see the retention sweep in `index.ts`.
+/// `userId` is null for guests, who have no account to attribute a line to.
+model ChatLog {
+  id         String   @id @default(cuid())
+  roomCode   String
+  userId     String?
+  senderName String
+  channel    String
+  text       String
+  /// What the filter made of this line when it was sent, so a moderator can
+  /// see that it was already masked/blocked without re-running the filter.
+  filtered   Boolean  @default(false)
+  sentAt     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([roomCode, sentAt])
+  @@index([sentAt])
+  @@map("chat_logs")
+}
+
+/// The ban audit trail. `User.banned`/`banReason`/`banUntil` remain the single
+/// source of truth for whether someone is banned *right now* (it is what
+/// `GameRoom.onAuth` reads on every join); this table is the history of how
+/// that state got there — who issued each ban, when, and when it was lifted.
+model BanRecord {
+  id         String    @id @default(cuid())
+  userId     String
+  issuedById String?
+  reason     String
+  /// Null for a permanent ban.
+  until      DateTime?
+  createdAt  DateTime  @default(now())
+  /// Set when this ban was lifted early; null while it stands or simply expires.
+  liftedAt   DateTime?
+  liftedById String?
+
+  user     User  @relation("BansReceived", fields: [userId], references: [id], onDelete: Cascade)
+  issuedBy User? @relation("BansIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("ban_records")
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+}
+
+/// One row per friendship, in both its states: `PENDING` is an outstanding
+/// request, `ACCEPTED` is a live friendship — there is no separate
+/// `Friendship` table, since an accepted request already carries everything a
+/// friendship needs and the two would only ever move in lockstep. A decline or
+/// an unfriend deletes the row outright rather than parking it in a third
+/// status, so either side is free to send a fresh request later. See
+/// `server/src/friends/provider.ts` for the service that owns this table.
+model FriendRequest {
+  id          String              @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendRequestStatus @default(PENDING)
+  createdAt   DateTime            @default(now())
+  respondedAt DateTime?
+
+  requester User @relation("SentFriendRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("ReceivedFriendRequests", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  /// Prevents a duplicate request in the same direction; the reverse
+  /// direction is checked in the service layer, which turns a crossed request
+  /// (B already asked A) into an instant mutual accept instead of a second row.
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@map("friend_requests")
+}
+
+/// A one-directional block. `blockerId` cannot be invited or matched with
+/// `blockedId` (see `GameRoom.onAuth`'s host check and `HubRoom`'s invite
+/// handler) regardless of whether `blockedId` has blocked back. Blocking
+/// severs any existing friendship/request between the two — see
+/// `FriendProvider.block`.
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
 }

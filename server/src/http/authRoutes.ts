@@ -30,6 +30,20 @@ const REGISTER_STATUS: Record<RegisterError, number> = {
   username_taken: 409,
 };
 
+/**
+ * Consent errors are checked HERE, before the account provider is ever
+ * called — not inside `BaseAuthProvider.register` (see that method's own doc
+ * on `RegisterInput.ageConfirmed`/`consentAccepted`). This is the one place
+ * that actually decides "no consent, no account": the real registration
+ * form always sends both, so these only fire against a client that skipped
+ * the checkboxes by calling the API directly.
+ */
+type ConsentError = "age_confirmation_required" | "consent_required";
+const CONSENT_STATUS: Record<ConsentError, number> = {
+  age_confirmation_required: 400,
+  consent_required: 400,
+};
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -42,10 +56,23 @@ export function createAuthRouter(
 
   router.post("/register", async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
+    const ageConfirmed = body.ageConfirmed === true;
+    const consentAccepted = body.consentAccepted === true;
+    if (!ageConfirmed) {
+      res.status(CONSENT_STATUS.age_confirmation_required).json({ error: "age_confirmation_required" });
+      return;
+    }
+    if (!consentAccepted) {
+      res.status(CONSENT_STATUS.consent_required).json({ error: "consent_required" });
+      return;
+    }
+
     const result = await getAuthProvider().register({
       email: asString(body.email),
       username: asString(body.username),
       password: asString(body.password),
+      ageConfirmed,
+      consentAccepted,
     });
     if (!result.ok) {
       res.status(REGISTER_STATUS[result.error]).json({ error: result.error });
@@ -100,6 +127,30 @@ export function createAuthRouter(
       return;
     }
     res.status(200).json({ user });
+  });
+
+  /**
+   * The GDPR/KVKK "right to erasure" endpoint. A bearer token alone proves
+   * this is *a* session for the account, but not that the person holding it
+   * is the one who should be able to destroy it — a stolen or briefly
+   * unattended token must not be enough — so the current password is
+   * required too, same as any other irreversible account action.
+   */
+  router.delete("/account", async (req: Request, res: Response) => {
+    const header = asString(req.headers.authorization);
+    const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+    const claims = token ? verifyToken(token) : null;
+    if (!claims) {
+      res.status(401).json({ error: "auth_invalid" });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const result = await getAuthProvider().deleteAccount(claims.userId, asString(body.password));
+    if (!result.ok) {
+      res.status(result.error === "not_found" ? 404 : 401).json({ error: result.error });
+      return;
+    }
+    res.status(204).send();
   });
 
   return router;

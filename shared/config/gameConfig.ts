@@ -293,6 +293,11 @@ export const JOIN_ERROR = {
   BANNED: 4403,
   /** A guest tried to CREATE a room; guests may only join existing ones. */
   GUEST_NO_CREATE: 4404,
+  /**
+   * Refused because of a block relationship with the room's host — see
+   * `GameRoom.onAuth`'s host check and the friend system's `Block` model.
+   */
+  BLOCKED: 4405,
 } as const;
 
 export type JoinError = (typeof JOIN_ERROR)[keyof typeof JOIN_ERROR];
@@ -366,4 +371,37 @@ export const GAME_CONFIG = {
 /** Broadcast-shaped payload telling a client their own death was confirmed. */
 export interface KilledMessage {
   by: string;
+}
+
+/**
+ * One meeting's vote outcome, as carried on the end-of-game summary. `results`
+ * (per-candidate counts) is always present — it is exactly what the meeting's
+ * own results screen already showed live, just retained. `ballots` (who voted
+ * for whom) is left empty unless `VOTES_ARE_PUBLIC`, the same secrecy rule
+ * `GameRoom.resolveVotes` already applies to `VoteTally.voterNames` — a game
+ * ending does not retroactively make anonymous ballots public.
+ */
+export interface GameSummaryVoteRound {
+  results: Array<{ targetId: string; targetName: string; count: number }>;
+  ballots: Array<{ voterId: string; voterName: string; targetId: string; targetName: string }>;
+}
+
+/**
+ * Broadcast once, the instant `declareGameOver` runs — the "who did what"
+ * breakdown behind the results screen. Everyone still seated gets a row here
+ * regardless of account status (unlike the persisted stats this same moment
+ * also produces — see `GameRoom.recordGameStats` — this is a live display,
+ * not a database write, so a guest's round is just as worth showing them).
+ */
+export interface GameSummaryMessage {
+  players: Array<{
+    id: string;
+    name: string;
+    role: string;
+    faction: string;
+    survived: boolean;
+    tasksCompleted: number;
+    tasksTotal: number;
+  }>;
+  voteRounds: GameSummaryVoteRound[];
 }

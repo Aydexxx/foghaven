@@ -26,9 +26,13 @@
     "authError": "Please sign in again to play.",
     "guestNoCreateError": "Guests can't create rooms — sign in to host.",
     "guestNoCreateHint": "Guests can join a room by code. Sign in to host your own.",
+    "blockedError": "You can't join that room.",
+    "friendsButton": "Friends",
     "signOutButton": "Sign out",
     "signInButton": "Sign in",
-    "backButton": "Back"
+    "backButton": "Back",
+    "inventoryButton": "Cosmetics",
+    "profileButton": "Profile"
   },
   "auth": {
     "loginTab": "Log In",
@@ -45,6 +49,9 @@
     "guestNote": "Guests can join a room by code but can't create one or earn a ban-proof identity.",
     "passwordHint": "At least 8 characters.",
     "busy": "…",
+    "ageConfirmLabel": "I am 13 years of age or older.",
+    "consentLabelPrefix": "I agree to the",
+    "consentLabelAnd": "and",
     "errors": {
       "invalid_email": "That doesn't look like a valid email address.",
       "invalid_username": "Usernames are 3–20 characters: letters, digits, spaces, - or _.",
@@ -55,6 +62,8 @@
       "invalid_credentials": "Wrong email/username or password.",
       "banned": "This account is banned{{reason}}.",
       "rate_limited": "Too many attempts. Please wait a moment and try again.",
+      "age_confirmation_required": "You must confirm you are 13 or older to register.",
+      "consent_required": "You must agree to the Terms of Service and Privacy Policy to register.",
       "unknown": "Something went wrong. Please try again."
     }
   },
@@ -105,7 +114,52 @@
       "confirmEjectsLabel": "Reveal ejected player's faction",
       "autoLabel": "Auto",
       "secondsValue": "{{value}}s"
+    },
+    "copyInviteLinkButton": "Copy Invite Link",
+    "inviteFriendsButton": "Invite Friends"
+  },
+  "friendsPanel": {
+    "heading": "Friends",
+    "closeButton": "Close",
+    "tabs": {
+      "friends": "Friends ({{count}})",
+      "requests": "Requests ({{count}})",
+      "blocked": "Blocked"
+    },
+    "addPlaceholder": "Add by username",
+    "addButton": "Add",
+    "pendingTag": "Pending",
+    "noFriends": "No friends yet — add one by username above.",
+    "noRequests": "No pending requests.",
+    "noBlocked": "Nobody blocked.",
+    "inviteButton": "Invite",
+    "invitedButton": "Invited!",
+    "removeButton": "Remove",
+    "blockButton": "Block",
+    "unblockButton": "Unblock",
+    "blockPlaceholder": "Block by username",
+    "acceptButton": "Accept",
+    "declineButton": "Decline",
+    "errors": {
+      "notFound": "No player with that username.",
+      "self": "That's you.",
+      "alreadyFriends": "You're already friends.",
+      "alreadyPending": "A request is already pending.",
+      "blocked": "That didn't work.",
+      "inviteOffline": "They're offline right now.",
+      "inviteNotFriends": "You can only invite friends.",
+      "unknown": "Something went wrong. Please try again."
     }
+  },
+  "friendInvite": {
+    "message": "{{name}} invited you to a game!",
+    "joinButton": "Join",
+    "joiningButton": "Joining…",
+    "dismissButton": "Dismiss"
+  },
+  "inviteLink": {
+    "joining": "Joining game…",
+    "error": "That invite link didn't work — the room may be full or already started."
   },
   "factions": {
     "townsfolk": "Town",
@@ -332,7 +386,19 @@
     "reasonParity": "The Strangers reached parity with the town.",
     "reasonCriticalSabotage": "The Lighthouse flooded before it could be repaired.",
     "backToLobby": "Back to Lobby",
-    "waitingForHost": "Waiting for the host to return to the lobby…"
+    "waitingForHost": "Waiting for the host to return to the lobby…",
+    "summary": {
+      "heading": "Round Summary",
+      "survived": "Survived",
+      "eliminated": "Eliminated",
+      "tasks": "{{completed}}/{{total}} tasks",
+      "voteHistory": "Vote History",
+      "meetingNumber": "Meeting {{number}}",
+      "voteCount": "{{name}} — {{count}} votes",
+      "voteCountSkip": "Skip — {{count}} votes",
+      "skipVote": "skip",
+      "ballotLine": "{{voter}} voted for {{target}}"
+    }
   },
   "vote": {
     "skip": "Skip vote",
@@ -379,5 +445,212 @@
       "instructions": "Click each dial to align it with its target.",
       "dialLabel": "Dial {{index}}"
     }
+  },
+  "moderation": {
+    "reportTitle": "Report this player",
+    "reportLabel": "Report {{name}}",
+    "voteMuteTitle": "Vote to mute this player",
+    "voteMuteLabel": "Vote to mute {{name}}",
+    "reportFiled": "Report sent. Thanks — a moderator will review it.",
+    "reportFailed": "That report couldn't be sent.",
+    "reportRateLimited": "You've sent a lot of reports. Please wait a moment.",
+    "messageBlocked": "That message wasn't sent. Keep it civil.",
+    "youAreMuted": "You're muted and can't chat right now.",
+    "slowDown": "You're sending messages too quickly."
+  },
+  "report": {
+    "heading": "Report {{name}}",
+    "noteLabel": "Anything else? (optional)",
+    "notePlaceholder": "What happened?",
+    "submitButton": "Send report",
+    "cancelButton": "Cancel",
+    "disclaimer": "Reports are reviewed by moderators. False reports may cost you your own account.",
+    "reasons": {
+      "harassment": "Harassment or bullying",
+      "hate_speech": "Hate speech or slurs",
+      "spam": "Spam or flooding",
+      "cheating": "Cheating",
+      "inappropriate_name": "Inappropriate name",
+      "griefing": "Griefing or throwing games",
+      "other": "Something else"
+    }
+  },
+  "admin": {
+    "heading": "Moderation",
+    "closeButton": "Close",
+    "tabs": {
+      "reports": "Reports ({{count}})",
+      "users": "Users"
+    },
+    "roles": {
+      "player": "Player",
+      "moderator": "Moderator",
+      "admin": "Admin"
+    },
+    "status": {
+      "open": "Open",
+      "actioned": "Actioned",
+      "dismissed": "Dismissed"
+    },
+    "showResolved": "Include resolved reports",
+    "noReports": "Nothing in the queue.",
+    "reportedBy": "Reported by {{name}} in room {{room}} · {{when}}",
+    "viewEvidence": "Chat log ({{count}} lines)",
+    "noEvidence": "No chat was captured with this report.",
+    "openUser": "Open account",
+    "resolutionPlaceholder": "What did you do about it?",
+    "markActioned": "Mark actioned",
+    "dismiss": "Dismiss",
+    "resolvedNote": "Resolution: {{note}}",
+    "searchPlaceholder": "Search by username, email or id",
+    "searchButton": "Search",
+    "noUsers": "No accounts found.",
+    "bannedTag": "Banned",
+    "reportCount": "{{count}} reports",
+    "backToResults": "← Back to results",
+    "currentlyBanned": "Currently banned: {{reason}} (until {{until}})",
+    "permanent": "permanent",
+    "lifted": "lifted",
+    "unbanButton": "Lift ban",
+    "banReasonLabel": "Reason",
+    "banUntilLabel": "Until (leave empty for permanent)",
+    "banPermanentButton": "Ban permanently",
+    "banTemporaryButton": "Ban temporarily",
+    "roleLabel": "Role:",
+    "banHistoryHeading": "Ban history",
+    "noBanHistory": "No bans on record.",
+    "chatRoomPrompt": "Room code to pull chat for:",
+    "fetchChatButton": "Look up room chat",
+    "errors": {
+      "forbidden": "You don't have permission to do that.",
+      "auth_invalid": "Please sign in again.",
+      "not_found": "Not found.",
+      "reason_required": "A reason is required.",
+      "invalid_until": "That date didn't make sense.",
+      "invalid_role": "That isn't a valid role.",
+      "invalid_status": "That isn't a valid status.",
+      "rate_limited": "Slow down a moment.",
+      "unavailable": "Moderation is unavailable right now.",
+      "unknown": "Something went wrong."
+    }
+  },
+  "cosmetics": {
+    "types": {
+      "hat": "Hats",
+      "accessory": "Accessories",
+      "pet": "Pets",
+      "outfit": "Outfits",
+      "victory_pose": "Victory Poses",
+      "death_effect": "Death Effects"
+    },
+    "items": {
+      "top_hat": "Top Hat",
+      "straw_boater": "Straw Boater",
+      "feathered_cap": "Feathered Cap",
+      "spectacles": "Round Spectacles",
+      "red_scarf": "Red Scarf",
+      "eye_patch": "Eye Patch",
+      "harbor_gull": "Harbor Gull",
+      "tabby_cat": "Tabby Cat",
+      "hermit_crab": "Hermit Crab",
+      "brass_pin": "Brass Pin",
+      "golden_sash": "Golden Sash",
+      "silver_sash": "Silver Sash",
+      "triumphant_wave": "Triumphant Wave",
+      "bow": "Bow",
+      "dust_puff": "Dust Puff",
+      "spark_burst": "Spark Burst",
+      "feather_scatter": "Feather Scatter"
+    }
+  },
+  "inventory": {
+    "heading": "Cosmetics",
+    "closeButton": "Close",
+    "coins": "{{count}} coins",
+    "previewHint": "This is how your loadout looks in-game.",
+    "equippedTag": "Equipped",
+    "equipButton": "Equip",
+    "unequipButton": "Unequip",
+    "buyButton": "Buy — {{price}} coins",
+    "errors": {
+      "notFound": "That item doesn't exist.",
+      "alreadyOwned": "You already own that.",
+      "insufficientCoins": "You don't have enough coins.",
+      "notOwned": "You don't own that yet.",
+      "unknown": "Something went wrong. Please try again."
+    }
+  },
+  "profile": {
+    "heading": "Profile",
+    "closeButton": "Close",
+    "loading": "Loading…",
+    "loadError": "Couldn't load your profile. Please try again.",
+    "stats": {
+      "gamesPlayed": "Games Played",
+      "winRate": "Win Rate",
+      "tasksCompleted": "Tasks Completed",
+      "avgSurvival": "Avg. Survival Time"
+    },
+    "roleStats": {
+      "heading": "Roles Played",
+      "record": "{{wins}}W / {{games}}G"
+    },
+    "badges": {
+      "heading": "Badges",
+      "first_win": {
+        "name": "First Win",
+        "description": "Win a game."
+      },
+      "regular": {
+        "name": "Regular",
+        "description": "Play 10 games."
+      },
+      "veteran": {
+        "name": "Veteran",
+        "description": "Play 50 games."
+      },
+      "task_master": {
+        "name": "Task Master",
+        "description": "Complete 100 task steps."
+      },
+      "survivor": {
+        "name": "Survivor",
+        "description": "Survive 10 rounds to the end."
+      },
+      "sharpshooter": {
+        "name": "Sharpshooter",
+        "description": "Win at least 60% of your last 10+ games."
+      }
+    },
+    "deleteAccount": {
+      "heading": "Danger Zone",
+      "description": "Permanently delete your account and everything attached to it — cosmetics, friends, stats, chat history. This cannot be undone.",
+      "startButton": "Delete Account",
+      "passwordLabel": "Confirm your password",
+      "confirmButton": "Permanently Delete",
+      "cancelButton": "Cancel",
+      "busy": "Deleting…",
+      "wrongPassword": "That password is incorrect.",
+      "error": "Something went wrong. Your account was not deleted."
+    }
+  },
+  "legal": {
+    "closeButton": "Close",
+    "lastUpdated": "Last updated: {{date}}",
+    "privacy": {
+      "title": "Privacy Policy",
+      "updated": "July 23, 2026",
+      "body": "This Privacy Policy explains what information Foghaven (\"we\", \"the game\") collects when you play, why we collect it, how long we keep it, and how you can have it deleted.\n\nWHAT WE COLLECT\n\nAccount data: if you register, we store your email address, username, and a securely hashed version of your password (we never store your password itself). We also record whether you confirmed you are 13 or older and when you accepted these terms.\n\nGameplay data: match results, the role you played, tasks completed, survival time, and votes cast during a round are used to build your lifetime stats and to run the game itself. Cosmetic purchases and your in-game coin balance are also stored against your account.\n\nChat and moderation data: in-game chat is temporarily retained (30 days) so that player reports can be reviewed by moderators. If you file or are the subject of a report, the relevant chat excerpt, the report itself, and any resulting moderation action (mute or ban) are retained as part of that record.\n\nTechnical data: we process your IP address transiently to rate-limit login attempts and abusive report filing, and to enforce account bans. We do not sell or share this data with advertisers, and we do not run third-party trackers or analytics in the game client.\n\nGuest play: if you play as a guest without registering, we do not create an account or store any of the above beyond the lifetime of your connection to a game room.\n\nBROWSER STORAGE\n\nThe game client stores a small amount of data in your browser's local storage: your sign-in token (so you stay signed in), a reconnection token (so a dropped connection can rejoin your seat), and your audio/graphics preferences. None of this is used for tracking or advertising, and none of it is shared with third parties. See our cookie/storage notice for details.\n\nRETENTION\n\nAccount data is kept for as long as your account exists. Raw chat logs are deleted after 30 days; a report's own evidence snapshot is kept until the report is resolved and for a reasonable period afterward for moderation accountability. Ban records are kept to enforce bans consistently.\n\nYOUR RIGHTS\n\nUnder data protection laws such as the GDPR (EU) and KVKK (Türkiye), you have the right to access, correct, or delete your personal data, and to withdraw consent at any time. You can delete your account and all associated data at any time from the Profile screen's \"Delete Account\" option. If you need help exercising any of these rights, contact us at the address below.\n\nCHILDREN\n\nFoghaven is not directed at children under 13, and registration requires confirming you meet this minimum age.\n\nCHANGES\n\nWe may update this policy from time to time; the \"Last updated\" date above reflects the most recent revision.\n\nCONTACT\n\nQuestions about this policy or your data can be sent to privacy@foghaven.example (replace with your real support address before launch)."
+    },
+    "terms": {
+      "title": "Terms of Service",
+      "updated": "July 23, 2026",
+      "body": "These Terms of Service govern your use of Foghaven. By registering an account, playing as a guest, or otherwise using the game, you agree to these terms.\n\nELIGIBILITY\n\nYou must be at least 13 years old to use Foghaven. By registering, you confirm you meet this requirement.\n\nACCOUNTS\n\nYou are responsible for keeping your password confidential and for all activity on your account. Usernames must not impersonate others, contain profanity, or otherwise violate the conduct rules below — we may reject or rename a username that does.\n\nCONDUCT\n\nWhile playing, you agree not to: harass or bully other players; use hate speech or slurs; spam or flood chat; cheat or exploit bugs to gain an unfair advantage; use an inappropriate username; grief teammates or deliberately throw games; or otherwise disrupt other players' experience. Players can report violations in-game; reports are reviewed by moderators.\n\nMODERATION AND ENFORCEMENT\n\nViolating these rules may result in a temporary mute, a temporary ban, or a permanent ban at our moderators' discretion, depending on severity and history. Ban reasons and duration (if temporary) are recorded and, where practical, shown to the affected account. We may act on reports, direct observation, or automated abuse detection (e.g. chat filtering, spam limits).\n\nVIRTUAL CURRENCY AND COSMETICS\n\nCoins are earned only by playing rounds and cannot currently be purchased with real money. Cosmetic items are purely decorative and never affect gameplay. We may adjust the cosmetics catalog, including prices, at any time; existing ownership of an item you already hold is not revoked by such a change.\n\nGUEST PLAY\n\nPlaying as a guest does not create an account; guests can join existing rooms but not create them, and have no persistent stats, cosmetics, or ban-proof identity.\n\nTERMINATION\n\nYou may delete your account at any time (see our Privacy Policy). We may suspend or terminate an account for violating these terms, including a permanent ban for serious or repeated violations.\n\nDISCLAIMER AND LIMITATION OF LIABILITY\n\nFoghaven is provided \"as is\" without warranties of any kind. We do not guarantee uninterrupted or error-free service. To the maximum extent permitted by law, we are not liable for indirect, incidental, or consequential damages arising from your use of the game.\n\nCHANGES\n\nWe may update these terms from time to time; continued use after a change constitutes acceptance of the revised terms.\n\nCONTACT\n\nQuestions about these terms can be sent to support@foghaven.example (replace with your real support address before launch)."
+    }
+  },
+  "cookieNotice": {
+    "text": "Foghaven uses your browser's local storage to keep you signed in, reconnect you to a dropped game, and remember your audio/graphics settings. We don't use tracking cookies or third-party analytics.",
+    "learnMore": "Learn more",
+    "dismissButton": "Got it"
   }
 }

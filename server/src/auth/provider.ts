@@ -1,4 +1,4 @@
-import { validateName } from "@foghaven/shared";
+import { USER_ROLE, validateName, type UserRole } from "@foghaven/shared";
 import { hashPassword, verifyPassword } from "./password";
 import { signToken, verifyToken } from "./token";
 import { isValidEmail, validatePassword } from "./validation";
@@ -27,6 +27,13 @@ export interface PublicUser {
   banned: boolean;
   banReason: string | null;
   banUntil: string | null;
+  /**
+   * Moderation privilege, surfaced so the client knows whether to offer the
+   * admin panel at all. Purely cosmetic on the client's side — every `/admin`
+   * route re-reads this from the database itself and would refuse a caller
+   * who edited it in their own local storage.
+   */
+  role: UserRole;
 }
 
 export interface AuthSuccess {
@@ -58,6 +65,7 @@ export type RegisterError =
   | "username_taken";
 export type LoginError = "invalid_credentials" | "banned";
 export type AuthenticateError = "auth_invalid" | "banned";
+export type DeleteAccountError = "invalid_password" | "not_found";
 
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E; ban?: BanInfo };
 
@@ -65,6 +73,17 @@ export interface RegisterInput {
   email: string;
   username: string;
   password: string;
+  /**
+   * Whether the registering player confirmed the minimum-age declaration.
+   * Optional here (defaults to false when omitted) because the actual gate —
+   * refusing to register at all without it — lives at the HTTP boundary (see
+   * `http/authRoutes.ts`), not in this shared core; that keeps every existing
+   * caller of `register()` (most of the test suite) working unchanged while
+   * the real registration surface still enforces it.
+   */
+  ageConfirmed?: boolean;
+  /** Same reasoning as `ageConfirmed` — the Terms of Service / Privacy Policy consent checkbox. */
+  consentAccepted?: boolean;
 }
 
 export interface LoginInput {
@@ -85,6 +104,15 @@ export interface AuthProvider {
     opts: AuthenticateOptions,
   ): Promise<Result<Identity, AuthenticateError>>;
   getPublicUser(userId: string): Promise<PublicUser | null>;
+  /**
+   * The GDPR/KVKK "right to erasure" path: verify the account's own password
+   * (a bearer token alone is not enough for something this destructive — see
+   * `http/authRoutes.ts`'s `DELETE /account`) and, if it matches, remove the
+   * row outright. Everything that hangs off it — cosmetics, friendships,
+   * stats, ban history — goes with it via the schema's own `onDelete: Cascade`
+   * rules; nothing here needs to know what those are.
+   */
+  deleteAccount(userId: string, password: string): Promise<Result<true, DeleteAccountError>>;
 }
 
 // --- Storage primitives the subclasses implement ---------------------------
@@ -100,6 +128,10 @@ export interface StoredUser {
   banned: boolean;
   banReason: string | null;
   banUntil: Date | null;
+  /** Prisma's enum casing (`PLAYER`); mapped to the shared lowercase form by `toPublic`. */
+  role?: string;
+  ageConfirmed?: boolean;
+  consentAcceptedAt?: Date | null;
 }
 
 export interface NewUser {
@@ -107,6 +139,8 @@ export interface NewUser {
   usernameLower: string;
   email: string;
   passwordHash: string;
+  ageConfirmed: boolean;
+  consentAcceptedAt: Date | null;
 }
 
 /** Whether a ban is in force right now — permanent, or temporary and not yet expired. */
@@ -124,6 +158,7 @@ export abstract class BaseAuthProvider implements AuthProvider {
   protected abstract findByEmail(emailLower: string): Promise<StoredUser | null>;
   protected abstract findByUsernameLower(usernameLower: string): Promise<StoredUser | null>;
   protected abstract insert(user: NewUser): Promise<StoredUser>;
+  protected abstract remove(id: string): Promise<void>;
 
   async register(input: RegisterInput): Promise<Result<AuthSuccess, RegisterError>> {
     const email = input.email.trim().toLowerCase();
@@ -157,7 +192,14 @@ export abstract class BaseAuthProvider implements AuthProvider {
     const passwordHash = await hashPassword(input.password);
     let user: StoredUser;
     try {
-      user = await this.insert({ username, usernameLower, email, passwordHash });
+      user = await this.insert({
+        username,
+        usernameLower,
+        email,
+        passwordHash,
+        ageConfirmed: input.ageConfirmed === true,
+        consentAcceptedAt: input.consentAccepted === true ? new Date() : null,
+      });
     } catch {
       // A unique-constraint violation from a race — someone took the name or
       // email between the check above and the insert. Report it the same way.
@@ -223,6 +265,18 @@ export abstract class BaseAuthProvider implements AuthProvider {
     const user = await this.findById(userId);
     return user ? toPublic(user) : null;
   }
+
+  async deleteAccount(userId: string, password: string): Promise<Result<true, DeleteAccountError>> {
+    const user = await this.findById(userId);
+    if (!user) {
+      return { ok: false, error: "not_found" };
+    }
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      return { ok: false, error: "invalid_password" };
+    }
+    await this.remove(userId);
+    return { ok: true, value: true };
+  }
 }
 
 /**
@@ -236,6 +290,13 @@ function banInfo(user: StoredUser): BanInfo {
   return { reason: user.banReason, until: user.banUntil ? user.banUntil.toISOString() : null };
 }
 
+/** Prisma stores roles upper-cased; the wire and the shared helpers use lowercase. */
+const ROLE_FROM_DB: Record<string, UserRole> = {
+  PLAYER: USER_ROLE.PLAYER,
+  MODERATOR: USER_ROLE.MODERATOR,
+  ADMIN: USER_ROLE.ADMIN,
+};
+
 function toPublic(user: StoredUser): PublicUser {
   return {
     id: user.id,
@@ -245,6 +306,9 @@ function toPublic(user: StoredUser): PublicUser {
     banned: user.banned,
     banReason: user.banReason,
     banUntil: user.banUntil ? user.banUntil.toISOString() : null,
+    // Anything unrecognised falls back to the least privileged role, so a
+    // malformed value can never read as moderator.
+    role: ROLE_FROM_DB[user.role ?? ""] ?? USER_ROLE.PLAYER,
   };
 }
 
@@ -300,6 +364,10 @@ export class InMemoryAuthProvider extends BaseAuthProvider {
     return stored;
   }
 
+  protected async remove(id: string): Promise<void> {
+    this.users.delete(id);
+  }
+
   /** Directly seed a stored user (test arrangement); returns the row. */
   async seedUser(
     overrides: Partial<StoredUser> & { username: string; email: string },
@@ -315,6 +383,8 @@ export class InMemoryAuthProvider extends BaseAuthProvider {
       banned: overrides.banned ?? false,
       banReason: overrides.banReason ?? null,
       banUntil: overrides.banUntil ?? null,
+      ageConfirmed: overrides.ageConfirmed ?? true,
+      consentAcceptedAt: overrides.consentAcceptedAt ?? new Date(),
     };
     this.users.set(stored.id, stored);
     return stored;

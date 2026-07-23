@@ -95,6 +95,15 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
     type: "boolean",
     default: CONFIRM_EJECTS,
   },
+  {
+    // Whether players can vote to mute someone for the rest of the round.
+    // On by default: the alternative in a room with a spammer is that
+    // everyone else leaves. Host-disablable for private games among friends,
+    // where the feature is only ever a prank vector.
+    id: "voteMuteEnabled",
+    type: "boolean",
+    default: true,
+  },
 ] as const;
 
 const SETTINGS_BY_ID = new Map(SETTING_DEFINITIONS.map((s) => [s.id, s]));

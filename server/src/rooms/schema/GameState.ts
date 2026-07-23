@@ -57,6 +57,28 @@ export class Player extends Schema {
    * client uses it to discard acknowledged inputs during reconciliation.
    */
   @type("number") lastSeq = 0;
+
+  /**
+   * The six cosmetic slots — a catalog id (see `@foghaven/shared`'s
+   * `COSMETICS`) or empty string for "nothing equipped in this slot". Set
+   * once at `onJoin` from the account's saved loadout (see
+   * `GameRoom.onJoin`'s cosmetics snapshot) and never changed mid-room, the
+   * same way `name` is a snapshot of the account rather than something a
+   * room message can rewrite.
+   *
+   * Public on purpose, and safe to be: cosmetics are decorative by
+   * construction (the catalog is closed and server-defined — nothing here can
+   * ever grant vision, speed, or hitbox advantage), so unlike `role` there is
+   * no secrecy this could leak. They ride the exact same `filterChildren`
+   * fog gate as `x`/`y`/`name` below simply by being fields on this class —
+   * no separate visibility logic needed.
+   */
+  @type("string") hatId = "";
+  @type("string") accessoryId = "";
+  @type("string") petId = "";
+  @type("string") outfitId = "";
+  @type("string") victoryPoseId = "";
+  @type("string") deathEffectId = "";
 }
 
 /**
@@ -84,6 +106,22 @@ export class RevealedPlayer extends Schema {
   @type("string") id = "";
   @type("string") name = "";
   @type("string") role = "";
+
+  /**
+   * Denormalised for the same reason `name` is: cosmetics live on `Player`,
+   * which a dead player has already been filtered out of by the time the
+   * results screen needs to draw their loadout. `color` rides along too —
+   * the results screen's pose preview needs it to pick the right archetype
+   * silhouette (see `characters/assign.ts`), and it's equally gone from a
+   * living client's stale copy of a dead teammate's `Player` row.
+   */
+  @type("string") color = "";
+  @type("string") hatId = "";
+  @type("string") accessoryId = "";
+  @type("string") petId = "";
+  @type("string") outfitId = "";
+  @type("string") victoryPoseId = "";
+  @type("string") deathEffectId = "";
 }
 
 /**

@@ -12,7 +12,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "ban": "tsx scripts/ban.ts"
+    "ban": "tsx scripts/ban.ts",
+    "grant-role": "tsx scripts/grantRole.ts"
   },
   "dependencies": {
     "@colyseus/core": "^0.15.0",
@@ -26,6 +27,7 @@
     "cors": "^2.8.6",
     "dotenv": "^16.4.0",
     "express": "^4.19.0",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {

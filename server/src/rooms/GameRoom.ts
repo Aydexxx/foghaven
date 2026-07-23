@@ -57,6 +57,22 @@ import {
   CHAT_COOLDOWN_MS,
   CHAT_CHANNEL,
   type ChatChannel,
+  screenText,
+  isReportReason,
+  CHAT_BURST_MAX,
+  CHAT_BURST_WINDOW_MS,
+  CHAT_REPEAT_MAX,
+  SPAM_MUTE_MS,
+  BLOCKED_MESSAGE_MUTE_THRESHOLD,
+  VOTE_MUTE_MS,
+  VOTE_MUTE_SHARE,
+  VOTE_MUTE_MIN_PLAYERS,
+  REPORT_CHAT_EXCERPT_LINES,
+  REPORT_NOTE_MAX_LENGTH,
+  REPORT_RATE_MAX,
+  REPORT_RATE_WINDOW_MS,
+  COINS_PER_ROUND,
+  COINS_WIN_BONUS,
   WIN_REASON,
   type WinReason,
   CRITICAL_REPAIR_POINTS,
@@ -67,11 +83,18 @@ import {
   parseSettingValue,
   coerceSettingValue,
   serializeSettingValue,
+  type GameSummaryMessage,
+  type GameSummaryVoteRound,
 } from "@foghaven/shared";
 import { GameState, Player, Body, VoteTally, RevealedPlayer } from "./schema/GameState";
 import { generateRoomCode, randomSpawn, pickRandom } from "./util";
 import { ABILITIES, cameras, voteWeights, type AbilityContext } from "../abilities";
 import { getAuthProvider, type Identity } from "../auth/provider";
+import { getFriendProvider } from "../friends/provider";
+import { getModerationProvider } from "../moderation/provider";
+import { getCosmeticProvider } from "../cosmetics/provider";
+import { getStatsProvider, type GameStatEntry } from "../stats/provider";
+import { RateLimiter } from "../auth/rateLimit";
 
 const TICK_INTERVAL_MS = 1000 / TICK_RATE;
 
@@ -287,6 +310,81 @@ export class GameRoom extends Room<GameState> {
    */
   private readonly reconnections = new Map<string, Deferred<Client>>();
 
+  /**
+   * Session id -> account id, for every connected player who is a real
+   * account (never a guest — see `onJoin`). Backs `onAuth`'s block check —
+   * `state.hostId` is a session id, and a fresh joiner has to be compared
+   * against the *account* the current host is signed in as, not the session
+   * that happens to hold the seat right now — and moderation, which needs a
+   * durable identity to attach a report or a chat log line to.
+   */
+  private readonly sessionUserIds = new Map<string, string>();
+
+  // --- Moderation ----------------------------------------------------------
+
+  /**
+   * Everyone currently silenced, and until when (epoch ms). Covers all three
+   * routes to a mute — the host muting someone, a vote-mute carrying, and the
+   * automatic spam mute — because from the chat path's point of view they are
+   * the same thing, and collapsing them means there is exactly one check to
+   * get right rather than three.
+   *
+   * Server-only and room-scoped on purpose: a mute is a local remedy for a
+   * local nuisance. Anything that should follow a player between rooms is a
+   * ban, which lives in the database and is enforced at `onAuth`.
+   */
+  private readonly mutedUntil = new Map<string, number>();
+
+  /** Vote-mute ballots: target session id -> the session ids voting to mute them. */
+  private readonly muteVotes = new Map<string, Set<string>>();
+
+  /** Rolling chat burst budget per session — the flood limiter above the per-message cooldown. */
+  private readonly chatBurst = new RateLimiter(CHAT_BURST_MAX, CHAT_BURST_WINDOW_MS);
+
+  /** The last thing each session said and how many times running, for repeat-flood detection. */
+  private readonly lastChatText = new Map<string, { text: string; count: number }>();
+
+  /** How many slur-tier messages each session has had refused, for the auto-mute threshold. */
+  private readonly blockedMessageCount = new Map<string, number>();
+
+  /** Per-reporter budget, so the moderation queue itself cannot be flooded. */
+  private readonly reportLimiter = new RateLimiter(REPORT_RATE_MAX, REPORT_RATE_WINDOW_MS);
+
+  /**
+   * The room's recent chat, kept in memory purely so a report can carry an
+   * excerpt as evidence without a database round trip at filing time. Capped
+   * at `REPORT_CHAT_EXCERPT_LINES`; the durable copy is the `ChatLog` table.
+   */
+  private readonly recentChat: Array<{ senderName: string; text: string; sentAt: string }> = [];
+
+  // --- Stats & end-of-game summary ------------------------------------------
+
+  /**
+   * When the world actually opened (phase became PLAYING), for survival-time
+   * stats. 0 outside a round. Every win condition only ever fires once play
+   * has started, so this is always set by the time `declareGameOver` reads it.
+   */
+  private gameStartedAt = 0;
+
+  /**
+   * When each player's real death (a kill) or ejection landed, session id ->
+   * epoch ms — the other end of a survival-time measurement. A player who
+   * makes it to the results screen simply has no entry here, so `declareGameOver`
+   * falls back to "now" for them. Deliberately separate from `deathLocations`
+   * (which only ever records real kills, for the medium): this needs
+   * ejections too, and never needs a room or killer faction.
+   */
+  private readonly diedAt = new Map<string, number>();
+
+  /**
+   * One entry per resolved meeting this game, appended in `resolveVotes` —
+   * before the *next* meeting's `startMeeting` clears `this.votes` — so the
+   * end-of-game summary can show every round's ballot, not just the last
+   * one. See `broadcastGameSummary` and `GameSummaryVoteRound`'s own doc for
+   * why `ballots` is usually empty.
+   */
+  private readonly voteHistory: GameSummaryVoteRound[] = [];
+
   override onCreate(): void {
     // Replace the framework-generated id with a short, human-readable code.
     // Assigning here (before the room is registered) means the matchmaker and
@@ -344,6 +442,15 @@ export class GameRoom extends Room<GameState> {
 
     this.onMessage("return_to_lobby", (client) => this.handleReturnToLobby(client));
 
+    // Moderation. `report` is available from anywhere including the results
+    // screen — the end of a round is exactly when people finally have the
+    // attention to report what happened during it.
+    this.onMessage("report", (client, message) => void this.handleReport(client, message));
+
+    this.onMessage("mute", (client, message) => this.handleHostMute(client, message));
+
+    this.onMessage("vote_mute", (client, message) => this.handleVoteMute(client, message));
+
     this.setSimulationInterval(() => this.update(), TICK_INTERVAL_MS);
   }
 
@@ -386,6 +493,22 @@ export class GameRoom extends Room<GameState> {
       throw new ServerError(JOIN_ERROR.GUEST_NO_CREATE, "sign in to create a room");
     }
 
+    // A joiner who has a block relationship with the current host is turned
+    // away — this is the friend system's "avoid matching them where
+    // possible" rule, applied at the one place this game actually has
+    // anything resembling matchmaking: joining a room someone else is
+    // hosting. Guests are exempt on both sides (no account, so no block row
+    // can exist), and a room between hosts is fine to re-check on every join
+    // since the host can change mid-lobby.
+    if (auth.value.userId) {
+      const hostUserId = this.sessionUserIds.get(this.state.hostId);
+      if (hostUserId && hostUserId !== auth.value.userId) {
+        if (await getFriendProvider().isBlocked(hostUserId, auth.value.userId)) {
+          throw new ServerError(JOIN_ERROR.BLOCKED, "blocked by the host");
+        }
+      }
+    }
+
     if (this.state.players.size >= MAX_PLAYERS) {
       throw new ServerError(JOIN_ERROR.ROOM_FULL, "room is full");
     }
@@ -418,10 +541,49 @@ export class GameRoom extends Room<GameState> {
 
     this.state.players.set(client.sessionId, player);
     this.inputs.set(client.sessionId, { queue: [], budget: 0 });
+    if (auth?.userId) {
+      this.sessionUserIds.set(client.sessionId, auth.userId);
+      this.applyCosmeticLoadout(client.sessionId, auth.userId);
+    }
 
     // First player in becomes the host — as does the first to arrive after
     // every host has gone.
     this.ensureConnectedHost();
+  }
+
+  /**
+   * Fetch this account's saved loadout and write it onto their `Player` row
+   * — fire-and-forget, deliberately not awaited by `onJoin`. Cosmetics are
+   * decorative by design (see the doc on `Player.hatId` and its siblings),
+   * so a slow or failed lookup should cost a player their hat for one round,
+   * never delay the join itself or drop them from the room.
+   */
+  private applyCosmeticLoadout(sessionId: string, userId: string): void {
+    const provider = getCosmeticProvider();
+    if (!provider) {
+      return;
+    }
+    void provider
+      .getLoadout(userId)
+      .then((loadout) => {
+        // The player may already have left by the time this resolves —
+        // session ids are never reused, so a missing entry here means gone,
+        // not "someone else now."
+        const player = this.state.players.get(sessionId);
+        if (!player) {
+          return;
+        }
+        player.hatId = loadout.hatId;
+        player.accessoryId = loadout.accessoryId;
+        player.petId = loadout.petId;
+        player.outfitId = loadout.outfitId;
+        player.victoryPoseId = loadout.victoryPoseId;
+        player.deathEffectId = loadout.deathEffectId;
+      })
+      .catch(() => {
+        // See above — a bare Player with every cosmetic slot empty is a
+        // perfectly valid, fully playable outcome.
+      });
   }
 
   /**
@@ -560,6 +722,7 @@ export class GameRoom extends Room<GameState> {
 
     this.state.players.delete(sessionId);
     this.inputs.delete(sessionId);
+    this.sessionUserIds.delete(sessionId);
     this.roles.delete(sessionId);
     this.tasks.delete(sessionId);
     this.mediumRevealed.delete(sessionId);
@@ -569,6 +732,16 @@ export class GameRoom extends Room<GameState> {
     this.disguises.delete(sessionId);
     this.pendingSilences.delete(sessionId);
     this.silencedThisMeeting.delete(sessionId);
+    this.mutedUntil.delete(sessionId);
+    this.muteVotes.delete(sessionId);
+    this.lastChatText.delete(sessionId);
+    this.blockedMessageCount.delete(sessionId);
+    this.diedAt.delete(sessionId);
+    // Ballots this player cast against others go with them, so a departed
+    // player can't keep contributing to a vote-mute threshold.
+    for (const ballots of this.muteVotes.values()) {
+      ballots.delete(sessionId);
+    }
 
     // End any grace period still running for them. Rejecting a deferred that
     // has already settled is a no-op, so the expiry path lands here harmlessly.
@@ -688,6 +861,7 @@ export class GameRoom extends Room<GameState> {
 
     this.clock.setTimeout(() => {
       this.state.phase = PHASE.PLAYING;
+      this.gameStartedAt = Date.now();
       this.startAbilityCooldowns();
     }, ROLE_REVEAL_MS);
   }
@@ -1509,6 +1683,12 @@ export class GameRoom extends Room<GameState> {
     this.restoreDisguise(victim.id);
 
     victim.alive = false;
+    // First death only — a constable's mutual kill or any other path that
+    // might somehow touch the same player twice must not push their
+    // survival-time end back out.
+    if (!this.diedAt.has(victim.id)) {
+      this.diedAt.set(victim.id, Date.now());
+    }
 
     const body = new Body();
     body.playerId = victim.id;
@@ -1868,6 +2048,25 @@ export class GameRoom extends Room<GameState> {
       this.state.voteResults.set(targetId, tally);
     }
 
+    // Retained for the end-of-game summary — see `broadcastGameSummary` and
+    // the doc on `voteHistory`. Captured now, before the *next* meeting's
+    // `startMeeting` clears `this.votes` out from under it.
+    this.voteHistory.push({
+      results: [...counts.entries()].map(([targetId, count]) => ({
+        targetId,
+        targetName: targetId === SKIP_VOTE ? "" : (this.state.players.get(targetId)?.name ?? "?"),
+        count,
+      })),
+      ballots: VOTES_ARE_PUBLIC
+        ? [...this.votes.entries()].map(([voterId, targetId]) => ({
+            voterId,
+            voterName: this.state.players.get(voterId)?.name ?? "?",
+            targetId,
+            targetName: targetId === SKIP_VOTE ? "" : (this.state.players.get(targetId)?.name ?? "?"),
+          }))
+        : [],
+    });
+
     const ejectedId = this.pickEjection(counts);
     if (ejectedId && this.state.players.has(ejectedId)) {
       this.ejectPlayer(ejectedId);
@@ -1898,6 +2097,9 @@ export class GameRoom extends Room<GameState> {
 
     const confirmEjects = this.getBooleanSetting("confirmEjects");
     ejected.alive = false;
+    if (!this.diedAt.has(sessionId)) {
+      this.diedAt.set(sessionId, Date.now());
+    }
     this.state.ejectedPlayerId = sessionId;
     this.state.ejectedPlayerName = ejected.name;
     this.state.ejectionConfirmed = confirmEjects;
@@ -2080,7 +2282,127 @@ export class GameRoom extends Room<GameState> {
       entry.id = id;
       entry.name = player.name;
       entry.role = this.roles.get(id) ?? "";
+      // Denormalised for the results screen's costumed pose preview — see
+      // the doc on `RevealedPlayer.color`.
+      entry.color = player.color;
+      entry.hatId = player.hatId;
+      entry.accessoryId = player.accessoryId;
+      entry.petId = player.petId;
+      entry.outfitId = player.outfitId;
+      entry.victoryPoseId = player.victoryPoseId;
+      entry.deathEffectId = player.deathEffectId;
       this.state.finalRoster.set(id, entry);
+    });
+
+    this.broadcastGameSummary();
+    this.awardRoundCoins(faction);
+    this.recordGameStats(faction);
+  }
+
+  /**
+   * Broadcast the "who did what" breakdown behind the results screen: every
+   * seated player's role, faction, survival, task progress, and this game's
+   * full vote history. A live display, not a database write — everyone still
+   * here gets a row, guest or account alike, unlike `recordGameStats` right
+   * after it.
+   */
+  private broadcastGameSummary(): void {
+    const players: GameSummaryMessage["players"] = [];
+    this.state.players.forEach((player, id) => {
+      const role = this.roles.get(id) ?? "";
+      const progress = this.tasks.get(id);
+      let tasksCompleted = 0;
+      let tasksTotal = 0;
+      progress?.forEach((task) => {
+        tasksCompleted += task.completedSteps;
+        tasksTotal += task.totalSteps;
+      });
+      players.push({
+        id,
+        name: player.name,
+        role,
+        faction: role ? factionOf(role) : "",
+        survived: player.alive,
+        tasksCompleted,
+        tasksTotal,
+      });
+    });
+
+    this.broadcast("gameSummary", { players, voteRounds: this.voteHistory } satisfies GameSummaryMessage);
+  }
+
+  /**
+   * Batch-write this game's result into every seated account's lifetime
+   * stats — one call, once per game, never touched per task or per kill (see
+   * `StatsProvider.recordGameResults`'s own doc for why that matters).
+   * Fire-and-forget for the same reason `awardRoundCoins` is: stats are a
+   * profile-screen nicety, and a slow or failed write must never delay the
+   * game-over transition every client is already waiting on. Guests are
+   * skipped — there is no account for a stat line to attach to.
+   */
+  private recordGameStats(winningFaction: Faction): void {
+    const provider = getStatsProvider();
+    if (!provider) {
+      return;
+    }
+    const entries: GameStatEntry[] = [];
+    const gameEndedAt = Date.now();
+    this.state.players.forEach((player, id) => {
+      const userId = this.sessionUserIds.get(id);
+      if (!userId) {
+        return;
+      }
+      const role = this.roles.get(id);
+      if (!role) {
+        return;
+      }
+      const progress = this.tasks.get(id);
+      let tasksCompleted = 0;
+      progress?.forEach((task) => {
+        tasksCompleted += task.completedSteps;
+      });
+      const diedAt = this.diedAt.get(id) ?? gameEndedAt;
+      const survivalTimeMs = Math.max(0, diedAt - (this.gameStartedAt || diedAt));
+      entries.push({
+        userId,
+        role,
+        won: factionOf(role) === winningFaction,
+        survived: player.alive,
+        tasksCompleted,
+        survivalTimeMs,
+      });
+    });
+    void provider.recordGameResults(entries).catch(() => {
+      // See above — a missed stat write costs one game's numbers, not a
+      // broken game.
+    });
+  }
+
+  /**
+   * Pay every registered account still seated a flat amount for having
+   * played the round out, plus a bonus for whoever ended up on the winning
+   * faction. Guests earn nothing — they have no account for a coin balance
+   * to attach to, the same reason they're excluded from friends and
+   * moderation. Fire-and-forget for the same reason `applyCosmeticLoadout`
+   * is: the economy is decorative, and a slow or failed award must never
+   * delay the game-over transition every client is waiting on.
+   */
+  private awardRoundCoins(winningFaction: Faction): void {
+    const provider = getCosmeticProvider();
+    if (!provider) {
+      return;
+    }
+    this.state.players.forEach((_player, id) => {
+      const userId = this.sessionUserIds.get(id);
+      if (!userId) {
+        return;
+      }
+      const role = this.roles.get(id);
+      const amount =
+        COINS_PER_ROUND + (role && factionOf(role) === winningFaction ? COINS_WIN_BONUS : 0);
+      void provider.awardCoins(userId, amount).catch(() => {
+        // See above — a missed award is a lost 25 coins, not a broken game.
+      });
     });
   }
 
@@ -2116,10 +2438,20 @@ export class GameRoom extends Room<GameState> {
     this.disguises.clear();
     this.pendingSilences.clear();
     this.silencedThisMeeting.clear();
+    // Mutes are per-round, like everything else here: "play again" starts
+    // everyone on a clean slate. Anything that should have followed the player
+    // into the next round belonged in a ban, not a mute.
+    this.mutedUntil.clear();
+    this.muteVotes.clear();
+    this.lastChatText.clear();
+    this.blockedMessageCount.clear();
     this.pendingLockCounts.clear();
     this.pendingSabotageCount = 0;
     this.criticalSabotageEndsAt = 0;
     this.pendingGameOver = null;
+    this.gameStartedAt = 0;
+    this.diedAt.clear();
+    this.voteHistory.length = 0;
     // Role settings AND balance settings (`state.settings`) deliberately
     // survive the reset — the host tuned them for this lobby, and "play
     // again" should mean the same game.
@@ -2187,6 +2519,16 @@ export class GameRoom extends Room<GameState> {
     }
 
     const now = Date.now();
+
+    // A mute — host-issued, vote-carried or automatic — silences all three
+    // channels at once. Checked before the cooldown so the sender is told
+    // *why* they are not being heard rather than being ignored silently.
+    const mutedUntil = this.mutedUntil.get(client.sessionId) ?? 0;
+    if (mutedUntil > now) {
+      client.send("chatRejected", { reason: "muted", mutedUntil });
+      return;
+    }
+
     const last = this.lastChatAt.get(client.sessionId) ?? 0;
     if (now - last < CHAT_COOLDOWN_MS) {
       return;
@@ -2198,6 +2540,44 @@ export class GameRoom extends Room<GameState> {
       return;
     }
 
+    // Burst budget on top of the per-message gap: the cooldown alone only
+    // stops someone holding the key down, not a script pacing itself just
+    // above it. Tripping this is what spam actually looks like, so it earns
+    // the automatic mute rather than a silent drop.
+    if (!this.chatBurst.check(client.sessionId, now).allowed) {
+      this.applyMute(client.sessionId, SPAM_MUTE_MS, now);
+      client.send("chatRejected", { reason: "rate_limited", mutedUntil: now + SPAM_MUTE_MS });
+      return;
+    }
+
+    // The same line over and over is the other shape flooding takes, and one
+    // the burst budget alone permits indefinitely at a slow enough pace.
+    const repeat = this.lastChatText.get(client.sessionId);
+    const repeatCount = repeat && repeat.text === text ? repeat.count + 1 : 1;
+    this.lastChatText.set(client.sessionId, { text, count: repeatCount });
+    if (repeatCount > CHAT_REPEAT_MAX) {
+      this.applyMute(client.sessionId, SPAM_MUTE_MS, now);
+      client.send("chatRejected", { reason: "rate_limited", mutedUntil: now + SPAM_MUTE_MS });
+      return;
+    }
+
+    // The filter. Ordinary profanity is masked and still delivered; slurs and
+    // targeted harassment are refused outright, and enough of them earns the
+    // same automatic mute as flooding does.
+    const screened = screenText(text);
+    if (screened.verdict === "blocked") {
+      const strikes = (this.blockedMessageCount.get(client.sessionId) ?? 0) + 1;
+      this.blockedMessageCount.set(client.sessionId, strikes);
+      if (strikes >= BLOCKED_MESSAGE_MUTE_THRESHOLD) {
+        this.applyMute(client.sessionId, SPAM_MUTE_MS, now);
+      }
+      client.send("chatRejected", { reason: "blocked" });
+      // Recorded even though it was never delivered: a refused slur is
+      // precisely the evidence a moderator reviewing a report wants to see.
+      this.recordChatLog(client.sessionId, sender.name, CHAT_CHANNEL.LIVING, text, true);
+      return;
+    }
+
     this.lastChatAt.set(client.sessionId, now);
 
     const channel: ChatChannel = sender.alive ? CHAT_CHANNEL.LIVING : CHAT_CHANNEL.DEAD;
@@ -2205,8 +2585,16 @@ export class GameRoom extends Room<GameState> {
       id: `${client.sessionId}-${now}`,
       channel,
       senderName: sender.name,
-      text,
+      text: screened.text,
     };
+
+    this.recordChatLog(
+      client.sessionId,
+      sender.name,
+      channel,
+      screened.text,
+      screened.verdict !== "clean",
+    );
 
     for (const recipient of this.clients) {
       const recipientPlayer = this.state.players.get(recipient.sessionId);
@@ -2218,6 +2606,202 @@ export class GameRoom extends Room<GameState> {
         continue;
       }
       recipient.send("chat", payload);
+    }
+  }
+
+  /**
+   * Silence a session for `durationMs`, extending rather than replacing an
+   * existing mute — a spammer who trips the limiter again mid-mute should not
+   * have their remaining time reset downwards by a shorter new one.
+   */
+  private applyMute(sessionId: string, durationMs: number, now = Date.now()): void {
+    const existing = this.mutedUntil.get(sessionId) ?? 0;
+    this.mutedUntil.set(sessionId, Math.max(existing, now + durationMs));
+  }
+
+  /**
+   * Keep a line for report evidence and hand it to the moderation store.
+   *
+   * The in-memory `recentChat` ring is what a report snapshots at filing time;
+   * the provider call is the durable, retention-swept copy. Fire-and-forget on
+   * purpose — chat is on the room's hot path and must not wait on a database
+   * write, and a lost log line is not worth stalling a meeting over.
+   */
+  private recordChatLog(
+    sessionId: string,
+    senderName: string,
+    channel: string,
+    text: string,
+    filtered: boolean,
+  ): void {
+    const sentAt = new Date();
+    this.recentChat.push({ senderName, text, sentAt: sentAt.toISOString() });
+    if (this.recentChat.length > REPORT_CHAT_EXCERPT_LINES) {
+      this.recentChat.shift();
+    }
+
+    const provider = getModerationProvider();
+    if (!provider) {
+      return;
+    }
+    void provider
+      .appendChatLog({
+        roomCode: this.roomId,
+        userId: this.sessionUserIds.get(sessionId) ?? null,
+        senderName,
+        channel,
+        text,
+        filtered,
+        sentAt,
+      })
+      .catch(() => {
+        // See above: logging is best-effort and never blocks play.
+      });
+  }
+
+  /**
+   * File a report against another player.
+   *
+   * The reported player must hold an account — a guest has no durable identity
+   * for a moderator to act on, so reporting one would only fill the queue with
+   * items nobody can resolve. The *reporter* may be a guest; their report is
+   * still worth having, and the rate limit is per session either way.
+   */
+  private async handleReport(client: Client, message: unknown): Promise<void> {
+    const reporter = this.state.players.get(client.sessionId);
+    if (!reporter) {
+      return;
+    }
+
+    const raw = (message ?? {}) as { targetId?: unknown; reason?: unknown; note?: unknown };
+    const targetId = typeof raw.targetId === "string" ? raw.targetId : "";
+    if (!isReportReason(raw.reason) || !targetId || targetId === client.sessionId) {
+      client.send("reportAck", { ok: false, error: "invalid" });
+      return;
+    }
+
+    // Resolve the target's name from whichever roster still knows it. A player
+    // reported from the results screen is often dead, and the living client's
+    // `players` map has been filtered clear of them — `finalRoster` is the
+    // only place their name survives. See `GameState.finalRoster`.
+    const targetName =
+      this.state.players.get(targetId)?.name ?? this.state.finalRoster.get(targetId)?.name ?? "";
+    const targetUserId = this.sessionUserIds.get(targetId);
+    if (!targetUserId || !targetName) {
+      client.send("reportAck", { ok: false, error: "invalid" });
+      return;
+    }
+
+    if (!this.reportLimiter.check(client.sessionId).allowed) {
+      client.send("reportAck", { ok: false, error: "rate_limited" });
+      return;
+    }
+
+    const provider = getModerationProvider();
+    if (!provider) {
+      client.send("reportAck", { ok: false, error: "unavailable" });
+      return;
+    }
+
+    const note =
+      typeof raw.note === "string" ? raw.note.trim().slice(0, REPORT_NOTE_MAX_LENGTH) || null : null;
+
+    try {
+      await provider.fileReport({
+        reporterId: this.sessionUserIds.get(client.sessionId) ?? null,
+        reporterName: reporter.name,
+        reportedId: targetUserId,
+        reportedName: targetName,
+        reason: raw.reason,
+        note,
+        roomCode: this.roomId,
+        // Snapshotted here rather than looked up later: `ChatLog` rows are
+        // deleted on a retention schedule, and a report's evidence has to
+        // outlive that sweep.
+        chatExcerpt: [...this.recentChat],
+      });
+      client.send("reportAck", { ok: true });
+    } catch {
+      client.send("reportAck", { ok: false, error: "unavailable" });
+    }
+  }
+
+  /**
+   * The host silencing someone for the rest of the round. Authoritative and
+   * host-only, the same as every other host power here — the client only ever
+   * asks. The host cannot mute themselves, which would otherwise be a way to
+   * lock a room's chat by accident.
+   */
+  private handleHostMute(client: Client, message: unknown): void {
+    if (client.sessionId !== this.state.hostId) {
+      return;
+    }
+    const raw = (message ?? {}) as { targetId?: unknown; muted?: unknown };
+    const targetId = typeof raw.targetId === "string" ? raw.targetId : "";
+    if (!targetId || targetId === client.sessionId || !this.state.players.has(targetId)) {
+      return;
+    }
+
+    if (raw.muted === false) {
+      this.mutedUntil.delete(targetId);
+      this.muteVotes.delete(targetId);
+      return;
+    }
+    // Long enough to outlast the round; a mute never survives the room.
+    this.applyMute(targetId, VOTE_MUTE_MS);
+  }
+
+  /**
+   * A player voting to mute someone. Carries once a majority of the *other*
+   * connected players agree, which is what keeps it from being a griefing tool
+   * in a small room while still working against a genuine nuisance in a full
+   * one — hence the `VOTE_MUTE_MIN_PLAYERS` floor too.
+   *
+   * Host-disablable via the `voteMuteEnabled` balance setting.
+   */
+  private handleVoteMute(client: Client, message: unknown): void {
+    if (!this.getBooleanSetting("voteMuteEnabled")) {
+      return;
+    }
+    const voter = this.state.players.get(client.sessionId);
+    if (!voter) {
+      return;
+    }
+    const raw = (message ?? {}) as { targetId?: unknown };
+    const targetId = typeof raw.targetId === "string" ? raw.targetId : "";
+    if (!targetId || targetId === client.sessionId || !this.state.players.has(targetId)) {
+      return;
+    }
+    // The host is exempt: they already hold `mute`, and letting a lobby
+    // vote-mute its own host is a griefing vector with no upside.
+    if (targetId === this.state.hostId) {
+      return;
+    }
+
+    let connected = 0;
+    this.state.players.forEach((player) => {
+      if (player.connected) {
+        connected += 1;
+      }
+    });
+    if (connected < VOTE_MUTE_MIN_PLAYERS) {
+      return;
+    }
+
+    let ballots = this.muteVotes.get(targetId);
+    if (!ballots) {
+      ballots = new Set();
+      this.muteVotes.set(targetId, ballots);
+    }
+    ballots.add(client.sessionId);
+
+    // Everyone except the target gets a say, so the threshold is a majority of
+    // the room minus them.
+    const electorate = Math.max(1, connected - 1);
+    if (ballots.size / electorate > VOTE_MUTE_SHARE) {
+      this.applyMute(targetId, VOTE_MUTE_MS);
+      this.muteVotes.delete(targetId);
+      this.broadcast("playerMuted", { targetId, until: this.mutedUntil.get(targetId) });
     }
   }
 

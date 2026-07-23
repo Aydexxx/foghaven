@@ -15,6 +15,8 @@ import { readRoomSettings } from "../net/settings";
 interface LobbyRoomProps {
   room: Room<GameState>;
   onLeave: () => void;
+  /** Opens the friends panel with this room pre-selected to invite into — absent for guests. */
+  onOpenFriends?: () => void;
 }
 
 interface RosterEntry {
@@ -35,11 +37,12 @@ const PRESETS: Preset[] = [PRESET.CLASSIC, PRESET.CHAOS, PRESET.PURE];
  * The role list renders from the shared registry (`ROLE_DEFINITIONS`), so a
  * new role appears here with no change to this file.
  */
-export function LobbyRoom({ room, onLeave }: LobbyRoomProps) {
+export function LobbyRoom({ room, onLeave, onOpenFriends }: LobbyRoomProps) {
   const { t } = useTranslation();
   const [players, setPlayers] = useState<RosterEntry[]>([]);
   const [hostId, setHostId] = useState(room.state.hostId);
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [enabledRoleIds, setEnabledRoleIds] = useState<string[]>([]);
   const [preset, setPreset] = useState(room.state.rolePreset);
   const [settings, setSettings] = useState<Record<string, number | boolean>>(() =>
@@ -90,6 +93,26 @@ export function LobbyRoom({ room, onLeave }: LobbyRoomProps) {
     }
   };
 
+  /**
+   * The growth loop: a link that drops whoever opens it straight into this
+   * room, no code to type — meant to be pasted into Discord. `App.tsx` reads
+   * the `invite` query param back out on load and joins with it directly
+   * (see its own doc comment); a query param rather than a path segment so
+   * it works unchanged against a static host with no server-side rewrite
+   * rule for a `/join/:code`-style path.
+   */
+  const copyInviteLink = async () => {
+    try {
+      const url = new URL(window.location.href);
+      url.search = `?invite=${room.roomId}`;
+      await navigator.clipboard.writeText(url.toString());
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch {
+      // See copyCode — the code itself is still visible on screen either way.
+    }
+  };
+
   return (
     <div className="panel">
       <h1>{t("lobbyRoom.heading")}</h1>
@@ -99,6 +122,17 @@ export function LobbyRoom({ room, onLeave }: LobbyRoomProps) {
         <button type="button" className="secondary" onClick={copyCode}>
           {copied ? t("lobbyRoom.copied") : t("lobbyRoom.copyButton")}
         </button>
+      </div>
+
+      <div className="invite-row">
+        <button type="button" className="secondary" onClick={copyInviteLink}>
+          {linkCopied ? t("lobbyRoom.copied") : t("lobbyRoom.copyInviteLinkButton")}
+        </button>
+        {onOpenFriends && (
+          <button type="button" className="secondary" onClick={onOpenFriends}>
+            {t("lobbyRoom.inviteFriendsButton")}
+          </button>
+        )}
       </div>
 
       <ul className="roster">

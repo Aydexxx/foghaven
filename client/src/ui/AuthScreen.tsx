@@ -8,6 +8,9 @@ interface AuthScreenProps {
   onAuthenticated: (session: AuthSession) => void;
   /** A guest chose a display name — no account, join-only. */
   onGuest: (name: string) => void;
+  /** Opens the Privacy Policy / Terms of Service overlay — reachable before signing in, so a player can read either before checking the consent box. */
+  onOpenPrivacy: () => void;
+  onOpenTerms: () => void;
 }
 
 type Tab = "login" | "register" | "guest";
@@ -22,7 +25,7 @@ const PASSWORD_MIN = 8;
  * feedback via the SAME shared rules the server enforces (`validateName`), so
  * the form and the server never disagree; the server remains authoritative.
  */
-export function AuthScreen({ onAuthenticated, onGuest }: AuthScreenProps) {
+export function AuthScreen({ onAuthenticated, onGuest, onOpenPrivacy, onOpenTerms }: AuthScreenProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("login");
   const [busy, setBusy] = useState(false);
@@ -34,6 +37,8 @@ export function AuthScreen({ onAuthenticated, onGuest }: AuthScreenProps) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [guestName, setGuestName] = useState("");
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   const errorText = (code: string, ban?: { reason: string | null }) =>
     code === "banned"
@@ -71,7 +76,15 @@ export function AuthScreen({ onAuthenticated, onGuest }: AuthScreenProps) {
       setError(errorText("weak_password"));
       return;
     }
-    void run(() => register(email.trim(), username.trim(), password));
+    if (!ageConfirmed) {
+      setError(errorText("age_confirmation_required"));
+      return;
+    }
+    if (!consentAccepted) {
+      setError(errorText("consent_required"));
+      return;
+    }
+    void run(() => register(email.trim(), username.trim(), password, ageConfirmed, consentAccepted));
   };
 
   const handleGuest = (event: FormEvent) => {
@@ -172,7 +185,39 @@ export function AuthScreen({ onAuthenticated, onGuest }: AuthScreenProps) {
             />
             <small className="field-hint">{t("auth.passwordHint")}</small>
           </label>
-          <button type="submit" disabled={busy || !email.trim() || !username.trim() || !password}>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={ageConfirmed}
+              onChange={(e) => setAgeConfirmed(e.target.checked)}
+              disabled={busy}
+            />
+            <span>{t("auth.ageConfirmLabel")}</span>
+          </label>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={consentAccepted}
+              onChange={(e) => setConsentAccepted(e.target.checked)}
+              disabled={busy}
+            />
+            <span>
+              {t("auth.consentLabelPrefix")}{" "}
+              <button type="button" className="link-button" onClick={onOpenTerms}>
+                {t("legal.terms.title")}
+              </button>{" "}
+              {t("auth.consentLabelAnd")}{" "}
+              <button type="button" className="link-button" onClick={onOpenPrivacy}>
+                {t("legal.privacy.title")}
+              </button>
+            </span>
+          </label>
+          <button
+            type="submit"
+            disabled={
+              busy || !email.trim() || !username.trim() || !password || !ageConfirmed || !consentAccepted
+            }
+          >
             {busy ? t("auth.busy") : t("auth.registerButton")}
           </button>
         </form>
