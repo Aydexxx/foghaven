@@ -1,0 +1,8 @@
+A set of 14 simple circular emblem icons for character roles in a folk-horror
+fishing-town game. Each emblem is a single bold symbol inside a circular
+rope-bordered frame. High contrast, readable at small size.
+Symbols: a lit lantern, a magnifying glass, a medical cross made of bandages,
+a constable's whistle, a town seal, a spiral seashell, a ship's wheel, an oil can,
+a hooded figure, a shifting mask, crossed knives, a silenced bell, an empty coat,
+a fishing hook.
+Arranged in a grid on a flat background, evenly spaced, no text.

@@ -1,0 +1,6 @@
+Using the attached character as an exact reference for proportions, colours, and style,
+show the same character in a clean side profile view, facing right, standing idle.
+Exactly one eye is visible from this angle. The hood profile shows the soft rounded peak.
+The lantern is held forward in the visible hand, at the same height as in the reference.
+Identical coat colour, identical proportions, identical lantern size.
+A single figure, centred, full body, feet flat, no cropping.

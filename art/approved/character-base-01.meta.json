@@ -1,0 +1,11 @@
+{
+  "promptName": "character-base",
+  "promptFile": "art/prompts/character-base.txt",
+  "resolvedPrompt": "A single game character, front-facing three-quarter view, standing idle.\nA short chunky figure in a heavy hooded oilskin fisherman's raincoat, dark blue-grey.\nThe coat is wider at the hem than at the shoulders, forming a rounded trapezoid silhouette.\nA soft rounded hood casts a completely flat dark shadow over the entire face — no skin,\nno nose, no mouth is visible. Only two large pale glowing oval eyes, slightly different\nsizes, float in that darkness.\nStubby arms visible from the elbow. Two short rounded boots.\nThe left hand holds a small brass fisherman's lantern with a warm amber flame inside.\nHead and hood together are roughly 40% of the total height — deliberately baby-faced\nproportions on an ominous figure.\nCentred, full body, feet flat, no cropping.\n\n2D game asset. Thick uniform dark outline in warm near-black #1A1620, never pure black,\nconstant weight, no tapering. Flat colour fills with exactly one darker shadow step.\nNo gradients, no soft shading, no ambient occlusion, no texture noise, no bevel.\nCute-cartoon proportions: chunky rounded shapes, oversized heads, stubby limbs.\nClean hand-drawn vector look, like a modern indie multiplayer party game.\nPalette strictly limited to: cold fog blues #2E3A47 #3F5060 #5C7285 #8FA3B0 #C3D2D8,\nweathered wood browns #3B2A22 #6B4A34 #9A7050, cold stone #3A3A42 #4A4A52,\nand warm lantern light #FFF3C4 #FFC65C #E08A2E used only for flame and glow.\nMood: cozy dread. Friendly shapes, unsettling world. Folk-horror fishing harbour at night.\nFlat plain neutral background. No scene, no environment, no text, no letters, no numbers,\nno watermark, no signature, no border, no drop shadow.",
+  "model": "gemini-3-pro-image",
+  "modelLabel": "Nano Banana Pro",
+  "refs": [],
+  "generatedAt": "2026-07-27T16:55:16.969Z",
+  "approvedAt": "2026-07-27T16:58:40.995Z",
+  "approvedAs": "character-base-01"
+}

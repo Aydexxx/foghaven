@@ -1,0 +1,4 @@
+Using the attached character as an exact reference for proportions, colours, and style,
+show the same character three times in a row on one flat background: facing left,
+facing forward, facing right. Identical proportions, identical coat, identical lantern
+in all three poses. Even spacing, same baseline, same scale.
