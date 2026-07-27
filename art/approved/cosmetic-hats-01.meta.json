@@ -1,0 +1,13 @@
+{
+  "promptName": "cosmetic-hats",
+  "promptFile": "art/prompts/cosmetic-hats.txt",
+  "resolvedPrompt": "Using the attached character as an exact reference for proportions, colours, and style,\ngenerate a sheet of 12 hats and headwear for this character to wear, arranged in a grid\non a flat neutral background, each hat isolated and viewed from the same angle, all sized\nto sit on this character's rounded hood.\nItems: fisherman's sou'wester, knitted wool beanie, tricorn hat, wreath of dried seaweed,\nbrass diving helmet, lamplighter's peaked cap, a gull perched like a hat, a small crab,\na ship-in-a-bottle, a tin bucket, a wilted flower crown, a constable's helmet.\nNo character, no head, no body — hats only.\n\n2D game asset. Thick uniform dark outline in warm near-black #1A1620, never pure black,\nconstant weight, no tapering. Flat colour fills with exactly one darker shadow step.\nNo gradients, no soft shading, no ambient occlusion, no texture noise, no bevel.\nCute-cartoon proportions: chunky rounded shapes, oversized heads, stubby limbs.\nClean hand-drawn vector look, like a modern indie multiplayer party game.\nPalette strictly limited to: cold fog blues #2E3A47 #3F5060 #5C7285 #8FA3B0 #C3D2D8,\nweathered wood browns #3B2A22 #6B4A34 #9A7050, cold stone #3A3A42 #4A4A52,\nand warm lantern light #FFF3C4 #FFC65C #E08A2E used only for flame and glow.\nMood: cozy dread. Friendly shapes, unsettling world. Folk-horror fishing harbour at night.\nFlat plain neutral background. No scene, no environment, no text, no letters, no numbers,\nno watermark, no signature, no border, no drop shadow.",
+  "model": "gemini-3-pro-image",
+  "modelLabel": "Nano Banana Pro",
+  "refs": [
+    "character-base-01"
+  ],
+  "generatedAt": "2026-07-27T17:12:44.067Z",
+  "approvedAt": "2026-07-27T17:16:32.357Z",
+  "approvedAs": "cosmetic-hats-01"
+}
