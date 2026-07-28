@@ -1,4 +1,4 @@
-import type { Faction, RoomSlug, Vec2 } from "@foghaven/shared";
+import type { Faction, RoomSlug, Vec2, LitPosition } from "@foghaven/shared";
 import type { Body, Player } from "../rooms/schema/GameState";
 
 /**
@@ -55,8 +55,13 @@ export interface AbilityContext {
   /** A role guess from the client message, if one was sent (Assassin). */
   guessedRole?: string;
   withinRange(a: Vec2, b: Vec2, range: number): boolean;
-  /** Line-of-sight — walls stop abilities the way they stop sight. */
-  canSee(a: Vec2, b: Vec2): boolean;
+  /**
+   * Line-of-sight — walls stop abilities the way they stop sight, and (§6.2)
+   * an extinguished target caps how close `a` has to be, independent of `a`'s
+   * own vision radius. A `Body` has no `lanternState` of its own; callers
+   * passing one build a `{ x, y, lanternState: "dropped" }` literal instead.
+   */
+  canSee(a: LitPosition, b: LitPosition): boolean;
   /** Kill a player: body, victim notification, win check. */
   kill(victim: Player): void;
   /** Private message to the acting player only. */

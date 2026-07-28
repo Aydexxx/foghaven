@@ -7,10 +7,19 @@ interface KeybindingSettingsPanelProps {
   onClose: () => void;
 }
 
-const ACTIONS: InputAction[] = ["moveUp", "moveDown", "moveLeft", "moveRight", "interact", "report", "bell"];
+const ACTIONS: InputAction[] = [
+  "moveUp",
+  "moveDown",
+  "moveLeft",
+  "moveRight",
+  "interact",
+  "report",
+  "bell",
+  "lantern",
+];
 
 /**
- * Rebind any of the seven keyboard actions. Only single-letter keys are
+ * Rebind any of the eight keyboard actions. Only single-letter keys are
  * accepted — the arrow keys are deliberately not offered as a rebind target
  * since they already work unconditionally as movement's fixed alternate
  * (see `GameScene.ts`'s `sampleInput`), and every other action here is a

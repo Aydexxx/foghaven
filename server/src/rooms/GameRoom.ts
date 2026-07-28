@@ -89,6 +89,8 @@ import {
   VOICE_CHANNEL,
   type VoiceRosterMessage,
   type VoiceSignalMessage,
+  lanternColors,
+  LANTERN_TOGGLE_COOLDOWN_MS,
 } from "@foghaven/shared";
 import { GameState, Player, Body, VoteTally, RevealedPlayer } from "./schema/GameState";
 import { generateRoomCode, randomSpawn, pickRandom } from "./util";
@@ -295,6 +297,9 @@ export class GameRoom extends Room<GameState> {
   /** Server-only emergency-meeting usage: session id -> bell rings used. */
   private readonly emergencyMeetingsUsed = new Map<string, number>();
 
+  /** Server-only anti-strobe guard: session id -> `Date.now()` of their last lantern toggle. See `LANTERN_TOGGLE_COOLDOWN_MS`. */
+  private readonly lastLanternToggleAt = new Map<string, number>();
+
   /**
    * Ballots for the current vote: voter session id -> target session id (or
    * `SKIP_VOTE`). Server-only. Only aggregate counts are ever published, and
@@ -461,6 +466,8 @@ export class GameRoom extends Room<GameState> {
 
     this.onMessage("call_meeting", (client) => this.handleCallMeeting(client));
 
+    this.onMessage("toggle_lantern", (client) => this.handleToggleLantern(client));
+
     this.onMessage("vote", (client, message) => this.handleVote(client, message));
 
     this.onMessage("chat", (client, message) => this.handleChat(client, message));
@@ -596,7 +603,9 @@ export class GameRoom extends Room<GameState> {
     player.y = spawn.y;
 
     player.color = this.pickColor();
+    player.lanternColor = this.pickLanternColor();
     player.alive = true;
+    player.lanternState = "lit";
 
     this.state.players.set(client.sessionId, player);
     concurrentPlayers.inc();
@@ -795,6 +804,7 @@ export class GameRoom extends Room<GameState> {
     this.tasks.delete(sessionId);
     this.mediumRevealed.delete(sessionId);
     this.emergencyMeetingsUsed.delete(sessionId);
+    this.lastLanternToggleAt.delete(sessionId);
     this.votes.delete(sessionId);
     this.lastChatAt.delete(sessionId);
     this.disguises.delete(sessionId);
@@ -1787,6 +1797,11 @@ export class GameRoom extends Room<GameState> {
     this.restoreDisguise(victim.id);
 
     victim.alive = false;
+    // §4.4's death sequence: the lantern detaches and hits the ground. This
+    // is what tells every ghost's Havener (and, via `visionRadiusAt`,
+    // nothing — a dead player already bypasses the fog entirely) that this
+    // player's light is now on the ground, not in their hand.
+    victim.lanternState = "dropped";
     // First death only — a constable's mutual kill or any other path that
     // might somehow touch the same player twice must not push their
     // survival-time end back out.
@@ -1870,8 +1885,10 @@ export class GameRoom extends Room<GameState> {
 
     // You can only report a body you can actually see. Body ids are session
     // ids, so without this a client could fish for hidden corpses through a
-    // wall by spamming report attempts with every known id.
-    if (!canSee(reporter, body)) {
+    // wall by spamming report attempts with every known id. A body has no
+    // `lanternState` of its own — see `GameState`'s bodies filter for why
+    // "dropped" is the right stand-in.
+    if (!canSee(reporter, { x: body.x, y: body.y, lanternState: "dropped" })) {
       logAntiCheatEvent(this.log, "report_fog_of_war", {
         sessionId: client.sessionId,
         userId: this.sessionUserIds.get(client.sessionId) ?? null,
@@ -1932,6 +1949,41 @@ export class GameRoom extends Room<GameState> {
       bodyName: "",
       isEmergency: true,
     });
+  }
+
+  /**
+   * §3.5/§4.1's core hide mechanic: "extinguish your lantern to hide." No
+   * role gate — every Havener, Town and Stranger alike, always has this.
+   * Flips lit <-> extinguished; a `flickering`/`dropped` lantern doesn't
+   * respond to this message at all (there is no player-triggered path INTO
+   * flickering yet — see `LanternState`'s doc — and a dropped lantern isn't
+   * in anyone's hand to relight).
+   *
+   * `LANTERN_TOGGLE_COOLDOWN_MS` is a spam guard only, not a mechanic the
+   * player is meant to feel — see its own doc.
+   */
+  private handleToggleLantern(client: Client): void {
+    if (this.state.phase !== PHASE.PLAYING) {
+      return;
+    }
+
+    const player = this.state.players.get(client.sessionId);
+    if (!player || !player.alive) {
+      return;
+    }
+
+    if (player.lanternState !== "lit" && player.lanternState !== "extinguished") {
+      return;
+    }
+
+    const now = Date.now();
+    const lastToggle = this.lastLanternToggleAt.get(client.sessionId) ?? 0;
+    if (now - lastToggle < LANTERN_TOGGLE_COOLDOWN_MS) {
+      return;
+    }
+    this.lastLanternToggleAt.set(client.sessionId, now);
+
+    player.lanternState = player.lanternState === "lit" ? "extinguished" : "lit";
   }
 
   /**
@@ -2223,6 +2275,9 @@ export class GameRoom extends Room<GameState> {
 
     const confirmEjects = this.getBooleanSetting("confirmEjects");
     ejected.alive = false;
+    // Same as a kill — see `killPlayer`'s doc on this field. An ejection
+    // leaves no body, but the lantern still hits the ground as they go.
+    ejected.lanternState = "dropped";
     if (!this.diedAt.has(sessionId)) {
       this.diedAt.set(sessionId, Date.now());
     }
@@ -2627,6 +2682,7 @@ export class GameRoom extends Room<GameState> {
 
     this.state.players.forEach((player) => {
       player.alive = true;
+      player.lanternState = "lit"; // relit for the new round — see `killPlayer`'s doc
       player.hasVoted = false;
       const spawn = randomSpawn();
       player.x = spawn.x;
@@ -3293,5 +3349,19 @@ export class GameRoom extends Room<GameState> {
 
     const index = this.state.players.size % PLAYER_COLORS.length;
     return PLAYER_COLORS[index] ?? PLAYER_COLORS[0];
+  }
+
+  /**
+   * The §3.5 identity light — unlike `pickColor` above, this never needs a
+   * wrap-around fallback: `MAX_PLAYERS` is defined as exactly
+   * `lanternColors.length` (see that constant's own doc), so a free lantern
+   * colour is guaranteed to exist for every seat the room can ever hold. The
+   * `?? lanternColors[0]` is defensive only — it should be unreachable.
+   */
+  private pickLanternColor(): string {
+    const used = new Set<string>();
+    this.state.players.forEach((p) => used.add(p.lanternColor));
+    const free = lanternColors.find((c) => !used.has(c.hex));
+    return (free ?? lanternColors[0]).hex;
   }
 }

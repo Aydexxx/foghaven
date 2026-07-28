@@ -1,4 +1,5 @@
 import { WORLD_WIDTH, WORLD_HEIGHT, TOWN_HALL_POINT } from "../map/townMap";
+import { lanternColors } from "./lanterns";
 
 /** How long the secret role reveal is shown before the world opens up. */
 export const ROLE_REVEAL_MS = 4000;
@@ -143,6 +144,24 @@ export const VISION_RADIUS_INDOOR = 260;
 export const VISION_RADIUS_OUTDOOR = 170;
 
 /**
+ * docs/ART_BIBLE.md §3.5/§6.2: a Havener's own vision now originates from
+ * their lantern (see `shared/game/vision.ts`'s `visionRadiusAt`/`canSee`),
+ * not just the ground they stand on.
+ *
+ * Extinguishing is a real trade, not a free advantage: it drops the
+ * douser's own sight to a third of normal (below), AND separately caps how
+ * close anyone has to be to spot the douser at all, regardless of the
+ * viewer's own radius. `LANTERN_EXTINGUISHED_DETECTION_RADIUS` deliberately
+ * still clears `KILL_RANGE`/`REPORT_BODY_RANGE` (60 each) — hiding shrinks
+ * how far away you're noticed, it doesn't grant invisibility at melee
+ * range, the same invariant `VISION_RADIUS_*`'s own doc protects.
+ */
+export const LANTERN_EXTINGUISHED_VISION_MULTIPLIER = 0.35;
+export const LANTERN_EXTINGUISHED_DETECTION_RADIUS = 80;
+/** Minimum time between one player's own extinguish/relight toggles — stops a strobing exploit, not a cooldown you're meant to feel. */
+export const LANTERN_TOGGLE_COOLDOWN_MS = 400;
+
+/**
  * Whether the dead can keep completing tasks.
  *
  * This is on by default for a structural reason, not just flavour: the task
@@ -278,8 +297,14 @@ export const MIN_PLAYERS = 4;
  * `maxClients`. That spare seat is what lets an over-capacity joiner reach
  * `onAuth` and be told the room is full, instead of being turned away by the
  * matchmaker with the same generic error a bad room code produces.
+ *
+ * Exactly `lanternColors.length` (§3.5) — not a separately-maintained
+ * number that could drift from it. Every seat gets a unique lantern colour
+ * assigned once at join (`GameRoom.pickLanternColor`) with no wrap, ever;
+ * this is what guarantees that stays true rather than hoping someone
+ * remembers to keep two numbers in sync.
  */
-export const MAX_PLAYERS = 15;
+export const MAX_PLAYERS = lanternColors.length;
 
 /**
  * Why the server refused a join. These are custom `ServerError` codes chosen

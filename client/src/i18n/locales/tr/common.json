@@ -106,7 +106,8 @@
       "moveRight": "Sağa hareket",
       "interact": "Etkileşim",
       "report": "Cesedi bildir",
-      "bell": "Zili çal"
+      "bell": "Zili çal",
+      "lantern": "Feneri söndür/yak"
     },
     "pressAKey": "Bir tuşa basın…",
     "conflict": "\"{{key}}\" zaten başka bir eyleme atanmış.",
@@ -381,6 +382,7 @@
     "touchInteractLabel": "Etkileşim",
     "touchReportLabel": "Bildir",
     "touchBellLabel": "Zil",
+    "touchLanternLabel": "Fener",
     "fullscreenToggle": "Tam ekran",
     "rotateDevicePrompt": "En iyi deneyim için cihazınızı yatay çevirin"
   },

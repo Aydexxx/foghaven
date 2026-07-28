@@ -6,6 +6,8 @@
  * file by `scripts/generate-tokens.ts` — never hand-edit tokens.css.
  */
 
+export { lanternColors, type LanternColor, type LanternColorId } from "@foghaven/shared";
+
 // ---------------------------------------------------------------------------
 // §3.1 Core
 // ---------------------------------------------------------------------------
@@ -55,29 +57,6 @@ export const semantic = {
   bloodBright: "#E5453F",
   voteGold: "#E8B94A",
 } as const;
-
-// ---------------------------------------------------------------------------
-// §3.5 Player Lantern Colours — order matches the doc table exactly. Position
-// in this array is meaningful (indexed against player slots), so do not
-// resort it alphabetically or otherwise.
-// ---------------------------------------------------------------------------
-
-export const lanternColors = [
-  { id: "amber", name: "Amber", hex: "#FFB347" },
-  { id: "crimson", name: "Crimson", hex: "#FF6B6B" },
-  { id: "rose", name: "Rose", hex: "#FF9FC4" },
-  { id: "violet", name: "Violet", hex: "#B98CFF" },
-  { id: "cobalt", name: "Cobalt", hex: "#6BA8FF" },
-  { id: "cyan", name: "Cyan", hex: "#5FE0DC" },
-  { id: "jade", name: "Jade", hex: "#6FE09A" },
-  { id: "lime", name: "Lime", hex: "#C8F06A" },
-  { id: "bone", name: "Bone", hex: "#F2EAD8" },
-  { id: "rust", name: "Rust", hex: "#E07A4A" },
-  { id: "ash", name: "Ash", hex: "#9AA5B5" },
-  { id: "plum", name: "Plum", hex: "#9B6BAA" },
-  { id: "moss", name: "Moss", hex: "#8FA85C" },
-  { id: "coral", name: "Coral", hex: "#FF8A7A" },
-] as const;
 
 export const colors = { ...core, ...materials, ...light, ...semantic } as const;
 
@@ -222,5 +201,3 @@ export const duration = {
   slow: 300,
   scene: 1200,
 } as const;
-
-export type LanternColor = (typeof lanternColors)[number];

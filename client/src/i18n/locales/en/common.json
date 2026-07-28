@@ -106,7 +106,8 @@
       "moveRight": "Move right",
       "interact": "Interact",
       "report": "Report body",
-      "bell": "Ring bell"
+      "bell": "Ring bell",
+      "lantern": "Extinguish/relight lantern"
     },
     "pressAKey": "Press a key…",
     "conflict": "\"{{key}}\" is already bound to another action.",
@@ -381,6 +382,7 @@
     "touchInteractLabel": "Interact",
     "touchReportLabel": "Report",
     "touchBellLabel": "Bell",
+    "touchLanternLabel": "Lantern",
     "fullscreenToggle": "Fullscreen",
     "rotateDevicePrompt": "Rotate your device to landscape for the best experience"
   },

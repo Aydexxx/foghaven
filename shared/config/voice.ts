@@ -6,7 +6,7 @@
  * decision about which peers a client is *allowed* to connect to. See
  * `GameRoom`'s voice section and `client/src/voice/VoiceController.ts`.
  *
- * The architecture is a WebRTC full mesh (fine at this game's <=15 players — no
+ * The architecture is a WebRTC full mesh (fine at this game's <=14 players — no
  * SFU), signalled over the existing Colyseus room. Two properties matter and
  * both are enforced server-side, never in the renderer:
  *

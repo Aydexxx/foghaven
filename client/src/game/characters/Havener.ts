@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { colors } from "../../theme/tokens";
+import type { LanternState } from "@foghaven/shared";
 import { AtlasKey } from "../../assets/atlasManifest";
 import { CHARACTER_HEIGHT, anchorLocal, type AnchorName } from "./anchors";
 import { HAVENER_ANIM_CONFIG } from "./havenerAnimConfig";
@@ -53,6 +54,12 @@ export type Facing = "left" | "right";
 /** The six ART_BIBLE §4.4 states, verbatim. */
 export type HavenerState = "idle" | "walk" | "run" | "interact" | "ghost" | "death";
 
+/** The glow overlay's resting opacity — see `buildLanternAndGlow`/`setLanternState`. */
+const GLOW_BASE_ALPHA = 0.45;
+/** §6.2/`LanternState`'s doc: a visual tell only, not wired to a game condition. Fast enough to read as "unsteady," not a strobe. */
+const FLICKER_PERIOD_MS = 90;
+const FLICKER_MIN_ALPHA = 0.12;
+
 // §4.2 stack, top of file order = draw order. The `anchor` each layer sits on
 // is the ONLY place a layer's position comes from (all via `anchorLocal`).
 const LAYERS = [
@@ -101,6 +108,9 @@ export class Havener extends Phaser.GameObjects.Container {
   private stateTimers: Phaser.Time.TimerEvent[] = [];
   private ghostWisps: Phaser.GameObjects.Ellipse[] = [];
   private lanternColorNum = WHITE;
+  /** The server-authoritative lit/flickering/extinguished/dropped value — see `setLanternState`. Distinct from `visualState` (idle/walk/.../ghost), which is purely local animation. */
+  private lanternState: LanternState = "lit";
+  private flickerTween?: Phaser.Tweens.Tween;
   /** True once `dropLantern` has detached the lantern — see the class doc. */
   private lanternDropped = false;
   /** The detached lantern's own display objects, kept only so `destroy()` can clean them up. */
@@ -167,7 +177,7 @@ export class Havener extends Phaser.GameObjects.Container {
     this.glow = this.scene.add
       .rectangle(hand.x, hand.y, 40, 40, WHITE)
       .setBlendMode(Phaser.BlendModes.ADD)
-      .setAlpha(0.45);
+      .setAlpha(GLOW_BASE_ALPHA);
     this.holders.glowOverlay.add(this.glow);
 
     // §4.2 z6 lantern: tinted at runtime with the player's colour. Origin
@@ -192,6 +202,63 @@ export class Havener extends Phaser.GameObjects.Container {
   setLanternColor(hex: string): void {
     this.lanternColorNum = hexNum(hex);
     this.applyLanternColor();
+  }
+
+  /**
+   * The server-authoritative lit/flickering/extinguished/dropped state —
+   * see `LanternState`'s own doc (shared/game/vision.ts) for what each means
+   * mechanically. This method only ever renders what it's told; it never
+   * decides on its own that a lantern should look a certain way, which is
+   * exactly what keeps this a pure client-side *rendering* of server truth
+   * rather than a second, client-side opinion about it.
+   *
+   * `dropped` is the one exception to "just recolour it": it hands off to
+   * `dropLantern`'s physics, same as the death animation calling it directly
+   * — both paths converge on the same guarded, idempotent method.
+   */
+  setLanternState(state: LanternState): void {
+    if (state === this.lanternState) {
+      return;
+    }
+    this.lanternState = state;
+    this.flickerTween?.stop();
+    this.flickerTween = undefined;
+
+    if (state === "dropped") {
+      this.dropLantern();
+      return;
+    }
+    if (this.lanternDropped) {
+      return; // already detached — nothing left on the rig to recolour
+    }
+    switch (state) {
+      case "lit":
+        this.glow.setAlpha(GLOW_BASE_ALPHA);
+        this.glow.setVisible(true);
+        this.applyLanternColor();
+        break;
+      case "extinguished":
+        // §6.2: "much harder for others to see you" — still held, just dark.
+        // Distinct from ghost's dark lantern (`enterGhost`): this is a LIVING
+        // player's own choice, not a death state.
+        this.lantern.setFillStyle(hexNum(colors.void));
+        this.glow.setVisible(false);
+        break;
+      case "flickering":
+        // A visual tell only — see `LanternState`'s doc on why this has no
+        // mechanical effect yet. True colour, unsteady brightness.
+        this.applyLanternColor();
+        this.glow.setVisible(true);
+        this.flickerTween = this.scene.tweens.add({
+          targets: this.glow,
+          alpha: FLICKER_MIN_ALPHA,
+          duration: FLICKER_PERIOD_MS,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+        break;
+    }
   }
 
   /** §4.5: face left or right by mirroring the whole composite. No-op if unchanged. */
@@ -340,6 +407,7 @@ export class Havener extends Phaser.GameObjects.Container {
 
   override destroy(fromScene?: boolean): void {
     this.clearStateTweens();
+    this.flickerTween?.stop();
     for (const obj of this.droppedLanternObjects) {
       obj.destroy();
     }

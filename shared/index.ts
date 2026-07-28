@@ -1,5 +1,6 @@
 export * from "./config/cosmetics";
 export * from "./config/gameConfig";
+export * from "./config/lanterns";
 export * from "./config/moderation";
 export * from "./config/roles";
 export * from "./config/settings";

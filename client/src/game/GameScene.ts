@@ -26,6 +26,8 @@ import {
   type TunnelSoundMessage,
   type Vec2,
   type AbilityTargetKind,
+  type LanternState,
+  type LitPosition,
 } from "@foghaven/shared";
 import type { BodyState, GameState, PlayerState } from "../net/types";
 import i18n from "../i18n";
@@ -37,7 +39,6 @@ import {
   PET_VISUALS,
 } from "./characters/cosmeticVisuals";
 import { Havener, HAVENER_ATLAS_KEY, type HavenerState } from "./characters/Havener";
-import { lanternHexForColor } from "./characters/playerLantern";
 import type { AnchorName } from "./characters/anchors";
 import { ATLAS_DIR, ATLAS_PAGES } from "../assets/atlasManifest";
 import { audioEngine } from "../audio/audioEngine";
@@ -258,7 +259,7 @@ export interface AbilityTargetInfo {
 }
 
 /** A one-shot action a touch button can trigger — see `"touch:action"` on the game event emitter. */
-export type TouchActionKind = "interact" | "report" | "bell";
+export type TouchActionKind = "interact" | "report" | "bell" | "lantern";
 
 /**
  * Whether each proximity prompt is currently showing, published every frame
@@ -300,6 +301,7 @@ export class GameScene extends Phaser.Scene {
   private eKey!: Phaser.Input.Keyboard.Key;
   private rKey!: Phaser.Input.Keyboard.Key;
   private bKey!: Phaser.Input.Keyboard.Key;
+  private lKey!: Phaser.Input.Keyboard.Key;
   private inputAccumulator = 0;
   private seq = 0;
   private pending: InputCommand[] = [];
@@ -562,6 +564,7 @@ export class GameScene extends Phaser.Scene {
       const bell = this.updateBellPrompt();
       const repair = this.updateRepairPrompt();
       this.publishPromptVisibility({ interact, report, bell, repair });
+      this.updateLanternToggle();
     }
 
     this.updateCommsVisibility();
@@ -648,6 +651,7 @@ export class GameScene extends Phaser.Scene {
     this.eKey = keyboard.addKey(bindings.interact);
     this.rKey = keyboard.addKey(bindings.report);
     this.bKey = keyboard.addKey(bindings.bell);
+    this.lKey = keyboard.addKey(bindings.lantern);
 
     // Stop these keys from scrolling/otherwise acting on the page while playing.
     keyboard.addCapture([
@@ -662,6 +666,7 @@ export class GameScene extends Phaser.Scene {
       bindings.interact,
       bindings.report,
       bindings.bell,
+      bindings.lantern,
     ]);
   }
 
@@ -828,7 +833,7 @@ export class GameScene extends Phaser.Scene {
 
     const toDx = pos.x - localPos!.x;
     const toDy = pos.y - localPos!.y;
-    const radius = visionRadiusAt(localPos!);
+    const radius = visionRadiusAt(this.asViewer(localPos!));
     const proximity = Math.max(0, 1 - Math.hypot(toDx, toDy) / radius);
     const pan = Math.max(-1, Math.min(1, toDx / radius));
     audioEngine.updateFootstepSpatial(id, pan, proximity);
@@ -918,11 +923,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     // §4.1: one identical Havener for everyone. Identity is the lantern's
-    // colour (§3.5), derived from the player's already-public `color` — no new
-    // network field, and it can never correlate with the one thing that is
-    // actually secret (their role). See `playerLantern.ts` for the §3.5 debt
-    // note on why that colour is not yet a unique per-player identity.
-    const havener = new Havener(this, player.x, player.y, lanternHexForColor(player.color));
+    // colour (§3.5) — `lanternColor` is a real, server-assigned field
+    // (`GameRoom.pickLanternColor`), unique for the whole room, independent
+    // of the legacy `color`/`PLAYER_COLORS` badge identity below.
+    const havener = new Havener(this, player.x, player.y, player.lanternColor);
 
     const badge = this.add.circle(
       player.x + BADGE_OFFSET.x,
@@ -1003,14 +1007,25 @@ export class GameScene extends Phaser.Scene {
       player.listen("name", (value) => label.setText(value)),
     );
     entity.disposers.push(
-      // A colour change — which never happens today, but the schema allows it
-      // — moves the identity badge AND re-tints the lantern, since §3.5 makes
-      // the lantern the carrier of that identity (`playerLantern.ts`).
+      // A colour change — which never happens today, but the schema allows
+      // it — only ever needs to move the identity badge now: `lanternColor`
+      // (below) is a fully independent field, assigned once and never
+      // re-derived from this one.
       player.listen("color", (value) => {
         badge.setFillStyle(this.parseColor(displayColorFor(value, graphicsEngine.getSettings().colorBlindMode)));
         badgeNumber.setText(String(playerColorIndex(value) + 1));
-        havener.setLanternColor(lanternHexForColor(value));
       }),
+    );
+    entity.disposers.push(
+      // Also never reassigned server-side today (see `GameRoom.onJoin`), but
+      // kept live for the same defensive reason `color`'s listener is.
+      player.listen("lanternColor", (value) => havener.setLanternColor(value)),
+    );
+    entity.disposers.push(
+      // The one server-authoritative lantern field that DOES change in
+      // play — lit/flickering/extinguished/dropped. The client renders
+      // whatever arrives here and never predicts or infers it.
+      player.listen("lanternState", (value) => havener.setLanternState(value)),
     );
 
     // Cosmetics arrive slightly after the player itself: `GameRoom.onJoin`
@@ -1158,6 +1173,22 @@ export class GameScene extends Phaser.Scene {
    */
   private isDeadPlayer(id: string): boolean {
     return this.room.state.bodies.has(id) || this.room.state.deadPlayerIds.includes(id);
+  }
+
+  /**
+   * The local player's own `LanternState`, straight from server state —
+   * `"lit"` only as the fallback for the brief window before the local
+   * player's own entry exists at all, never a guess about a real player.
+   * §6.2: every vision-radius computation on this client is the LOCAL
+   * player's own, so this is the one lantern state all of them need.
+   */
+  private localLanternState(): LanternState {
+    return this.room.state.players.get(this.room.sessionId)?.lanternState ?? "lit";
+  }
+
+  /** `pos` (assumed to be the local player's own position) plus their real lantern state, ready for `visionRadiusAt`/`canSee`. */
+  private asViewer(pos: Vec2): LitPosition {
+    return { x: pos.x, y: pos.y, lanternState: this.localLanternState() };
   }
 
   private addBody(body: BodyState, key: string): void {
@@ -1509,7 +1540,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.fogRadius +=
-      (visionRadiusAt(pos, this.room.state.sabotageActive) - this.fogRadius) * FOG_RADIUS_RATE;
+      (visionRadiusAt(this.asViewer(pos), this.room.state.sabotageActive) - this.fogRadius) *
+      FOG_RADIUS_RATE;
 
     rt.fill(FOG_COLOR, this.fogAlpha);
     const cam = this.cameras.main;
@@ -1525,6 +1557,24 @@ export class GameScene extends Phaser.Scene {
    * re-checks the reporter's distance to that exact body before anything
    * happens — see `GameRoom.handleReportBody`.
    */
+  /**
+   * §3.5/§4.1's core hide mechanic — always available, no proximity gate and
+   * no prompt UI (there is nothing to walk up to). Just the keypress/tap
+   * itself, forwarded to the server, which alone decides whether it
+   * actually flips lit <-> extinguished (phase, alive, cooldown — see
+   * `GameRoom.handleToggleLantern`). This client never predicts the result;
+   * `entity.havener`'s lantern only changes once `lanternState` comes back
+   * over the wire.
+   */
+  private updateLanternToggle(): void {
+    if (this.localIsGhost) {
+      return;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.lKey) || this.consumeTouchAction("lantern")) {
+      this.room.send("toggle_lantern");
+    }
+  }
+
   private updateReportPrompt(): boolean {
     if (this.localIsGhost) {
       this.reportPrompt?.setVisible(false);
@@ -1574,8 +1624,9 @@ export class GameScene extends Phaser.Scene {
       const distance = Phaser.Math.Distance.Between(pos.x, pos.y, bodyPos.x, bodyPos.y);
       if (distance <= bestDistance) {
         // A corpse just across a wall is in range but not in sight; the
-        // server would refuse the report, so don't offer the prompt.
-        if (!canSee(pos, bodyPos)) {
+        // server would refuse the report, so don't offer the prompt. A body
+        // has no lantern of its own — see the server's identical treatment.
+        if (!canSee(this.asViewer(pos), { ...bodyPos, lanternState: "dropped" })) {
           continue;
         }
         best = key;

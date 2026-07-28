@@ -1,4 +1,5 @@
 import type { ArraySchema, MapSchema, Schema } from "@colyseus/schema";
+import type { LanternState } from "@foghaven/shared";
 
 /**
  * Client-side view of the server's `Player` schema. Extending `Schema` gives
@@ -16,6 +17,10 @@ export interface PlayerState extends Schema {
   x: number;
   y: number;
   color: string;
+  /** The §3.5 identity light — one of the 14 `lanternColors`, unique per room, assigned once at join. See the server `Player` schema's own doc. */
+  lanternColor: string;
+  /** lit / flickering / extinguished / dropped — server-authoritative, never predicted. See `Havener.setLanternState`. */
+  lanternState: LanternState;
   alive: boolean;
   /** False while this player is inside their reconnection grace period. */
   connected: boolean;

@@ -21,6 +21,8 @@ export interface InputSettings {
   interact: string;
   report: string;
   bell: string;
+  /** §3.5/§4.1: "extinguish your lantern to hide" — always available, no role gate. */
+  lantern: string;
 }
 
 export const DEFAULT_INPUT_SETTINGS: InputSettings = {
@@ -31,6 +33,7 @@ export const DEFAULT_INPUT_SETTINGS: InputSettings = {
   interact: "E",
   report: "R",
   bell: "B",
+  lantern: "L",
 };
 
 const STORAGE_KEY = "foghaven.input";
@@ -55,6 +58,7 @@ export function loadInputSettings(): InputSettings {
       interact: str(parsed.interact, DEFAULT_INPUT_SETTINGS.interact),
       report: str(parsed.report, DEFAULT_INPUT_SETTINGS.report),
       bell: str(parsed.bell, DEFAULT_INPUT_SETTINGS.bell),
+      lantern: str(parsed.lantern, DEFAULT_INPUT_SETTINGS.lantern),
     };
   } catch {
     return { ...DEFAULT_INPUT_SETTINGS };

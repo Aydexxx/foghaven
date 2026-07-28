@@ -139,6 +139,13 @@ export function TouchControls({ gameEvents }: TouchControlsProps) {
         >
           {t("game.touchBellLabel")}
         </button>
+        <button
+          type="button"
+          className="touch-action-button"
+          onClick={() => triggerAction("lantern")}
+        >
+          {t("game.touchLanternLabel")}
+        </button>
       </div>
     </div>
   );

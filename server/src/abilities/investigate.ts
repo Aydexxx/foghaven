@@ -22,7 +22,9 @@ export const investigateAbility: Ability = {
     if (!ctx.withinRange(ctx.actor, targetBody, REPORT_BODY_RANGE)) {
       return false;
     }
-    if (!ctx.canSee(ctx.actor, targetBody)) {
+    // A body has no `lanternState` of its own — see `GameState`'s bodies
+    // filter for why "dropped" is the right stand-in.
+    if (!ctx.canSee(ctx.actor, { x: targetBody.x, y: targetBody.y, lanternState: "dropped" })) {
       return false;
     }
 

@@ -1,5 +1,5 @@
 import { Schema, MapSchema, ArraySchema, type, filterChildren } from "@colyseus/schema";
-import { PHASE, canSee } from "@foghaven/shared";
+import { PHASE, canSee, type LanternState } from "@foghaven/shared";
 
 /**
  * The phases during which the fog restricts what a living client is sent.
@@ -31,6 +31,29 @@ export class Player extends Schema {
   @type("number") y = 0;
   @type("string") color = "";
   @type("boolean") alive = true;
+
+  /**
+   * The §3.5 lantern colour this player was dealt — one of the 14
+   * `lanternColors`, unique for the room's whole lifetime, assigned once at
+   * `GameRoom.onJoin` (`pickLanternColor`) and never reassigned. Distinct
+   * from the legacy `color` above: that field still exists only to drive the
+   * colour-blind badge and the pre-7.5 preview rig (Inventory/Profile/
+   * GameOver), neither of which this touches. This one is the actual
+   * identity light the in-world Havener renders (§4.1: "player identity is
+   * carried by the lantern, not the body").
+   */
+  @type("string") lanternColor = "";
+
+  /**
+   * lit / flickering / extinguished / dropped — see `LanternState`'s own
+   * doc in `shared/game/vision.ts`. Server-authoritative and public for the
+   * same reason `alive` is: whether someone doused their lantern is exactly
+   * the kind of thing the room can see for itself, so hiding the field
+   * would only be a client-side illusion. The CLIENT never predicts or
+   * infers this — it renders whatever value arrives here, full stop (see
+   * `Havener.setLanternState`).
+   */
+  @type("string") lanternState: LanternState = "lit";
 
   /**
    * Whether this player's socket is currently attached. False means they
@@ -232,7 +255,11 @@ export class GameState extends Schema {
     if (!FOG_PHASES.has(this.phase)) {
       return true;
     }
-    return canSee(viewer, value, this.sabotageActive);
+    // A body carries no `lanternState` of its own — its lantern has already
+    // separately detached and hit the ground (§4.4's death sequence) by the
+    // time a corpse exists at all, so it never gets the extinguished-target
+    // detection cap; a body is found at the viewer's ordinary vision range.
+    return canSee(viewer, { x: value.x, y: value.y, lanternState: "dropped" }, this.sabotageActive);
   })
   @type({ map: Body })
   bodies = new MapSchema<Body>();
