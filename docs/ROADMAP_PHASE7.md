@@ -16,10 +16,10 @@ Remember: `.env` is gitignored, so it must be created by hand on each machine.
 |---|---|---|---|
 | 7.1 | Design tokens | A | Done — `52ac81f` |
 | 7.2 | Typography pipeline | A | Done — `570d9dd` |
-| 7.3 | Asset cleanup + atlas | A | |
-| 7.4 | Remove current music | A | |
-| 7.5 | Character rig architecture | B | **stop here and check in** |
-| 7.6 | Animation state machine | B | |
+| 7.3 | Asset cleanup + atlas | A | Done — `006abb0` |
+| 7.4 | Remove current music | A | Done — `c25d514` |
+| 7.5 | Character rig architecture | B | Done — `f89213f` |
+| 7.6 | Animation state machine | B | Done — `5d4fd2b` |
 | 7.7 | Lantern & per-player light | B | |
 | 7.8 | Juice layer | C | |
 | 7.9 | Kill cutscene | C | |
