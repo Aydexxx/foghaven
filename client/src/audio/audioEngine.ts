@@ -1,7 +1,6 @@
 import type { RoomSlug } from "@foghaven/shared";
 import { RoomAmbience } from "./synth/ambience";
 import { FootstepVoice } from "./synth/footstep";
-import { TensionMusic } from "./synth/music";
 import {
   playBodyFoundStinger,
   playEjectionStinger,
@@ -44,10 +43,10 @@ const STINGERS: Record<StingerKind, typeof playKillStinger> = {
 const VOLUME_RAMP_S = 0.05;
 
 /**
- * The audio engine: one `AudioContext`, two buses (music, sfx) feeding one
- * master gain, and everything else in `audio/` plugged into one or the
- * other. A single module-level instance (`audioEngine`, exported below) —
- * not a React context — because its two callers are on opposite sides of a
+ * The audio engine: one `AudioContext`, one sfx bus feeding one master gain,
+ * and everything else in `audio/` plugged into it. A single module-level
+ * instance (`audioEngine`, exported below) — not a React context — because
+ * its two callers are on opposite sides of a
  * boundary this codebase already draws elsewhere: `GameScene` is a Phaser
  * class outside React's tree entirely (see how it already imports shared
  * config directly rather than receiving it as props), and the settings
@@ -63,10 +62,8 @@ const VOLUME_RAMP_S = 0.05;
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private musicBus: GainNode | null = null;
   private sfxBus: GainNode | null = null;
   private ambience: RoomAmbience | null = null;
-  private music: TensionMusic | null = null;
   private readonly footsteps = new Map<string, FootstepVoice>();
   private settings: AudioSettings = loadAudioSettings();
   private readonly listeners = new Set<() => void>();
@@ -87,15 +84,12 @@ class AudioEngine {
       this.masterGain = ctx.createGain();
       this.masterGain.connect(ctx.destination);
 
-      this.musicBus = ctx.createGain();
-      this.musicBus.connect(this.masterGain);
       this.sfxBus = ctx.createGain();
       this.sfxBus.connect(this.masterGain);
 
       this.applyVolumes();
 
-      this.ambience = new RoomAmbience(ctx, this.musicBus);
-      this.music = new TensionMusic(ctx, this.musicBus);
+      this.ambience = new RoomAmbience(ctx, this.sfxBus);
     }
 
     void this.ctx.resume().catch(() => {
@@ -130,7 +124,7 @@ class AudioEngine {
   }
 
   setMuted(bus: AudioBus, muted: boolean): void {
-    const key = bus === "master" ? "mutedMaster" : bus === "music" ? "mutedMusic" : "mutedSfx";
+    const key = bus === "master" ? "mutedMaster" : "mutedSfx";
     this.settings = { ...this.settings, [key]: muted };
     this.commitSettings();
   }
@@ -150,15 +144,13 @@ class AudioEngine {
   }
 
   private applyVolumes(): void {
-    if (!this.ctx || !this.masterGain || !this.musicBus || !this.sfxBus) {
+    if (!this.ctx || !this.masterGain || !this.sfxBus) {
       return;
     }
     const now = this.ctx.currentTime;
     const master = this.settings.mutedMaster ? 0 : this.settings.master;
-    const music = this.settings.mutedMusic ? 0 : this.settings.music;
     const sfx = this.settings.mutedSfx ? 0 : this.settings.sfx;
     this.ramp(this.masterGain, master, now);
-    this.ramp(this.musicBus, music, now);
     this.ramp(this.sfxBus, sfx, now);
   }
 
@@ -177,18 +169,10 @@ class AudioEngine {
     STINGERS[kind]({ ctx: this.ctx, destination: this.sfxBus });
   }
 
-  // --- Ambience + music ---------------------------------------------------
+  // --- Ambience -------------------------------------------------------
 
   setRoom(slug: RoomSlug): void {
     this.ambience?.setRoom(slug);
-  }
-
-  setTension(value: number): void {
-    this.music?.setTension(value);
-  }
-
-  setSabotageActive(active: boolean): void {
-    this.music?.setSabotage(active);
   }
 
   // --- Footsteps ----------------------------------------------------------
@@ -218,14 +202,12 @@ class AudioEngine {
   }
 
   /**
-   * Back to a neutral resting state between rounds — tension and sabotage
-   * clear, ambience returns to the open streets, every footstep voice
-   * drops. The context, buses and settings all survive: this is "a new
-   * round is starting," not "the player left the game."
+   * Back to a neutral resting state between rounds — ambience returns to
+   * the open streets and every footstep voice drops. The context, buses
+   * and settings all survive: this is "a new round is starting," not "the
+   * player left the game."
    */
   reset(): void {
-    this.setTension(0);
-    this.setSabotageActive(false);
     this.setRoom("streets");
     for (const id of [...this.footsteps.keys()]) {
       this.removeFootstepSource(id);

@@ -1,434 +1,720 @@
 # Foghaven — Phase 7: Art & Feel Overhaul
 
-> Work order for Claude Code. 24 prompts across 7 blocks.
-> **Every prompt assumes `docs/ART_BIBLE.md` has been read.** The Art Bible is the spec; this file is the schedule.
-> Continues from Phase 6. Repo: `C:\dev\foghaven`.
+> Work order for Claude Code. 25 prompts across 8 blocks.
+> Every prompt below is copy-paste ready. Paste the prompt, then paste the
+> **Standard Footer** underneath it.
+> The Art Bible (`docs/ART_BIBLE.md`) is the spec; this file is the schedule.
 
-Repo location: `docs/ROADMAP_PHASE7.md`
+Repo: `C:\dev\foghaven` — worked across two machines (AYDENİZ, BROTHERS).
+Remember: `.env` is gitignored, so it must be created by hand on each machine.
 
 ---
 
-## Ground Rules
+## Progress
 
-**Order matters more than usual here.** Block A produces the tokens and pipeline everything else consumes. Block B is deliberately second because it is the cheapest possible win and it fixes the thing that is actively unpleasant right now. Do not jump to the map art pass (Block F) early — it is the largest block and it will look wrong if the character, lighting, and tokens are not settled first.
+| # | Prompt | Block | Status |
+|---|---|---|---|
+| 7.1 | Design tokens | A | Done — `52ac81f` |
+| 7.2 | Typography pipeline | A | Done — `570d9dd` |
+| 7.3 | Asset cleanup + atlas | A | |
+| 7.4 | Remove current music | A | |
+| 7.5 | Character rig architecture | B | **stop here and check in** |
+| 7.6 | Animation state machine | B | |
+| 7.7 | Lantern & per-player light | B | |
+| 7.8 | Juice layer | C | |
+| 7.9 | Kill cutscene | C | |
+| 7.10 | Ejection cutscene | C | |
+| 7.11 | Meeting call cutscene | C | |
+| — | **Playtest checkpoint** | — | play a real round with friends |
+| 7.12 | Component kit | D | |
+| 7.13 | Lobby as a playable room | D | |
+| 7.14 | Role selection screen | D | |
+| 7.15 | Discussion & voting screen | D | |
+| 7.16 | Round end screen | D | |
+| 7.17 | Fog & lighting rework | E | |
+| 7.18 | Room art pass | E | |
+| 7.19 | Map graph audit | E | |
+| 7.20 | Task minigame framework | F | |
+| 7.21 | First six minigames | F | |
+| 7.22 | Visual tasks | F | |
+| 7.23 | Layered ambience system | G | needs audio assets sourced first |
+| 7.24 | Stinger library & ducking | G | needs audio assets sourced first |
+| 7.25 | Anti-leak sweep | H | |
 
-**Model routing**
+**Audio moved to Block G.** It was originally second, on the theory that it was
+the cheapest win. That was wrong: the code is easy, but sourcing four ambience
+stems and seventeen stingers is an afternoon of hunting, not a coding task.
+7.4 kills the current annoying loop immediately, so the wait costs nothing.
 
-| Model | Use for |
+---
+
+## Standard Footer
+
+Paste this after **every** prompt below.
+
+```
+Before finishing:
+- Run `npm test` from the REPO ROOT, not from client/ or server/. Report the total
+  test count. It must be 451 or higher. Running vitest from a subdirectory only
+  runs that workspace's tests and will report a falsely small number.
+- Run typecheck, eslint, and a production build. All must be clean.
+- Commit with a descriptive message. Do not push.
+- Stay strictly inside this task's scope. If you find something broken that is out
+  of scope, report it at the end rather than fixing it.
+- If a decision in this prompt seems wrong once you're in the code, stop and tell me
+  rather than working around it silently.
+```
+
+If a root `npm test` script doesn't exist yet, 7.3 adds it.
+
+---
+
+## Model Routing
+
+| Model | Prompts |
 |---|---|
-| Fable 5 | Architecture and systemic decisions — 7.3, 7.6, 7.9, 7.14, 7.21 |
-| Opus 4.8 | Anything touching game state, secrecy, or the server — 7.10, 7.15, 7.20, 7.23 |
-| Sonnet 5 | Standard implementation — most prompts |
-| Haiku 4.5 | Boilerplate, asset wiring, config — 7.2, 7.5 |
+| Fable 5 | 7.3, 7.5, 7.8, 7.13, 7.20 — architecture and systemic decisions |
+| Opus 4.8 | 7.9, 7.14, 7.19, 7.22, 7.25 — game state, secrecy, server trust |
+| Sonnet 5 | everything else |
 
-**Rules for every prompt**
-- All code, comments, commits, and docs in English
-- No hardcoded colours, sizes, or durations — everything from tokens
-- Client is untrusted: no art or animation change may reveal hidden state (see 7.24)
-- Full test suite green before each commit
-- Nothing merges until it has been seen running, not just passing tests
+---
 
-**Test suite baseline entering Phase 7: 451 passing.**
+## Rules
+
+- All code, comments, commits, and docs in English.
+- No hardcoded colours, sizes, or durations — everything from `client/src/theme/tokens.ts`.
+- The client is untrusted. No art or animation change may reveal hidden state.
+- One commit per prompt. Never batch two prompts into one commit.
+- Don't skip ahead. Block E (world) in particular will look wrong and need redoing
+  if Blocks A–C aren't settled first.
 
 ---
 
 # Block A — Foundations
 
-Nothing else can start cleanly until these three land.
-
-## 7.1 — Design tokens
-**Model:** Sonnet 5
-
-> Read `docs/ART_BIBLE.md` sections 3 and 7.
->
-> Create `client/src/theme/tokens.ts` exporting every colour token from §3 (core, materials, light, semantic, and the 14 player lantern colours as an ordered array), the typography scale from §7, a spacing scale (4/8/12/16/24/32/48), a radius scale (6/10/12/14/20), and a duration scale (fast 60ms, base 120ms, slow 300ms, scene 1200ms).
->
-> Mirror all of it as CSS custom properties in `client/src/theme/tokens.css` for the React layer, generated from the same TS source so the two can never drift.
->
-> Then sweep the entire client for hardcoded hex colours, px font sizes, and magic-number durations, and replace them with tokens. Report anything that does not map cleanly to a token rather than inventing a new value.
->
-> Add an ESLint rule banning hex literals in `client/src/**` outside `theme/`.
-
-**Done when:** zero hex literals outside `theme/`; ESLint enforces it; app renders with the new palette.
-
-## 7.2 — Typography pipeline
-**Model:** Haiku 4.5
-
-> Self-host Alfa Slab One, Nunito (700/800), and JetBrains Mono (700). Subset to Latin + Latin Extended — Turkish characters are required and must be verified (ğ, ü, ş, ı, İ, ö, ç).
->
-> Add `@font-face` with `font-display: swap` and preload the two fonts used above the fold. Wire the §7 scale into both the React CSS layer and Phaser's text styles so they cannot diverge.
->
-> Remove the current serif entirely.
->
-> Then fix the untranslated key `lobbyRoom.settings.voteMuteEnabledLabel`, and add a CI check that fails the build if any locale file has a key present in `en` but missing or empty elsewhere.
-
-**Done when:** no font hotlinking; Turkish glyphs render correctly; missing-translation check runs in CI.
-
-## 7.3 — Asset pipeline and Gemini generation script
+## 7.3 — Asset cleanup pass and atlas pipeline
 **Model:** Fable 5
 
-> Read `docs/ART_BIBLE.md` §12 in full.
->
-> Build the asset pipeline:
->
-> 1. Directory structure: `art/prompts/` (committed), `art/generated/` (gitignored), `art/approved/` (committed), `client/public/assets/atlas/` (build output).
->
-> 2. `scripts/genart.mjs` — a Node script that:
->    - reads `GEMINI_API_KEY` from `.env` (fail with a clear message if absent; verify `.env` is gitignored)
->    - takes a prompt name, resolves `art/prompts/<name>.txt`, and appends the §12.2 style block verbatim
->    - supports `--model pro|flash|lite` mapping to `gemini-3-pro-image-preview`, `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`
->    - supports `--refs a,b,c` to pass approved assets as reference images (Pro only)
->    - supports `--n <count>`, writing to `art/generated/<name>/<ISO-timestamp>-<i>.png`
->    - writes a `.meta.json` sidecar alongside each output recording prompt file, full resolved prompt, model, refs, and timestamp
->    - prints an estimated cost before running and requires confirmation above a configurable threshold
->
-> 3. `scripts/approve.mjs <generated-path> <asset-name>` — moves a chosen output to `art/approved/`, carrying its meta forward.
->
-> 4. `scripts/cleanup.mjs` — the §12.5 pass: background removal by alpha threshold, palette snap to the §3 token set, outline colour normalisation to `#1A1620`, and downscale to a per-asset target. Palette snapping must be automatic and scripted, never manual.
->
-> 5. `npm run atlas` — packs `art/approved/` into texture atlases with a generated TS manifest so asset keys are typed.
->
-> Do not commit an API key. Do not call the API from client code — this is a build-time tool only.
+Half of this landed already: `scripts/genart.mjs`, `scripts/approve.mjs`, and the
+`art/` directory structure exist and are committed. This finishes the rest.
 
-**Done when:** `node scripts/genart.mjs character-base --model pro --n 4` produces four images with sidecars; `npm run atlas` produces a typed manifest.
+```
+Read docs/ART_BIBLE.md section 12, especially 12.5.
 
----
+The generation half of the asset pipeline already exists: scripts/genart.mjs,
+scripts/approve.mjs, and art/prompts/ + art/generated/ + art/approved/. Do not
+rewrite those. This task adds the two missing pieces.
 
-# Block B — Audio
+1. scripts/cleanup.mjs — the section 12.5 pass, run against files in art/approved/.
+   It takes an asset name and produces a cleaned version, writing to
+   art/approved/<name>.clean.png so the original is never destroyed:
 
-Do this second. It is roughly a day of work and it fixes the single most complained-about thing in the current build.
+   a. Background removal. AI output does not have clean alpha. Detect the flat
+      background colour from the image corners, then remove it with a tolerance
+      threshold. Handle anti-aliased edges — a hard threshold leaves a halo.
+   b. Palette snap. Quantise every remaining pixel to the nearest colour in the
+      ART_BIBLE section 3 token set, imported from client/src/theme/tokens.ts so
+      there is one palette definition in the repo, not two. Use perceptual distance
+      (CIELAB / deltaE), not naive RGB distance — RGB distance produces visibly
+      wrong matches on dark colours, which is most of our palette.
+   c. Outline normalisation. Find near-black outline pixels and snap them to the
+      exact ink token, at uniform opacity.
+   d. Downscale to a target size passed as an argument, defaulting to 128px on the
+      long edge.
 
-## 7.4 — Layered ambience system
+   Print a before/after summary: how many distinct colours before, how many after,
+   how many pixels were made transparent. If the palette snap changes more than 40%
+   of non-transparent pixels, warn loudly — that means the source drifted far from
+   the palette and should probably be regenerated rather than corrected.
+
+2. npm run atlas — packs everything in art/approved/ into texture atlases under
+   client/public/assets/atlas/, and generates a TypeScript manifest so asset keys
+   are typed rather than magic strings. Prefer .clean.png over .png where both exist.
+
+3. Add a root-level `npm test` script that runs the test suites of every workspace
+   (client, server, and shared if it has one) and reports a combined total. Running
+   vitest from a single subdirectory has already caused two commits to be verified
+   against only 2 of 451 tests. Make the root script the obvious one to run.
+
+Then run cleanup.mjs against the three existing approved assets — character-base-01,
+character-side-01, cosmetic-hats-01 — and report the before/after summary for each
+WITHOUT committing the cleaned output yet. I want to see the numbers first.
+```
+
+## 7.4 — Remove the current music
 **Model:** Sonnet 5
 
-> Read `docs/ART_BIBLE.md` §11.
->
-> Replace the current looping music entirely. Build an `AudioDirector` that manages four ambience layers (`bed`, `sea`, `town`, `dread`), each an independent looping stem with its own gain node.
->
-> The director subscribes to game state and crossfades layer gains over 2–3 seconds according to the §11.2 mix table. It must never hard-cut. Room type applies a low-pass to the `town` layer when indoors.
->
-> No melodic content anywhere. If a stem has a discernible tune, it is the wrong stem.
->
-> Add a master volume plus independent music / SFX / voice sliders, persisted to local storage, and make sure they actually apply to voice chat gain too.
+Tiny task, but do it now rather than waiting for Block G.
 
-**Done when:** a full round can be played without the audio becoming irritating; every state transition is a fade, not a cut.
+```
+Remove the current looping background music entirely — lobby and in-game, every code
+path that starts it, and the audio files themselves if they are only used for this.
+Leave the game silent.
 
-## 7.5 — Stinger library and mix ducking
-**Model:** Haiku 4.5
+Do NOT build any replacement audio system. The layered ambience system is a later block
+and will be built from scratch there. Silence is the intended state until then.
 
-> Implement the §11.3 stinger library as a preloaded sprite sheet with a single `playStinger(key)` API. Every playback applies ±4% random pitch variation.
->
-> Implement automatic ducking: ambience drops to 15% during meetings, and ducks under proximity voice whenever a nearby peer is transmitting.
->
-> Own footsteps only, quiet. **No footstep audio for other players** — it leaks positional information the fog exists to hide. Add a test asserting no remote-player position triggers a local sound.
-
-**Done when:** all 17 stingers fire from their events; the anti-leak test passes.
+Leave existing sound effects alone if any exist — this is about the music loop only.
+```
 
 ---
 
-# Block C — Character
+# Block B — Character
 
-## 7.6 — Character rig architecture
+## 7.5 — Character rig architecture
+**Model:** Fable 5
+**Stop after this one and check in before continuing.** Everything in Blocks B and C
+hangs off these decisions.
+
+```
+Read docs/ART_BIBLE.md section 4 in full.
+
+Replace the current single-sprite character with a layered composite.
+
+FIRST: present your architecture plan and wait for approval before writing any
+implementation code. Cover how you'll structure the container, how cosmetics attach and
+swap, how the two facing directions work, and how this interacts with the existing
+GameScene player rendering and the server's player state. Flag anything in ART_BIBLE
+section 4 that doesn't survive contact with the existing code.
+
+Once approved, implement:
+
+- A Havener Phaser container with the nine-layer z-order stack from section 4.2.
+- The six named anchor points from section 4.3, defined once as an exported constant.
+  Nothing may hardcode an anchor offset anywhere else.
+- Cosmetics attach by anchor name and swap at runtime without rebuilding the container
+  or touching sibling layers.
+- The lantern layer is runtime-tinted with the player's colour from the lantern colour
+  array in tokens.ts. The glow overlay is an additive sprite tinted to match.
+- Two-direction facing only, left and right, horizontally mirrored per section 4.5.
+  Do not build four-direction movement.
+
+Use art/approved/character-base-01.png and character-side-01.png, preferring the
+.clean.png versions if 7.3 has produced them.
+
+The architecture matters more than the visuals in this task. If the sprites need slicing
+into layers and that isn't done yet, use placeholder rectangles for individual layers and
+make the structure correct — real art can be swapped in later without touching the
+architecture.
+```
+
+## 7.6 — Animation state machine
+**Model:** Sonnet 5
+
+```
+Read docs/ART_BIBLE.md section 4.4.
+
+Implement the six animation states as tweens on the 7.5 rig: idle, walk, run, interact,
+ghost, death. No frame-by-frame sprite animation anywhere.
+
+Every duration, amplitude, and easing lives in a single config object rather than inline
+in the tween calls, so the feel can be tuned without hunting through files.
+
+The death state is the priority. Squash, then the lantern DETACHES from the rig, falls
+under gravity, bounces once, rolls, and its glow fades to zero over 400ms. This is the
+signature moment of the game — spend real time on it and don't settle for the first
+version that technically works.
+
+Add a dev-only playground route rendering one Havener with a button per state and a live
+slider for every value in the config object. This is how the animation actually gets
+tuned, so it needs to be genuinely usable, not a debug dump.
+```
+
+## 7.7 — Lantern and per-player light
+**Model:** Sonnet 5
+
+```
+Read docs/ART_BIBLE.md sections 3.5 and 6.2.
+
+Every Havener emits light in their own colour. Wire this into the vision system rather
+than layering it on top: a player's own vision radius originates from their lantern.
+
+Lantern states:
+- lit — normal
+- flickering — a visual tell, reserved for future use; implement the state but don't wire
+  it to any game condition yet
+- extinguished — voluntarily doused: much harder for others to see you, and your own
+  vision radius drops sharply. Both halves must be felt in play; if it's purely an
+  advantage, it's a broken mechanic.
+- dropped — detached and on the ground, glow fading, from the death animation
+
+The server is authoritative for lantern state. The client renders what the server sends
+and never predicts or infers it.
+
+Verify that 14 players standing in one room are individually distinguishable by light
+colour through fog. If they aren't, report it — the colour set may need adjusting, and
+that's an ART_BIBLE change, not something to fix by improvising new colours here.
+```
+
+---
+
+# Block C — Feel
+
+## 7.8 — Juice layer
 **Model:** Fable 5
 
-> Read `docs/ART_BIBLE.md` §4.
->
-> Replace the current single-sprite character with the §4.2 layered composite. Build a `Havener` Phaser container with the nine-layer stack in the specified z-order, and the six named anchor points from §4.3 as fixed offsets in a single exported constant.
->
-> Cosmetics attach by anchor name and must be swappable at runtime without rebuilding the container. The lantern layer is runtime-tinted with the player's colour from the §3.5 array; the glow overlay is an additive sprite tinted to match.
->
-> Two-direction facing only (§4.5) — left and right, horizontally mirrored. Do not build four-direction.
->
-> Ship with placeholder art if the real sprite is not ready. The architecture is what matters in this prompt.
+```
+Read docs/ART_BIBLE.md section 9.
 
-**Done when:** a Havener renders as a composite; swapping a hat at runtime does not touch any other layer; lantern tint changes with player colour.
+Build a central JuiceDirector exposing: shake(px, ms), hitStop(ms),
+flash(colour, alpha, ms), punch(target, scale, ms), vignette(intensity, ms).
 
-## 7.7 — Animation state machine
+Every effect in the section 9 table routes through it. No ad-hoc camera calls or one-off
+tweens scattered through gameplay code — if something shakes the screen and doesn't go
+through JuiceDirector, that's a bug.
+
+hitStop must pause visual updates WITHOUT pausing the network clock or desyncing server
+state. This is the part that is easy to get subtly wrong. Test it under repeated rapid
+hit-stops.
+
+Add a global reduced-motion setting that scales all amplitudes to zero while preserving
+durations, and respect prefers-reduced-motion by default. Durations must be preserved so
+timing-dependent gameplay stays identical — a player with reduced motion must not gain or
+lose any information or timing advantage.
+```
+
+## 7.9 — Kill cutscene
+**Model:** Opus 4.8
+
+```
+Read docs/ART_BIBLE.md section 10.1.
+
+Implement the kill as a five-beat timeline, roughly 1.4s total — not as a state
+transition.
+
+The blood splash is a hand-drawn angular ink-splatter sprite, the sharp-cornered style
+ART_BIBLE section 2 reserves for danger. Not a particle system.
+
+SECURITY IS THE MAIN CONCERN HERE. The cutscene plays only for the killer and the victim.
+It must not be constructible, inferable, or timing-detectable by any other client. Audit
+exactly what the server sends during the kill window and confirm no third party receives
+anything they could not already derive from legitimate game state.
+
+Write tests for this specifically, including one that measures whether message timing or
+message size alone leaks that a kill occurred elsewhere on the map. A test that only
+checks "the kill event isn't in the payload" is not sufficient.
+```
+
+## 7.10 — Ejection cutscene
 **Model:** Sonnet 5
 
-> Implement the six states in §4.4 as tweens on the rig from 7.6. No frame-by-frame sprite animation anywhere.
->
-> Every duration and amplitude comes from a config object, not inline numbers, so they can be tuned without a rebuild.
->
-> The `death` state is the priority: squash, then the lantern **detaches from the rig**, falls under gravity, bounces once, rolls, and its glow fades to zero over 400 ms. Spend real time on this one — it is the signature moment of the game.
->
-> Add a dev-only playground route that renders one Havener with buttons for every state and live sliders for each timing value.
+```
+Read docs/ART_BIBLE.md section 10.2.
 
-**Done when:** the playground exists; the death animation looks good enough that you want to watch it twice.
+Implement the ejection sequence, roughly 3.5s: the pier, the walk into the fog, the
+shrinking lantern, the light going out, one bell toll, then the reveal text.
 
-## 7.8 — Lantern and per-player light
+There is no pier backdrop asset yet. Build the sequence with a placeholder and make the
+backdrop swappable via a single asset key, so real art drops in later without touching
+the timeline.
+
+The reveal line must respect the existing "show ejected player's faction" lobby setting.
+When it's off, omit the second line entirely — and make sure there is no timing difference
+that betrays what it would have said. Same total duration either way.
+
+Add a skip on any input after 1.5s. Skipping is per-client: one player skipping must not
+affect what anyone else sees.
+```
+
+## 7.11 — Meeting call cutscene
 **Model:** Sonnet 5
 
-> Each Havener emits a light in their own colour. Wire this into the vision system rather than bolting it on: a player's own vision radius (§6.2) originates from their lantern.
->
-> Implement lantern states: `lit` (normal), `flickering` (low oil / Stranger tell, if the design calls for it), `extinguished` (voluntarily doused — smaller vision radius, much harder for others to see you), `dropped` (detached, on the ground, fading).
->
-> Extinguishing is a real tactical choice: you become hard to see, and you also become nearly blind. Make sure both halves are actually felt in play.
->
-> Server is authoritative for lantern state. The client renders what the server says and never predicts it.
+```
+Read docs/ART_BIBLE.md section 10.3.
 
-**Done when:** 14 players in one room are individually identifiable by light colour through fog; extinguishing is a meaningful trade.
+Implement the meeting call, roughly 1.8s: a ring of every player's lantern flaring to full
+brightness against black, bell toll, title slam, then the discussion UI sliding up from
+below.
+
+Two variants sharing one timeline:
+- body reported — header names the room where the body was found
+- emergency button — header names the caller
+
+The transition into the discussion UI must be continuous. No flash of unstyled content, no
+gap, no jump cut.
+```
+
+### Playtest checkpoint
+
+Before starting Block D, play a full round with friends.
+
+If the game doesn't feel dramatically better than it did at the start of Phase 7, something
+in Blocks A–C was skipped or done shallowly. Find it now. Blocks D, E, and F are the large
+ones, and building them on a weak foundation multiplies the problem rather than hiding it.
 
 ---
 
-# Block D — Feel
+# Block D — Interface
 
-## 7.9 — Juice layer
+## 7.12 — Component kit
+**Model:** Sonnet 5
+
+```
+Read docs/ART_BIBLE.md section 8, and docs/TOKEN_DEBT.md.
+
+Build Panel, Button, Card, and Slider as the only styled primitives in the client.
+
+The Button's 5px ink thickness bar and its 60ms press collapse are what make it feel like a
+game button rather than a web button. Implement them exactly as specified.
+
+Then rebuild every existing screen out of these four primitives, deleting one-off styling as
+you go. TOKEN_DEBT.md is the worklist — this is where the colour repaint that 7.1
+deliberately deferred finally happens. Work through it and check items off.
+
+Enforce a 48px minimum interactive height everywhere. Fix anything with text below 13px.
+
+As the final step of this task, flip the ESLint hex-literal rule from "warn" to "error". If
+that can't be done because literals remain, list what's left and why.
+```
+
+## 7.13 — Lobby as a playable room
 **Model:** Fable 5
 
-> Read `docs/ART_BIBLE.md` §9.
->
-> Build a central `JuiceDirector` exposing `shake(px, ms)`, `hitStop(ms)`, `flash(colour, alpha, ms)`, `punch(target, scale, ms)`, and `vignette(intensity, ms)`. Every effect in the §9 table routes through it — no ad-hoc camera calls scattered through gameplay code.
->
-> Hit-stop must pause visual updates without pausing the network clock or desyncing server state. This is the part to get right.
->
-> Add a global reduced-motion setting that scales all amplitudes to zero while preserving durations, and respect `prefers-reduced-motion` by default.
+```
+Read docs/ART_BIBLE.md sections 5.2 and 8.
 
-**Done when:** every §9 row fires; reduced-motion produces no shake or flash; no desync under repeated hit-stops.
+The lobby is currently an HTML form. Replace it with a walkable space — this is the single
+largest experiential gap against Among Us and Goose Goose Duck.
 
-## 7.10 — Kill cutscene
+The lobby is the Tavern interior. Players spawn as their Havener and can walk around and
+see each other before the round starts. The host has a voteGold crown above their nameplate.
+
+Ready state is physical: stand on a marked flagstone by the door. A green check appears
+above ready players. The host's Start button unlocks when the minimum is met.
+
+The settings panel becomes an overlay opened from a table in the room, not the primary
+interface. Room code and invite buttons stay pinned as a small persistent HUD element.
+
+CRITICAL: preserve every existing lobby feature — room code, invite link, friend invites,
+role toggles, balance sliders, presets, language selector. This is a presentation change,
+not a feature removal. Before finishing, enumerate every feature the old lobby had and
+confirm each one still works. Report that list.
+
+Room art doesn't exist yet. Use flat token-coloured shapes for the tavern; the art pass is
+a later block.
+```
+
+## 7.14 — Role selection screen
 **Model:** Opus 4.8
 
-> Implement §10.1 as a timeline, not a state transition. Five beats, 1.4 s total.
->
-> The blood splash is a hand-drawn ink-splatter sprite in the angular style reserved for danger — not a particle system.
->
-> **Security:** the cutscene plays only for the killer and the victim. It must not be constructible, inferable, or timing-detectable by any other client. Audit what the server sends during the kill window and confirm no third party receives anything they could not already derive. Add tests for this specifically, including a test that measures whether message timing alone leaks the event.
+```
+New mechanic, adapted from Goose Goose Duck.
 
-**Done when:** the cutscene lands; the leak tests pass; a modified client observing all traffic cannot determine that a kill occurred elsewhere on the map.
+After faction assignment but before the round starts, each player is offered a choice of
+roles from within their own faction.
 
-## 7.11 — Ejection cutscene
+Flow: players are prompted in randomised order. Each is offered 3 role cards plus a Random
+card, each with its emblem and a one-line description. A timer runs; on expiry, Random is
+taken. Other players see only that someone is picking, and who has finished — never what
+was offered or what was chosen.
+
+Cards use the 7.12 Card primitive with the voteGold selected state. Role emblems exist as a
+sheet in art/approved/ — if they haven't been sliced into individual assets yet, use
+placeholders keyed so the real emblems drop in later.
+
+SECURITY IS THE WHOLE POINT OF THIS PROMPT. The set of roles offered to a player leaks
+faction information if any part of it is visible to others. The server sends each client
+only its own options.
+
+Test that a modified client cannot learn another player's offered set, their choice, their
+faction, or even the size of their option list. Test that pick timing does not correlate
+with faction — if Strangers get fewer options and therefore pick faster, that's a leak.
+
+Add a lobby setting to disable role selection entirely and fall back to the current random
+assignment.
+```
+
+## 7.15 — Discussion and voting screen
 **Model:** Sonnet 5
 
-> Implement §10.2 — the pier, the walk into the fog, the shrinking lantern, the light going out, the bell, the reveal text. Roughly 3.5 s.
->
-> Use `art/approved/cutscene-pier.png` as the backdrop with the three-layer parallax fog from §6.1 running over it.
->
-> The reveal line respects the existing `Atılan oyuncunun tarafını göster` lobby setting — when off, the second line is omitted entirely and no timing difference betrays what it would have said.
->
-> Add a skip on any input after 1.5 s, with per-client skip — one player skipping must not affect anyone else.
+```
+Read docs/ART_BIBLE.md section 8.
 
-**Done when:** it reads as a scene rather than a transition; the reveal setting is honoured with no timing tell.
+Replace the text list with a grid of player Cards. Each card shows the player's Havener
+sprite in their lantern colour, their name, their vote pips, and a speaking indicator driven
+by the existing proximity voice system.
 
-## 7.12 — Meeting call cutscene
+- Dead players: desaturated, ink X overlay, cannot be voted for
+- Header: the meeting cause — the room where the body was found, or the caller's name
+- A voteGold timer bar across the top
+- SKIP is a first-class Button, not a small link
+
+Voting: the card punches on selection, a pip drops in with a bounce. If the lobby is set to
+anonymous voting, votes stay hidden until the timer ends — verify nothing in the network
+traffic reveals them early.
+
+The screen has to be readable at a glance during a 45-second timer. If it takes more than
+about two seconds to find a specific player, the layout is wrong.
+```
+
+## 7.16 — Round end screen
 **Model:** Sonnet 5
 
-> Implement §10.3 — the ring of flaring lanterns against black, the bell toll, the title slam, the discussion UI sliding up. About 1.8 s.
->
-> Two variants: body reported (header names the room where the body was found) and emergency button (header names the caller). Both use the same timeline.
+```
+Read docs/ART_BIBLE.md sections 9 and 10.
 
-**Done when:** both variants play; the transition into the discussion UI is continuous with no flash of unstyled state.
+Rebuild the round end screen on the cutscene language. The losing side's lanterns extinguish
+one by one, 80ms apart, before the result title slams in.
+
+Then the roster with each player's role emblem and faction, followed by the round summary and
+voting history — all in Cards, collapsible so the screen isn't a wall of data on first view.
+The drama comes first, the statistics come second.
+
+Keep the report button on each player row and the return-to-lobby flow exactly as they work
+now.
+```
 
 ---
 
-# Block E — Interface
+# Block E — World
 
-## 7.13 — Component kit
+The largest block. Do not start before Blocks A–C are done and the playtest checkpoint has
+passed.
+
+## 7.17 — Fog and lighting rework
 **Model:** Sonnet 5
 
-> Read `docs/ART_BIBLE.md` §8.
->
-> Build `Panel`, `Button`, `Card`, and `Slider` as the only styled primitives in the client. The Button's 5 px `ink` thickness bar and its 60 ms press collapse are what make it feel like a game button — implement them exactly.
->
-> Then rebuild every existing screen out of these four. Delete all one-off styling as you go. Nothing in the client should be a bare `div` with inline styles when you are done.
->
-> Enforce the 48 px minimum interactive height everywhere. Audit for anything currently below 13 px of text and fix it.
+```
+Read docs/ART_BIBLE.md section 6.
 
-**Done when:** four primitives, zero one-off component styles, all touch targets ≥ 48 px.
+Replace the single radial gradient with three cooperating systems:
 
-## 7.14 — Lobby as a playable room
+1. Three parallax noise fog layers per section 6.1. The near layer renders ABOVE characters —
+   that one detail is what makes it read as weather rather than a filter.
+2. A darkness mask with short 24px falloff, punched through by light sources. Radii from
+   section 6.2. The sabotage transition animates over 1.2s, never instantly.
+3. The Lighthouse Beam from section 6.3 — a rotating wedge, one sweep every 40s, briefly
+   revealing whatever it crosses, visible to everyone.
+
+The beam is server-driven with a deterministic phase seeded per round, so every client sees
+it in the same place at the same time. It is a real gameplay element, not decoration: being
+caught by it standing over a body must be a genuine risk.
+
+Profile on mobile. If three fog layers are too expensive, drop the FAR layer on low-end
+devices — never the near one, since that's the layer doing the actual work.
+```
+
+## 7.18 — Room art pass
+**Model:** Sonnet 5
+
+```
+Read docs/ART_BIBLE.md section 5.
+
+Work through the section 5.2 room table ONE ROOM AT A TIME, one commit per room. Do not
+batch — if the style drifts, we need to see exactly where.
+
+For each room:
+1. Reshape its collision geometry to the assigned non-rectangular silhouette
+2. Apply its palette skew
+3. Hand-place 4-8 props
+4. Place its in-world light source and wire it to the lighting system
+5. Delete the in-world room name text — names live only on the minimap and in meeting
+   headers from now on
+
+Room art assets don't exist yet and will be generated separately as we go. For each room,
+list exactly which prop and background assets you need, and the size each should be, so they
+can be generated to spec rather than generated and then fudged to fit.
+```
+
+## 7.19 — Map graph audit
+**Model:** Opus 4.8
+
+```
+Read docs/ART_BIBLE.md section 5.3. This task is independent of art.
+
+FIRST, produce a written report. Change nothing until it's approved:
+- every room with only one connection
+- every room pair with only one route between them
+- every sightline longer than 1.5 screen widths
+- the vent/shortcut graph mapped against the walking graph, flagging where they trivially
+  coincide and therefore add nothing
+
+Then propose changes with reasoning and wait for approval. Do not silently redesign the map —
+layout changes alter game balance in ways that aren't visible in code review.
+
+Once approved and applied, add an automated test that fails if any room has fewer than two
+connections, so future map edits can't reintroduce a dead end.
+```
+
+---
+
+# Block F — Tasks
+
+## 7.20 — Task minigame framework
 **Model:** Fable 5
 
-> The lobby is currently an HTML form. Replace it with a walkable space — this is the single largest experiential gap against the reference games.
->
-> The lobby is the Tavern interior (§5.2). Players spawn in it as their Havener and can walk around and see each other before the round starts. The host is marked with a `voteGold` crown above their nameplate.
->
-> Ready state is physical: stand on the marked flagstone by the door. A green check appears above ready players. The host's Start button unlocks when the minimum is met.
->
-> The settings panel becomes an overlay opened from a table in the room, not the primary interface. The room code and invite buttons stay pinned as a small persistent HUD element.
->
-> Preserve every existing lobby feature — room code, invite link, friend invites, role toggles, balance sliders, the presets. This is a presentation change, not a feature removal. Confirm feature parity explicitly before finishing.
+```
+Tasks are currently "walk to a place". They need to be interactive minigames.
 
-**Done when:** you can walk around the tavern with friends before a round, and nothing from the old lobby has been lost.
+Build a framework where each minigame is a self-contained module declaring: its id, its
+display name, its duration band (short/long), whether it is a VISUAL task (see 7.22), and a
+mount/unmount lifecycle against a standard overlay built from the 7.12 primitives.
 
-## 7.15 — Role selection screen
+THE SERVER OWNS COMPLETION. The client reports an attempt; the server validates plausibility
+— elapsed time within expected bounds, correct station, player alive and in range, task not
+already complete, no impossible completion rate — and only then increments progress. Assume
+the client is hostile and will try to complete every task instantly and remotely.
+
+Deliver the framework plus one reference minigame, and tests covering every rejection path,
+not just the happy path.
+```
+
+## 7.21 — First six minigames
+**Model:** Sonnet 5
+
+```
+Build six minigames on the 7.20 framework, all built from the 7.12 primitives:
+
+1. Trim the Wick — rotate a dial to bring a flame to the right height (short)
+2. Mend the Net — drag rope ends to matching knots (long)
+3. Wind the Lighthouse Gear — a rhythm hold, release at the right moment (short)
+4. Pump the Bilge — repeated timed presses against a rising water line (long)
+5. Sort the Ledger — drag entries into the correct column (long)
+6. Ring the Bell — repeat a 4-note pattern back (short)
+
+Each needs its own success and failure feel. Each must be completable in under 12 seconds by
+someone who knows it — anything longer and players stop doing tasks, which breaks the entire
+game loop.
+
+Test each one on a phone. Drag-based minigames in particular tend to work on desktop and fall
+apart on touch.
+```
+
+## 7.22 — Visual tasks
 **Model:** Opus 4.8
 
-> New mechanic, adapted from Goose Goose Duck. After faction assignment but before the round starts, each player is offered a choice of roles from within their own faction.
->
-> Flow: players are prompted in a randomised order. Each is offered 3 role cards plus a Random card, each with its emblem (§12.3 role-emblems) and a single-line description. A timer runs; on expiry, Random is taken. Other players see only that someone is picking and who has finished — never what was offered or what was chosen.
->
-> Cards use the §8 Card primitive with the `voteGold` selected state.
->
-> **Security is the whole prompt.** The set of roles offered to a player leaks faction information if any part of it is visible to others. The server sends each client only its own options. Test that a modified client cannot learn another player's offered set, their choice, their faction, or even the size of their option list. Test that pick timing is not correlated with faction.
->
-> Add a lobby setting to disable role selection entirely and fall back to the current random assignment.
+```
+The highest-value deduction mechanic in Among Us and Goose Goose Duck, and currently absent
+from Foghaven. Completing one of these in front of a witness proves you are not a Stranger.
 
-**Done when:** the flow works for 14 players; every leak test passes; the toggle cleanly reverts to old behaviour.
+Implement three tasks that produce an effect other players can see:
+1. Light the Beacon — the room floods with warm light for 3s, visible from adjacent rooms
+2. Raise the Flag — a mast flag rises, visible across the harbour
+3. Sound the Foghorn — a directional sound and visual pulse across the whole map
 
-## 7.16 — Discussion and voting screen
-**Model:** Sonnet 5
+STRANGERS MUST BE UNABLE TO FAKE THESE. A Stranger at the station goes through the motions
+with no visible effect. Verify at the server: only a genuine completion by a Townsfolk
+broadcasts the effect, and the broadcast cannot be forged, replayed, or triggered by any
+client-side means. Test the forge and replay paths explicitly.
 
-> Replace the text list with a grid of player Cards (§8). Each card shows the player's Havener sprite in their lantern colour, their name, their vote pips, and a speaking indicator driven by proximity voice.
->
-> Dead players: desaturated, `ink` X overlay, cannot be voted for.
-> Header: the meeting cause — the room where the body was found, or the name of the caller.
-> A `voteGold` timer bar spans the top.
-> `SKIP` is a first-class Button, not a small link.
->
-> Voting: card punches on selection, a pip drops in with a bounce, and votes stay hidden until the timer ends if the lobby is set to anonymous voting.
-
-**Done when:** the screen reads at a glance during a 45-second timer; anonymous voting reveals nothing early.
-
-## 7.17 — Round end screen
-**Model:** Sonnet 5
-
-> Rebuild on the §10 language. The losing side's lanterns extinguish one by one, 80 ms apart, before the result title slams in.
->
-> Then the roster with each player's role emblem and faction, followed by the round summary and voting history — all in Cards, collapsible so the screen is not a wall on first view.
->
-> Keep the report button on each player row and the return-to-lobby flow exactly as they are.
-
-**Done when:** the ending has a beat of drama before the data appears.
+Add a lobby setting to disable visual tasks, since they shift balance meaningfully toward the
+Town.
+```
 
 ---
 
-# Block F — World
+# Block G — Audio
 
-The largest block. Do not start it before Blocks A through D are done.
+Both prompts here need assets sourced first — four ambience stems and seventeen stingers.
+Don't start until those files exist in `client/public/audio/`.
 
-## 7.18 — Fog and lighting rework
+**Note on tone:** ART_BIBLE section 1 says "cozy dread" — friendly shapes, unsettling world.
+The audio must match. The reference is Over the Garden Wall, not Silent Hill: melancholy and
+eerie folk, not horror. Warm low strings, distant accordion, nostalgic and gently unsettling.
+If a stem sounds like a horror film, it's wrong for this game.
+
+## 7.23 — Layered ambience system
 **Model:** Sonnet 5
 
-> Read `docs/ART_BIBLE.md` §6.
->
-> Replace the single radial gradient with:
->
-> 1. Three parallax noise fog layers per §6.1. The near layer renders **above** characters — this is the detail that makes it read as weather.
-> 2. A darkness mask with short 24 px falloff, punched by light sources. Radii from §6.2. The sabotage transition animates over 1.2 s.
-> 3. The Lighthouse Beam (§6.3) — a rotating wedge, one sweep every 40 s, briefly revealing whatever it crosses, visible to everyone.
->
-> The beam is server-driven with a deterministic phase seeded per round, so every client sees it in the same place at the same time. It is a real gameplay element, not decoration: being caught by it standing over a body should be a genuine risk.
->
-> Profile on mobile. If the three fog layers cost too much, drop the far layer on low-end devices rather than reducing the near one.
+```
+Read docs/ART_BIBLE.md section 11.
 
-**Done when:** fog reads as weather; the beam is synchronised across clients; mobile holds frame rate.
+Build an AudioDirector managing four independent ambience layers (bed, sea, town, dread),
+each a separately looping stem with its own gain node on a shared AudioContext. Stems load
+from client/public/audio/ambience/.
 
-## 7.19 — Room art pass
+If a stem file is missing, that layer stays silent and logs once. A missing file must never
+throw or break the rest of the audio.
+
+The director subscribes to game state and crossfades layer gains per the section 11.2 mix
+table, over 2-3 seconds. It must never hard-cut — including on round start, round end, and
+returning to lobby. Indoor rooms apply a low-pass filter to the town layer.
+
+No melodic content anywhere. If a stem has a discernible tune, it's the wrong stem — say so
+rather than shipping it.
+
+Add a master volume plus independent music / SFX / voice sliders, persisted to localStorage.
+The voice slider must actually apply to the WebRTC proximity voice gain, not just to SFX.
+
+Add a dev-only debug panel showing the four live layer gains, so the mix can be tuned by ear
+without a rebuild.
+```
+
+## 7.24 — Stinger library and mix ducking
 **Model:** Sonnet 5
 
-> Work through the §5.2 table one room at a time. For each room:
->
-> 1. Generate the props sheet via `art/prompts/props-<room>.txt`
-> 2. Generate the background plate via `art/prompts/room-<name>-plate.txt`
-> 3. Run the §12.5 cleanup pass on both
-> 4. Reshape the room's collision geometry to its assigned non-rectangular silhouette
-> 5. Hand-place 4–8 props
-> 6. Place the room's in-world light source and wire it to the lighting system
->
-> **Delete the in-world room name text** once a room's art lands. Names stay on the minimap and in meeting headers only.
->
-> Commit one room per commit. Do not batch — if the style drifts you want to be able to see exactly where.
+```
+Read docs/ART_BIBLE.md sections 11.3 and 11.4.
 
-**Done when:** all ten rooms have shape, palette, props, and light; no text labels remain on the playfield.
+Implement the 17-stinger library as a preloaded sprite sheet behind a single playStinger(key)
+API. Every playback applies ±4% random pitch variation so repeats don't grate.
 
-## 7.20 — Map graph audit
-**Model:** Opus 4.8
+Automatic ducking:
+- ambience drops to 15% during meetings
+- ambience ducks under proximity voice whenever a nearby peer is transmitting
 
-> Independent of art. Audit the map against §5.3 and produce a written report before changing anything:
->
-> - list every room with only one connection
-> - list every room pair with only one route between them
-> - identify sightlines longer than 1.5 screen widths
-> - map the vent/shortcut graph against the walking graph and find where they trivially coincide
->
-> Then propose changes, with reasoning, and wait for approval before implementing. Do not silently redesign the map.
->
-> Add an automated test that fails if any room has fewer than two connections, so future map edits cannot reintroduce a dead end.
-
-**Done when:** the report exists, changes are approved and applied, and the connectivity test is in CI.
+Own footsteps only, and quiet. NO footstep audio for other players — it leaks positional
+information that the fog exists to hide. Add a test asserting that no remote player's position
+or movement can trigger a local sound.
+```
 
 ---
 
-# Block G — Tasks
+# Block H — Final
 
-## 7.21 — Task minigame framework
-**Model:** Fable 5
-
-> Tasks are currently "walk to a place". They need to be interactive minigames.
->
-> Build a framework where each minigame is a self-contained module declaring its id, display name, duration band (short / long), whether it is *visual* (see 7.23), and a mount/unmount lifecycle against a standard overlay.
->
-> **The server owns completion.** The client reports an attempt; the server validates plausibility — elapsed time within expected bounds, correct station, player alive and in range, not already complete — and only then increments progress. A client must not be able to complete a task instantly or remotely. Assume the client is hostile.
->
-> Add the framework with one reference minigame, and tests covering the rejection paths.
-
-**Done when:** the framework exists; a modified client cannot complete a task it did not actually perform.
-
-## 7.22 — First six minigames
-**Model:** Sonnet 5
-
-> Build six minigames on the 7.21 framework, all themed and all built from §8 primitives:
->
-> 1. **Trim the Wick** — rotate a dial to bring a flame to the right height (short)
-> 2. **Mend the Net** — drag rope ends to matching knots (long)
-> 3. **Wind the Lighthouse Gear** — a rhythm hold, release at the right moment (short)
-> 4. **Pump the Bilge** — repeated timed presses against a rising water line (long)
-> 5. **Sort the Ledger** — drag entries into the right column (long)
-> 6. **Ring the Bell** — repeat a 4-note pattern back (short)
->
-> Each needs its own success and failure feel, and each must be finishable in under 12 seconds by someone who knows it. Anything longer and players stop doing tasks.
-
-**Done when:** all six are playable, distinct, and quick.
-
-## 7.23 — Visual tasks
+## 7.25 — Anti-leak sweep
 **Model:** Opus 4.8
 
-> The highest-value deduction mechanic in the reference games, and currently absent.
->
-> Implement three tasks that produce an animation other nearby players can see, so completing one in front of a witness proves you are not a Stranger:
->
-> 1. **Light the Beacon** — the room floods with warm light for 3 s, visible from adjacent rooms
-> 2. **Raise the Flag** — a mast flag rises, visible across the harbour
-> 3. **Sound the Foghorn** — a directional sound and visual pulse across the whole map
->
-> **Strangers must be unable to fake these.** A Stranger standing at the station goes through the motions with no visible effect. Verify at the server: only a genuine completion by a Townsfolk broadcasts the effect, and the broadcast cannot be forged or replayed by a client.
->
-> Add a lobby setting to disable visual tasks, since they meaningfully shift balance toward the Town.
+```
+Final security pass over everything Phase 7 added. Art and animation are a new and easy leak
+surface, and most of it was added by prompts focused on how things look rather than on what
+they reveal.
 
-**Done when:** the three effects are visible to witnesses; a Stranger cannot trigger any of them by any client-side means; the balance toggle works.
+Write the tests FIRST, then fix what they catch:
 
-## 7.24 — Anti-leak sweep
-**Model:** Opus 4.8
+- No animation state, cosmetic, or lantern behaviour differs by faction in any way visible to
+  another client
+- Role emblems are never sent to clients that shouldn't have them
+- Cutscene triggers are not inferable from message timing, size, or ordering
+- The lighthouse beam reveals identically for everyone and cannot be locally disabled or
+  delayed for advantage
+- Fog and vision radii are enforced server-side; a client that draws less fog than it should
+  simply doesn't receive the data it would need to cheat
+- Reduced-motion and every accessibility setting confer no informational or timing advantage
+- The role selection screen (7.14) and visual tasks (7.22) hold up under a client that logs
+  all traffic
 
-> Final security pass over everything Phase 7 added. Art and animation are a new and easy leak surface.
->
-> Audit and test:
-> - no animation state, cosmetic, or lantern behaviour differs by faction in any way visible to another client
-> - the role emblem is never sent to clients that should not have it
-> - cutscene triggers are not inferable from message timing, size, or ordering
-> - the lighthouse beam reveals identically for everyone and cannot be locally disabled for advantage
-> - fog and vision radii are enforced server-side; a client that draws more fails to receive the data
-> - reduced-motion and every accessibility setting confer no informational advantage
->
-> Write the tests first, then fix what they catch.
-
-**Done when:** the suite passes and a hostile client with full traffic visibility gains nothing over an honest one.
+Finish with a written summary of what was tested, what was found, and what was fixed.
+```
 
 ---
 
-## Suggested Order and Rough Pacing
+## Pacing
 
-| Block | Prompts | Feel gained | Effort |
+| Block | Prompts | Effort | Feel gained |
 |---|---|---|---|
-| A — Foundations | 7.1–7.3 | none yet | 3–4 evenings |
-| B — Audio | 7.4–7.5 | **large, immediate** | 1–2 evenings |
-| C — Character | 7.6–7.8 | large | 4–5 evenings |
-| D — Feel | 7.9–7.12 | **largest per hour** | 4–6 evenings |
-| E — Interface | 7.13–7.17 | large | 6–8 evenings |
-| F — World | 7.18–7.20 | large | 8–12 evenings |
-| G — Tasks | 7.21–7.24 | moderate, but deepens the game most | 6–8 evenings |
+| A — Foundations | 7.3–7.4 | 1–2 evenings | none directly |
+| B — Character | 7.5–7.7 | 4–5 evenings | large |
+| C — Feel | 7.8–7.11 | 4–6 evenings | **largest per hour** |
+| D — Interface | 7.12–7.16 | 6–8 evenings | large |
+| E — World | 7.17–7.19 | 8–12 evenings | large |
+| F — Tasks | 7.20–7.22 | 6–8 evenings | deepens the game most |
+| G — Audio | 7.23–7.24 | 1–2 evenings + sourcing | large |
+| H — Final | 7.25 | 1–2 evenings | none directly |
 
-Realistically two to three months of evenings. But Block B lands in the first week, and Block D is where the game stops feeling like a prototype.
+Two to three months of evenings, realistically. Block C is where it stops feeling like a
+prototype.
 
-**Checkpoint after Block D:** play a full round with friends before starting Block E. If it does not feel dramatically better at that point, something in Blocks A–D was skipped, and continuing into the largest blocks will only multiply the problem.
+---
+
+## Deferred / tracked separately
+
+Not part of Phase 7, but don't lose them:
+
+- **Turkish legal copy.** `legal.privacy.body` and `legal.terms.body` have no Turkish
+  translation. The game is live and most players are Turkish. Needs a real translation, not
+  a machine one.
+- **Test suite runtime.** 451 tests take ~17 minutes, which suggests real-time waits rather
+  than fake timers. Not worth refactoring mid-Phase-7, but it will get painful.
+- **`--ink-well`** is referenced but never defined, so its fallback always renders. Tracked
+  in TOKEN_DEBT.md.

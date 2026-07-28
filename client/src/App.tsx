@@ -236,9 +236,9 @@ function App() {
    */
   const [adminRole, setAdminRole] = useState<UserRole | null>(null);
 
-  // Room-level stingers and the tension score behind the adaptive music —
-  // see the hook's own doc for why this is the one place both live,
-  // independent of whichever screen the phase currently has on display.
+  // Room-level stingers — see the hook's own doc for why this is the one
+  // place they live, independent of whichever screen the phase currently
+  // has on display.
   useGameAudio(room, assignment?.role ?? null);
 
   // Proximity voice — lives at the app root so the WebRTC mesh survives the

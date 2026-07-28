@@ -6,17 +6,17 @@ interface AudioSettingsPanelProps {
   onClose: () => void;
 }
 
-const BUSES: AudioBus[] = ["master", "music", "sfx"];
+const BUSES: AudioBus[] = ["master", "sfx"];
 
-function mutedKey(bus: AudioBus): "mutedMaster" | "mutedMusic" | "mutedSfx" {
-  return bus === "master" ? "mutedMaster" : bus === "music" ? "mutedMusic" : "mutedSfx";
+function mutedKey(bus: AudioBus): "mutedMaster" | "mutedSfx" {
+  return bus === "master" ? "mutedMaster" : "mutedSfx";
 }
 
 /**
- * Master / music / sfx volume and mute, all of it live — every slider and
- * toggle here writes straight through `audioEngine`, which applies it to
- * the actual gain nodes immediately and persists it for next time. There is
- * no separate "apply" step: what the sliders show is what's playing.
+ * Master / sfx volume and mute, all of it live — every slider and toggle
+ * here writes straight through `audioEngine`, which applies it to the
+ * actual gain nodes immediately and persists it for next time. There is no
+ * separate "apply" step: what the sliders show is what's playing.
  */
 export function AudioSettingsPanel({ onClose }: AudioSettingsPanelProps) {
   const { t } = useTranslation();

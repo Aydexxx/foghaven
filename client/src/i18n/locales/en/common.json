@@ -82,7 +82,6 @@
   "audioSettings": {
     "heading": "Sound",
     "master": "Master",
-    "music": "Music",
     "sfx": "Sound effects",
     "mute": "Mute",
     "unmute": "Unmute",

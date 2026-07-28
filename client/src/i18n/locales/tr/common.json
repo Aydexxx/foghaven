@@ -82,7 +82,6 @@
   "audioSettings": {
     "heading": "Ses",
     "master": "Ana ses",
-    "music": "Müzik",
     "sfx": "Ses efektleri",
     "mute": "Sessize al",
     "unmute": "Sesi aç",

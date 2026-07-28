@@ -1,5 +1,5 @@
 /**
- * Persistence for the audio settings — master/music/sfx volume and mute,
+ * Persistence for the audio settings — master/sfx volume and mute,
  * everything the acceptance criteria means by "settings work". Same
  * `localStorage`-with-try/catch shape as `net/session.ts`: a player's audio
  * preference is a convenience, never something a storage failure should be
@@ -8,23 +8,19 @@
 
 const STORAGE_KEY = "foghaven.audio";
 
-export type AudioBus = "master" | "music" | "sfx";
+export type AudioBus = "master" | "sfx";
 
 export interface AudioSettings {
   master: number;
-  music: number;
   sfx: number;
   mutedMaster: boolean;
-  mutedMusic: boolean;
   mutedSfx: boolean;
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   master: 0.8,
-  music: 0.6,
   sfx: 0.9,
   mutedMaster: false,
-  mutedMusic: false,
   mutedSfx: false,
 };
 
@@ -48,10 +44,8 @@ export function loadAudioSettings(): AudioSettings {
     const parsed = JSON.parse(raw) as Partial<AudioSettings>;
     return {
       master: clamp01(parsed.master, DEFAULT_AUDIO_SETTINGS.master),
-      music: clamp01(parsed.music, DEFAULT_AUDIO_SETTINGS.music),
       sfx: clamp01(parsed.sfx, DEFAULT_AUDIO_SETTINGS.sfx),
       mutedMaster: bool(parsed.mutedMaster, DEFAULT_AUDIO_SETTINGS.mutedMaster),
-      mutedMusic: bool(parsed.mutedMusic, DEFAULT_AUDIO_SETTINGS.mutedMusic),
       mutedSfx: bool(parsed.mutedSfx, DEFAULT_AUDIO_SETTINGS.mutedSfx),
     };
   } catch {
