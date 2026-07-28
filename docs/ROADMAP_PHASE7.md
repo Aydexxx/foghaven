@@ -20,7 +20,7 @@ Remember: `.env` is gitignored, so it must be created by hand on each machine.
 | 7.4 | Remove current music | A | Done — `c25d514` |
 | 7.5 | Character rig architecture | B | Done — `f89213f` |
 | 7.6 | Animation state machine | B | Done — `5d4fd2b` |
-| 7.7 | Lantern & per-player light | B | |
+| 7.7 | Lantern & per-player light | B | Done — `b7dd8e4` |
 | 7.8 | Juice layer | C | |
 | 7.9 | Kill cutscene | C | |
 | 7.10 | Ejection cutscene | C | |
@@ -719,11 +719,15 @@ Not part of Phase 7, but don't lose them:
 - **`--ink-well`** is referenced but never defined, so its fallback always renders. Tracked
   in TOKEN_DEBT.md.
 
-- **MAX_PLAYERS vs lantern colour count.** Server allows up to 15 players; ART_BIBLE §3.5
-  defines exactly 14 lantern colours. A collision at max capacity already exists in the
-  legacy 10-colour system today, independent of Phase 7. Decision needed before 7.7:
-  either cap MAX_PLAYERS to 14 (recommended — trivial change, avoids adding a 15th colour
-  too close to existing ones) or design a 15th lantern colour.
+- **MAX_PLAYERS vs lantern colour count — resolved in 7.7.** MAX_PLAYERS is now derived
+  from `lanternColors.length` (14), so the two can't drift apart again. A CIEDE2000
+  pairwise check found all 14 colours distinguishable at full brightness (closest pair
+  deltaE2000 7.03), but under realistic fog-dimmed viewing the closest pair is
+  Crimson/Coral at deltaE2000 4.41 — below the 5.0 "visually similar" threshold, and a
+  different pair than the ones ART_BIBLE §3.5's own accessibility note flags
+  (Amber/Rust, Rose/Coral — both fine at every distance tested). Worth a look next time
+  §3.5's palette is revisited; not fixed here per scope. Also still missing anywhere in
+  the codebase: the §3.5-mandated colourblind two-letter-code system (AM/RU/RO/CO etc).
 - **Preview/in-world visual unification.** The character now renders differently in-game
   (new Havener rig) versus in Inventory/Profile/GameOver previews (old archetype rig).
   Intentional for now, but needs a unification pass eventually.
