@@ -1,0 +1,74 @@
+{
+  "frames": {
+    "character-side-01": {
+      "frame": {
+        "x": 2,
+        "y": 2,
+        "w": 48,
+        "h": 66
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 42,
+        "y": 2,
+        "w": 48,
+        "h": 66
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 70
+      }
+    },
+    "character-base-01": {
+      "frame": {
+        "x": 52,
+        "y": 2,
+        "w": 42,
+        "h": 65
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 42,
+        "y": 3,
+        "w": 42,
+        "h": 65
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 70
+      }
+    },
+    "cosmetic-hats-01": {
+      "frame": {
+        "x": 96,
+        "y": 2,
+        "w": 116,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 7,
+        "y": 2,
+        "w": 116,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 70
+      }
+    }
+  },
+  "meta": {
+    "app": "scripts/atlas.mjs",
+    "image": "foghaven-0.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 256,
+      "h": 128
+    },
+    "scale": "1"
+  }
+}

@@ -12,6 +12,10 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w client",
-    "test": "npm run test -w shared && npm run test -w server && npm run test -w client"
+    "test": "node scripts/test-all.mjs",
+    "atlas": "node scripts/atlas.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.3"
   }
 }
