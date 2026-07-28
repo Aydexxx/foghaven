@@ -846,12 +846,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Choose which loop this character should be showing right now — idle,
-   * walking, working a task, or drifting as a ghost — and which way they
-   * face. Facing is derived purely from horizontal movement (no facing
-   * exists server-side to read), and only ever flips on a real horizontal
-   * step so a player moving straight up or down keeps whichever way they
-   * were last walking rather than snapping to a default.
+   * Choose which §4.4 state this character should be showing right now —
+   * idle, walking, interacting with a task, or drifting as a ghost — and
+   * which way they face. Facing is derived purely from horizontal movement
+   * (no facing exists server-side to read), and only ever flips on a real
+   * horizontal step so a player moving straight up or down keeps whichever
+   * way they were last walking rather than snapping to a default. `run` is
+   * a real, fully tuned Havener state (see `Havener.ts`) but nothing here
+   * triggers it — there is no sprint mechanic in gameplay yet.
    *
    * The one-shot death fall (`playDeathTransition`) is deliberately left
    * alone here — this only manages the four looping states, and stays out
@@ -874,10 +876,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const state: HavenerState = this.isDeadPlayer(id)
+    const state: Exclude<HavenerState, "death"> = this.isDeadPlayer(id)
       ? "ghost"
       : id === this.room.sessionId && this.taskModalOpen
-        ? "task"
+        ? "interact"
         : Math.hypot(dx, dy) > MOVEMENT_EPSILON
           ? "walk"
           : "idle";

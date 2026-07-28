@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { colors } from "../../theme/tokens";
 import { AtlasKey } from "../../assets/atlasManifest";
 import { CHARACTER_HEIGHT, anchorLocal, type AnchorName } from "./anchors";
+import { HAVENER_ANIM_CONFIG } from "./havenerAnimConfig";
 
 /**
  * The Havener — the one composite character from docs/ART_BIBLE.md §4.
@@ -24,10 +25,21 @@ import { CHARACTER_HEIGHT, anchorLocal, type AnchorName } from "./anchors";
  * face left/right per §4.5. GameScene keeps the nameplate as an external
  * sibling in world space, as it always has.
  *
- * Animation is intentionally minimal for this task: idle breathing + lantern
- * sway (§4.4) and facing are done properly; walk/task reuse idle and death is
- * a placeholder settle. The full §4.4 choreography — above all the signature
- * detaching-lantern death — is deferred to 7.6.
+ * §4.4: every animation is a tween on this stack, never frame-by-frame sprite
+ * art. Every number driving those tweens comes from `HAVENER_ANIM_CONFIG`
+ * (havenerAnimConfig.ts) — nothing here is a hardcoded duration/amplitude —
+ * so the feel can be retuned (see the dev playground, havenerPlayground.ts)
+ * without touching this file.
+ *
+ * A design note on WHY the topple/lean tweens animate `this.angle` and never
+ * `this.x`/`this.y`: GameScene repositions the container every render frame
+ * via `setPosition(pos.x, pos.y)` — that authoritative position sync would
+ * fight (and win against) any tween trying to also drive x/y here. Rotation
+ * and scale are untouched by that sync, so every in-place flourish (idle
+ * breathing, the run lean, the death topple) lives there instead. The one
+ * exception is the DETACHED lantern during death: once it's removed from this
+ * container and re-parented to the scene, it is no longer subject to that
+ * sync at all, and is free to move in world space on its own.
  */
 
 /** The atlas texture key loaded in GameScene.preload (the 7.3 pipeline output). */
@@ -38,12 +50,8 @@ const BODY_FRAME: AtlasKey = "character-side-01";
 const BASE_FACING: Facing = "right";
 
 export type Facing = "left" | "right";
-export type HavenerState = "idle" | "walk" | "task" | "ghost" | "death";
-
-const GHOST_ALPHA = 0.45; // §4.4 ghost
-const IDLE_PERIOD_MS = 900; // §4.4 idle loop
-const LANTERN_LAG_MS = 150; // §4.4 "lantern ... offset 150 ms behind the body"
-const LANTERN_SWAY_DEG = 3; // §4.4 idle "Lantern rotates ±3°"
+/** The six ART_BIBLE §4.4 states, verbatim. */
+export type HavenerState = "idle" | "walk" | "run" | "interact" | "ghost" | "death";
 
 // §4.2 stack, top of file order = draw order. The `anchor` each layer sits on
 // is the ONLY place a layer's position comes from (all via `anchorLocal`).
@@ -88,9 +96,15 @@ export class Havener extends Phaser.GameObjects.Container {
   private glow!: Phaser.GameObjects.Rectangle;
   private facing: Facing = BASE_FACING;
   private visualState: HavenerState = "idle";
-  private idleTweens: Phaser.Tweens.Tween[] = [];
-  private deathTimer?: Phaser.Time.TimerEvent;
+  /** Every tween belonging to the CURRENT looping/one-shot state — stopped and cleared on every transition. */
+  private stateTweens: Phaser.Tweens.Tween[] = [];
+  private stateTimers: Phaser.Time.TimerEvent[] = [];
+  private ghostWisps: Phaser.GameObjects.Ellipse[] = [];
   private lanternColorNum = WHITE;
+  /** True once `dropLantern` has detached the lantern — see the class doc. */
+  private lanternDropped = false;
+  /** The detached lantern's own display objects, kept only so `destroy()` can clean them up. */
+  private droppedLanternObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(scene: Phaser.Scene, x: number, y: number, lanternHex: string) {
     super(scene, x, y);
@@ -127,7 +141,10 @@ export class Havener extends Phaser.GameObjects.Container {
       body.setScale(scale);
       this.holders.bodyBase.add(body);
       // legs + face are baked into this un-sliced art. Their holders still
-      // exist (z-order + future slices + cosmetic visors), just empty for now.
+      // exist (z-order + future slices + cosmetic visors), just empty for now
+      // — the walk/run/ghost tweens below still target them, so the moment a
+      // sliced leg layer lands, those tweens start moving real art with no
+      // other change.
       return;
     }
     // No atlas yet (`npm run atlas` not run): pure placeholder composite, so
@@ -162,13 +179,16 @@ export class Havener extends Phaser.GameObjects.Container {
   }
 
   private applyLanternColor(): void {
+    if (this.lanternDropped) {
+      return;
+    }
     this.lantern.setFillStyle(this.lanternColorNum);
     this.glow.setFillStyle(this.lanternColorNum);
   }
 
   // --- Public API ---------------------------------------------------------
 
-  /** §3.5: retint the lantern (and its glow) to the player's identity light. */
+  /** §3.5: retint the lantern (and its glow) to the player's identity light. No-op once dropped — a ghost's hand is empty. */
   setLanternColor(hex: string): void {
     this.lanternColorNum = hexNum(hex);
     this.applyLanternColor();
@@ -211,99 +231,489 @@ export class Havener extends Phaser.GameObjects.Container {
     }
   }
 
-  /** Drive the looping visual state. Cheap no-op when unchanged (called every frame). */
-  playState(state: HavenerState): void {
+  /**
+   * Drive the state. Cheap no-op when unchanged — GameScene calls this every
+   * frame with "whatever should be showing right now", not as a discrete
+   * trigger, so idle/walk/run/ghost only restart when they actually change.
+   * `interact` is the one exception (see `startInteract`'s own doc). `death`
+   * is NOT reachable through here — see `playDeath`, which needs a completion
+   * callback `playState` has no way to carry.
+   */
+  playState(state: Exclude<HavenerState, "death">): void {
     if (state === this.visualState) {
       return;
     }
+    this.enterState(state);
+  }
+
+  /**
+   * Force-restart whichever state is currently showing, re-reading
+   * `HAVENER_ANIM_CONFIG` from scratch. This is what makes the dev playground
+   * actually live: a slider drag calls this so the loop you're watching
+   * updates immediately, instead of only taking effect the next time you
+   * click a state button.
+   */
+  restartCurrentState(): void {
+    if (this.visualState === "death") {
+      return; // one-shot and already mid-flight; nothing sensible to restart.
+    }
+    this.enterState(this.visualState);
+  }
+
+  private enterState(state: Exclude<HavenerState, "death">): void {
+    const wasGhost = this.visualState === "ghost";
     this.visualState = state;
-    if (state === "ghost") {
-      this.enterGhost();
-    } else {
-      // walk/task reuse idle for now (deferred to 7.6); idle is the real one.
+    if (wasGhost && state !== "ghost") {
       this.exitGhost();
-      this.startIdle();
+    }
+    switch (state) {
+      case "idle":
+        this.startIdle();
+        break;
+      case "walk":
+        this.startWalkOrRun(HAVENER_ANIM_CONFIG.walk.periodMs, 1, 0);
+        break;
+      case "run":
+        this.startWalkOrRun(
+          HAVENER_ANIM_CONFIG.run.periodMs,
+          HAVENER_ANIM_CONFIG.run.amplitudeMultiplier,
+          HAVENER_ANIM_CONFIG.run.leanDeg,
+        );
+        break;
+      case "interact":
+        this.startInteract();
+        break;
+      case "ghost":
+        this.enterGhost();
+        break;
     }
   }
 
   /**
-   * One-shot death settle. Deliberately minimal — the full §4.4 death (squash,
-   * fall, the lantern detaching and rolling with its glow fading) is the 7.6
-   * signature-moment task. Here it squashes briefly, then hands back so
-   * GameScene can flip to the ghost state, preserving the existing flow.
+   * The one-shot death sequence: squash, then the whole body topples
+   * (rotation only — see the class doc), while the lantern detaches and lives
+   * out its own gravity/bounce/roll/glow-fade independently (`dropLantern`).
+   * `onComplete` fires once the BODY settles — the signature lantern moment is
+   * allowed to keep playing after that, unblocking GameScene's transition to
+   * the ghost state without waiting on decoration.
    */
   playDeath(onComplete: () => void): void {
     this.visualState = "death";
-    this.stopIdle();
-    this.deathTimer?.remove(false);
-    this.scene.tweens.add({
-      targets: this.holders.bodyBase,
-      scaleX: 1.2,
-      scaleY: 0.8,
-      duration: 80,
-      ease: "Quad.easeOut",
-      yoyo: true,
-    });
-    this.deathTimer = this.scene.time.delayedCall(500, onComplete);
+    this.clearStateTweens();
+    const cfg = HAVENER_ANIM_CONFIG.death;
+
+    this.dropLantern();
+
+    this.stateTweens.push(
+      this.scene.tweens.add({
+        targets: this.holders.bodyBase,
+        scaleX: cfg.squash.scaleX,
+        scaleY: cfg.squash.scaleY,
+        duration: cfg.squash.durationMs,
+        ease: "Quad.easeOut",
+      }),
+    );
+
+    this.stateTweens.push(
+      this.scene.tweens.add({
+        targets: this,
+        angle: this.facing === "right" ? cfg.fall.rotationDeg : -cfg.fall.rotationDeg,
+        duration: cfg.fall.durationMs,
+        delay: cfg.squash.durationMs,
+        ease: "Cubic.easeOut",
+      }),
+    );
+    this.stateTweens.push(
+      this.scene.tweens.add({
+        targets: this.holders.bodyBase,
+        scaleY: cfg.fall.settleScaleY,
+        duration: cfg.fall.durationMs,
+        delay: cfg.squash.durationMs,
+        ease: "Cubic.easeOut",
+      }),
+    );
+
+    this.stateTimers.push(
+      this.scene.time.delayedCall(cfg.squash.durationMs + cfg.fall.durationMs, onComplete),
+    );
   }
 
   override destroy(fromScene?: boolean): void {
-    this.stopIdle();
-    this.deathTimer?.remove(false);
+    this.clearStateTweens();
+    for (const obj of this.droppedLanternObjects) {
+      obj.destroy();
+    }
     super.destroy(fromScene);
+  }
+
+  // --- The signature moment -------------------------------------------------
+
+  /**
+   * §4.4: "the lantern DETACHES from the rig, falls under gravity, bounces
+   * once, rolls, and its glow fades to zero over 400ms." Reparents the lit
+   * lantern + glow from this container into the scene at their current world
+   * position, then runs a hand-tuned, four-phase motion:
+   *
+   *   1. fall   — an accelerating toss away from the hand (gravity winning).
+   *   2. bounce — ONE decelerate-up/accelerate-down hop (deliberately not
+   *      Phaser's built-in `Bounce` ease, which decays over several bounces —
+   *      the brief lives here explicitly so there is exactly one).
+   *   3. roll   — a decaying slide with continuous rotation, selling "rolling"
+   *      rather than "sliding to a stop".
+   *   4. the glow, fading out from the moment of impact (the start of the
+   *      bounce) rather than the moment of release — the light doesn't dim
+   *      mid-air, it dims because the fall disturbed the flame.
+   *
+   * Public (not private) because 7.7 wires the server-authoritative "dropped"
+   * lantern state, and reuses this exact motion for that — the death
+   * animation is one caller of it, not its only reason to exist.
+   */
+  dropLantern(): void {
+    if (this.lanternDropped) {
+      return;
+    }
+    this.lanternDropped = true;
+    const cfg = HAVENER_ANIM_CONFIG.death.lantern;
+    const direction = this.facing === "right" ? 1 : -1;
+
+    const lantern = this.lantern;
+    const glow = this.glow;
+
+    // World-space handoff: capture where they are right now (still children,
+    // still subject to this container's position/facing/rotation), detach
+    // them, then re-express that same spot in absolute scene coordinates —
+    // from this point on nothing about the Havener (including its own death
+    // topple, playing concurrently) moves them again.
+    const lanternWorld = lantern.getWorldTransformMatrix().decomposeMatrix();
+    const glowWorld = glow.getWorldTransformMatrix().decomposeMatrix();
+    this.holders.heldItem.remove(lantern);
+    this.holders.glowOverlay.remove(glow);
+    lantern.setPosition(lanternWorld.translateX, lanternWorld.translateY);
+    glow.setPosition(glowWorld.translateX, glowWorld.translateY);
+    // Keep whatever mid-swing angle the lantern had at the moment of release
+    // — a small bit of organic variation the physics then takes over from.
+    lantern.setAngle(lanternWorld.rotation * Phaser.Math.RAD_TO_DEG);
+    this.scene.add.existing(lantern);
+    this.scene.add.existing(glow);
+    this.droppedLanternObjects.push(lantern, glow);
+
+    const landX = lanternWorld.translateX + direction * cfg.fallSidewaysPx;
+    const landY = lanternWorld.translateY + cfg.fallDownPx;
+    const rollX = landX + direction * cfg.rollDistancePx;
+
+    const glowFollow = () => glow.setPosition(lantern.x, lantern.y - 4);
+
+    this.scene.tweens.add({
+      targets: lantern,
+      x: landX,
+      y: landY,
+      duration: cfg.fallDurationMs,
+      delay: cfg.detachDelayMs,
+      ease: "Quad.easeIn", // accelerating — gravity winning
+      onUpdate: glowFollow,
+      onComplete: () => {
+        // Phase 2: one bounce — deliberately hand-built from two tweens
+        // rather than Phaser's `Bounce` ease, which decays over several hops.
+        this.scene.tweens.add({
+          targets: lantern,
+          y: landY - cfg.bounceHeightPx,
+          duration: cfg.bounceDurationMs / 2,
+          ease: "Quad.easeOut", // decelerating on the way up
+          yoyo: true,
+          onUpdate: glowFollow,
+          onComplete: () => {
+            // Phase 3: roll — a decaying slide, spinning as it goes.
+            this.scene.tweens.add({
+              targets: lantern,
+              x: rollX,
+              angle: lantern.angle + direction * cfg.rollRotationDeg,
+              duration: cfg.rollDurationMs,
+              ease: "Sine.easeOut",
+              onUpdate: glowFollow,
+            });
+          },
+        });
+        // Phase 4: the glow fade starts at impact, not release.
+        this.scene.tweens.add({
+          targets: glow,
+          alpha: 0,
+          duration: cfg.glowFadeMs,
+          ease: "Sine.easeIn",
+        });
+      },
+    });
   }
 
   // --- Animation ----------------------------------------------------------
 
+  /** Stops and clears every tween/timer belonging to the current state, and resets every property a state tween might have left non-default. */
+  private clearStateTweens(): void {
+    for (const tween of this.stateTweens) {
+      tween.stop();
+    }
+    this.stateTweens = [];
+    for (const timer of this.stateTimers) {
+      timer.remove(false);
+    }
+    this.stateTimers = [];
+    // Generic reset of every §4.2 holder, not just the ones the outgoing
+    // state happened to touch — cheap, and means a new state never has to
+    // know which fields a *different* state's tweens might have left dirty.
+    for (const layer of LAYERS) {
+      const holder = this.holders[layer.key];
+      holder.setPosition(0, 0);
+      holder.setAngle(0);
+      holder.setScale(1, 1);
+      holder.setVisible(true);
+    }
+    if (!this.lanternDropped) {
+      this.lantern.setAngle(0);
+      const hand = anchorLocal("hand");
+      this.lantern.setPosition(hand.x, hand.y - 8);
+    }
+    this.setAngle(0);
+  }
+
   private startIdle(): void {
-    this.stopIdle();
+    this.clearStateTweens();
+    const cfg = HAVENER_ANIM_CONFIG.idle;
     // §4.4 idle: body breathes on scaleY, pivoting at the feet (holder origin),
     // so the hem stays planted.
-    this.idleTweens.push(
+    this.stateTweens.push(
       this.scene.tweens.add({
         targets: this.holders.bodyBase,
-        scaleY: 1.02,
-        duration: IDLE_PERIOD_MS / 2,
+        scaleY: 1 + cfg.bodyScaleYAmplitude,
+        duration: cfg.periodMs / 2,
         ease: "Sine.easeInOut",
         yoyo: true,
         repeat: -1,
       }),
     );
-    // §4.4 idle: lantern sways ±3°, a beat (150 ms) behind the body.
-    this.lantern.setAngle(-LANTERN_SWAY_DEG);
-    this.idleTweens.push(
+    // §4.4 idle: lantern sways ±3°, a beat behind the body.
+    if (!this.lanternDropped) {
+      this.lantern.setAngle(-cfg.lanternSwayDeg);
+      this.stateTweens.push(
+        this.scene.tweens.add({
+          targets: this.lantern,
+          angle: cfg.lanternSwayDeg,
+          duration: cfg.periodMs / 2,
+          ease: "Sine.easeInOut",
+          yoyo: true,
+          repeat: -1,
+          delay: cfg.lanternLagMs,
+        }),
+      );
+    }
+  }
+
+  /**
+   * §4.4 walk + run share one shape — run is explicitly "same as walk,
+   * amplitudes ×1.4, body leans 5° into direction" — so both are built here,
+   * parameterised by period/amplitude-multiplier/lean rather than duplicated.
+   *
+   * "Coat hem lags body by 60 ms": there is no separate sliced hem layer yet
+   * (§4.2's `legs` is the nearest lower-body layer today — see `buildBody`),
+   * so the hem lag is applied to the same leg-swing tween that stands in for
+   * it. When a real hem layer exists, split this into its own tween with the
+   * same `hemLagMs` and leave the leg swing unlagged.
+   */
+  private startWalkOrRun(periodMs: number, amplitudeMultiplier: number, leanDeg: number): void {
+    this.clearStateTweens();
+    const cfg = HAVENER_ANIM_CONFIG.walk;
+    const bobPx = cfg.bodyBobPx * amplitudeMultiplier;
+    const legDeg = cfg.legSwingDeg * amplitudeMultiplier;
+    const lanternDeg = cfg.lanternSwingDeg * amplitudeMultiplier;
+
+    this.setAngle(this.facing === "right" ? leanDeg : -leanDeg);
+
+    // Body bob.
+    this.stateTweens.push(
       this.scene.tweens.add({
-        targets: this.lantern,
-        angle: LANTERN_SWAY_DEG,
-        duration: IDLE_PERIOD_MS / 2,
+        targets: this.holders.bodyBase,
+        y: -bobPx,
+        duration: periodMs / 2,
         ease: "Sine.easeInOut",
         yoyo: true,
         repeat: -1,
-        delay: LANTERN_LAG_MS,
+      }),
+    );
+    // Legs alternate (the hem-lag stand-in — see doc above).
+    this.holders.legs.setAngle(-legDeg);
+    this.stateTweens.push(
+      this.scene.tweens.add({
+        targets: this.holders.legs,
+        angle: legDeg,
+        duration: periodMs / 2,
+        ease: "Sine.easeInOut",
+        yoyo: true,
+        repeat: -1,
+        delay: cfg.hemLagMs,
+      }),
+    );
+    // Lantern swings.
+    if (!this.lanternDropped) {
+      this.lantern.setAngle(-lanternDeg);
+      this.stateTweens.push(
+        this.scene.tweens.add({
+          targets: this.lantern,
+          angle: lanternDeg,
+          duration: periodMs / 2,
+          ease: "Sine.easeInOut",
+          yoyo: true,
+          repeat: -1,
+        }),
+      );
+    }
+  }
+
+  /**
+   * §4.4 interact: a 400ms once-off squash + lantern raise + hand sparkle.
+   * GameScene drives this the same way as every looping state — by calling
+   * `playState("interact")` every frame a task modal is open — so once the
+   * one-shot finishes, `visualState` is reset back to "idle" here rather than
+   * left on "interact". That means the NEXT frame's `playState("interact")`
+   * call (still true — the task is still open) sees a real state change and
+   * fires the squash again: a small, deliberate, self-sustaining pulse for
+   * as long as the player keeps working the task, not a one-time flourish
+   * followed by a frozen pose.
+   */
+  private startInteract(): void {
+    this.clearStateTweens();
+    const cfg = HAVENER_ANIM_CONFIG.interact;
+    const half = cfg.durationMs / 2;
+
+    this.stateTweens.push(
+      this.scene.tweens.add({
+        targets: this.holders.bodyBase,
+        scaleY: cfg.squashScaleY,
+        duration: half,
+        ease: "Quad.easeOut",
+        yoyo: true,
+      }),
+    );
+    if (!this.lanternDropped) {
+      this.stateTweens.push(
+        this.scene.tweens.add({
+          targets: this.lantern,
+          y: this.lantern.y - cfg.lanternRaisePx,
+          duration: half,
+          ease: "Quad.easeOut",
+          yoyo: true,
+        }),
+      );
+      this.spawnInteractSparkle(cfg.sparkleDurationMs, cfg.sparkleRadiusPx);
+    }
+
+    this.stateTimers.push(
+      this.scene.time.delayedCall(cfg.durationMs, () => {
+        if (this.visualState === "interact") {
+          this.visualState = "idle"; // see doc above — lets the next request re-trigger
+        }
       }),
     );
   }
 
-  private stopIdle(): void {
-    for (const tween of this.idleTweens) {
-      tween.stop();
-    }
-    this.idleTweens = [];
-    this.holders.bodyBase.setScale(1, 1);
-    this.lantern.setAngle(0);
+  private spawnInteractSparkle(durationMs: number, radiusPx: number): void {
+    const hand = anchorLocal("hand");
+    const sparkle = this.scene.add.circle(hand.x, hand.y - 10, 1, hexNum(colors.flameCore), 0.9);
+    this.holders.heldItem.add(sparkle);
+    this.scene.tweens.add({
+      targets: sparkle,
+      radius: radiusPx,
+      alpha: 0,
+      duration: durationMs,
+      ease: "Quad.easeOut",
+      onComplete: () => sparkle.destroy(),
+    });
   }
 
   private enterGhost(): void {
-    // §4.4 ghost: translucent, and the lantern goes dark.
-    this.setAlpha(GHOST_ALPHA);
-    this.lantern.setFillStyle(hexNum(colors.void));
-    this.glow.setVisible(false);
-    this.startIdle();
+    this.clearStateTweens();
+    const cfg = HAVENER_ANIM_CONFIG.ghost;
+
+    this.setAlpha(cfg.alpha);
+    this.holders.legs.setVisible(false);
+    if (!this.lanternDropped) {
+      // A ghost's lantern is dark — see §4.4. Not the same as `dropLantern`:
+      // nothing detaches or falls, it simply stops glowing while still held.
+      this.lantern.setFillStyle(hexNum(colors.void));
+      this.glow.setVisible(false);
+    }
+    // Defensive: `restartCurrentState` (the playground's live-tuning path) can
+    // re-enter ghost while it's already active, to pick up a slider change —
+    // clear any wisps from the previous pass first so they never accumulate.
+    for (const wisp of this.ghostWisps) {
+      wisp.destroy();
+    }
+    this.ghostWisps = [];
+
+    // Vertical float — every visible layer except the already-hidden legs, so
+    // the whole silhouette drifts together. This targets the §4.2 HOLDERS'
+    // own y, never `this.y`: GameScene repositions the container itself every
+    // render frame (see the class doc), which would fight a tween on `this.y`
+    // frame-for-frame and the float would never visibly happen.
+    const floatTargets = LAYERS.filter((l) => l.key !== "legs").map((l) => this.holders[l.key]);
+    this.stateTweens.push(
+      this.scene.tweens.add({
+        targets: floatTargets,
+        y: -cfg.floatPx,
+        duration: cfg.periodMs / 2,
+        ease: "Sine.easeInOut",
+        yoyo: true,
+        repeat: -1,
+      }),
+    );
+
+    // §4.4: "hem dissolves into three drifting wisps." Not one of the §4.2
+    // named layers (it's a state-specific effect, not a cosmetic slot), so
+    // these are loose children of the container itself rather than living in
+    // any holder.
+    const feet = anchorLocal("feet");
+    for (let i = 0; i < cfg.wispCount; i++) {
+      const angleOffset = (i / cfg.wispCount) * Math.PI * 2;
+      const wisp = this.scene.add.ellipse(
+        feet.x + Math.cos(angleOffset) * 6,
+        feet.y - 4 + Math.sin(angleOffset) * 3,
+        cfg.wispRadiusPx * 2,
+        cfg.wispRadiusPx * 2.4,
+        hexNum(colors.foam),
+        cfg.wispAlpha,
+      );
+      this.add(wisp);
+      this.ghostWisps.push(wisp);
+      // Phase-offset per wisp (a third of the period each) so the three drift
+      // independently rather than in unison — reads as dissolving mist, not
+      // three synchronised dots.
+      const phase = (i / cfg.wispCount) * cfg.wispDriftMs;
+      this.stateTweens.push(
+        this.scene.tweens.add({
+          targets: wisp,
+          x: wisp.x + Math.cos(angleOffset) * cfg.wispDriftPx,
+          y: wisp.y - cfg.wispDriftPx,
+          alpha: 0,
+          duration: cfg.wispDriftMs,
+          delay: -phase,
+          ease: "Sine.easeOut",
+          yoyo: true,
+          repeat: -1,
+        }),
+      );
+    }
   }
 
   private exitGhost(): void {
     this.setAlpha(1);
-    this.glow.setVisible(true);
-    this.applyLanternColor();
+    this.holders.legs.setVisible(true);
+    // The float tween lives on the holders (see `enterGhost`), and whichever
+    // state comes next starts with `clearStateTweens()`, which resets every
+    // holder's position generically — nothing further to undo here.
+    if (!this.lanternDropped) {
+      this.glow.setVisible(true);
+      this.applyLanternColor();
+    }
+    for (const wisp of this.ghostWisps) {
+      wisp.destroy();
+    }
+    this.ghostWisps = [];
   }
 }
