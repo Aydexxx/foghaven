@@ -45,7 +45,8 @@ import { PhaseAtmosphere } from "./atmosphere/PhaseAtmosphere";
 import { inputEngine } from "../input/inputEngine";
 import { graphicsEngine } from "../graphics/graphicsEngine";
 import { displayColorFor, playerColorIndex } from "../graphics/colorBlindPalette";
-import { typeScale } from "../theme/tokens";
+import { fonts, fontStacks } from "../theme/tokens";
+import { phaserTextStyle } from "../theme/phaserText";
 
 /**
  * The sprite's anchor point, as a fraction of the frame — where the rig's
@@ -118,7 +119,7 @@ const TILESET_KEY = "town-tiles";
 
 /** How the room signage reads compared to a task's location label. */
 const ROOM_LABEL_COLOR = "#8f8fae";
-const ROOM_LABEL_FONT_SIZE = `${typeScale.caption.fontSize}px`;
+const ROOM_LABEL_STYLE = phaserTextStyle("ui", "caption");
 
 /** How smoothly the camera chases the local player — 1 would be instant. */
 const CAMERA_LERP = 0.15;
@@ -936,17 +937,21 @@ export class GameScene extends Phaser.Scene {
     // cannot fix. See graphics/colorBlindPalette.ts.
     const badgeNumber = this.add
       .text(player.x + BADGE_OFFSET.x, player.y + BADGE_OFFSET.y, String(playerColorIndex(player.color) + 1), {
-        fontFamily: "sans-serif",
+        // Below the §7 "nothing under 13px" floor, deliberately: this glyph
+        // is a reinforcing cue packed inside an 8px-radius badge (see the
+        // comment above), not text a player reads for information — bumping
+        // it to caption(13) would blow out the badge geometry. Still uses
+        // the numeric family/weight, since it is literally a counter.
+        fontFamily: fontStacks.numeric,
         fontSize: "9px",
-        fontStyle: "bold",
+        fontStyle: String(fonts.numeric.weight),
         color: "#000000",
       })
       .setOrigin(0.5, 0.5);
 
     const label = this.add
       .text(player.x, player.y - LABEL_OFFSET_Y, player.name, {
-        fontFamily: "sans-serif",
-        fontSize: "14px",
+        ...phaserTextStyle("ui", "label"),
         color: "#ffffff",
       })
       .setOrigin(0.5, 1);
@@ -1180,8 +1185,7 @@ export class GameScene extends Phaser.Scene {
     circle.setAlpha(0.75);
     const cross = this.add
       .text(body.x, body.y, "✕", {
-        fontFamily: "sans-serif",
-        fontSize: "16px",
+        ...phaserTextStyle("ui", "label"),
         color: "#000000",
       })
       .setOrigin(0.5, 0.5);
@@ -1413,8 +1417,7 @@ export class GameScene extends Phaser.Scene {
     for (const room of ROOMS) {
       const label = this.add
         .text(room.center.x, room.center.y, i18n.t(`rooms.${room.slug}`), {
-          fontFamily: "sans-serif",
-          fontSize: ROOM_LABEL_FONT_SIZE,
+          ...ROOM_LABEL_STYLE,
           color: ROOM_LABEL_COLOR,
         })
         .setOrigin(0.5, 0.5)
@@ -1550,8 +1553,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.reportPrompt) {
       this.reportPrompt = this.add
         .text(0, 0, i18n.t("game.reportPrompt"), {
-          fontFamily: "sans-serif",
-          fontSize: `${typeScale.caption.fontSize}px`,
+          ...phaserTextStyle("ui", "caption"),
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },
@@ -1618,8 +1620,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.bellPrompt) {
       this.bellPrompt = this.add
         .text(0, 0, i18n.t("game.bellPrompt"), {
-          fontFamily: "sans-serif",
-          fontSize: `${typeScale.caption.fontSize}px`,
+          ...phaserTextStyle("ui", "caption"),
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },
@@ -1702,8 +1703,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.repairPrompt) {
       this.repairPrompt = this.add
         .text(0, 0, i18n.t("game.repairPrompt"), {
-          fontFamily: "sans-serif",
-          fontSize: `${typeScale.caption.fontSize}px`,
+          ...phaserTextStyle("ui", "caption"),
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },
@@ -1764,8 +1764,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(2, 0x000000, 0.4);
     const label = this.add
       .text(task.x, task.y - TASK_LABEL_OFFSET_Y, task.room, {
-        fontFamily: "sans-serif",
-        fontSize: "11px",
+        ...phaserTextStyle("ui", "caption"),
         color: "#ffd166",
       })
       .setOrigin(0.5, 1);
@@ -1812,8 +1811,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.interactPrompt) {
       this.interactPrompt = this.add
         .text(0, 0, i18n.t("game.interactPrompt"), {
-          fontFamily: "sans-serif",
-          fontSize: `${typeScale.caption.fontSize}px`,
+          ...phaserTextStyle("ui", "caption"),
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },

@@ -139,6 +139,7 @@
       "votingMsLabel": "Oylama süresi",
       "tasksPerPlayerLabel": "Oyuncu başına görev",
       "confirmEjectsLabel": "Atılan oyuncunun tarafını göster",
+      "voteMuteEnabledLabel": "Oyla susturmaya izin ver",
       "autoLabel": "Otomatik",
       "secondsValue": "{{value}}sn"
     },

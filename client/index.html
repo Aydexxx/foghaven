@@ -4,6 +4,44 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Foghaven</title>
+
+    <!-- §7 Typography (docs/ART_BIBLE.md) — self-hosted, subset to Latin +
+         Latin Extended (see client/src/theme/tokens.ts for the source of
+         truth and client/public/fonts/*/LICENSE.txt for provenance).
+         Preloaded here: only Display and UI, the two roles the very first
+         screen (title + buttons) needs. Numeric (timers/counters/room
+         codes) and the UI 800 weight aren't needed until later screens, so
+         they load lazily via the @font-face rules in theme/tokens.css
+         instead of competing for bandwidth with the app bundle. -->
+    <link
+      rel="preload"
+      href="/fonts/alfa-slab-one/alfa-slab-one-400-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/alfa-slab-one/alfa-slab-one-400-latin-ext.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/nunito/nunito-700-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/nunito/nunito-700-latin-ext.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
     <style>
       /* Minimal splash shown before the JS bundle (and index.css) has loaded
          — inlined rather than relying on the stylesheet, which is imported
@@ -11,12 +49,15 @@
          React's first render replaces #root's children, so this never has
          to be removed by hand. Colors match index.css's --paper-void/--ink/
          --timber-light/--brass so there's no visible flash handing off to
-         the real app. */
+         the real app. The splash itself has no text, but this font-family
+         still applies the instant React mounts real content — 'Nunito'
+         first in case a repeat visit already has it cached, system-ui as
+         the safe fallback otherwise (never Georgia/serif — see §7). */
       body {
         margin: 0;
         background: #16120c;
         color: #ece1c8;
-        font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+        font-family: "Nunito", system-ui, sans-serif;
       }
       #splash {
         min-height: 100vh;

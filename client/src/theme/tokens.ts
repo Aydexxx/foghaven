@@ -86,10 +86,96 @@ export const colors = { ...core, ...materials, ...light, ...semantic } as const;
 // ---------------------------------------------------------------------------
 
 export const fonts = {
-  display: { family: "'Alfa Slab One', serif", weight: 400 },
-  ui: { family: "'Nunito', sans-serif", weightRegular: 700, weightBold: 800 },
-  numeric: { family: "'JetBrains Mono', monospace", weight: 700 },
+  display: { name: "Alfa Slab One", fallback: "serif", weight: 400 },
+  ui: { name: "Nunito", fallback: "sans-serif", weightRegular: 700, weightBold: 800 },
+  numeric: { name: "JetBrains Mono", fallback: "monospace", weight: 700 },
 } as const;
+
+function fontStack(name: string, fallback: string): string {
+  return `'${name}', ${fallback}`;
+}
+
+// The exact CSS font-family value for each role — computed once from `fonts`
+// so the CSS custom properties (index.css/tokens.css) and Phaser canvas text
+// (theme/phaserText.ts) request the literal same string. Neither layer may
+// build its own font-family string from `fonts.*.name` independently — that
+// is exactly how the two would drift.
+export const fontStacks = {
+  display: fontStack(fonts.display.name, fonts.display.fallback),
+  ui: fontStack(fonts.ui.name, fonts.ui.fallback),
+  numeric: fontStack(fonts.numeric.name, fonts.numeric.fallback),
+} as const;
+
+// Self-hosted under client/public/fonts/ (see docs/ART_BIBLE.md §7 — "do not
+// hotlink Google Fonts"). Each family is subset into "latin" and
+// "latin-ext" — both are required: Turkish characters (ğ Ğ ü Ü ş Ş ı İ ö Ö ç
+// Ç) split across the two (ü/Ü/ö/Ö/ç/Ç/ı are in "latin"; ğ/Ğ/İ/ş/Ş are in
+// "latin-ext"). unicode-range values are the standard google-fonts subset
+// ranges (verified against the actual glyph tables at build time, not just
+// asserted) and are identical across all three families.
+const UNICODE_RANGE = {
+  latin:
+    "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+  latinExt:
+    "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF",
+} as const;
+
+interface FontFaceSubset {
+  unicodeRange: string;
+  /** Basename under client/public/fonts/<dir>/, without extension. */
+  file: string;
+}
+
+interface FontFaceDef {
+  family: string;
+  dir: string;
+  weight: number;
+  style: "normal";
+  subsets: readonly [FontFaceSubset, FontFaceSubset];
+}
+
+export const fontFaces: readonly FontFaceDef[] = [
+  {
+    family: fonts.display.name,
+    dir: "alfa-slab-one",
+    weight: fonts.display.weight,
+    style: "normal",
+    subsets: [
+      { unicodeRange: UNICODE_RANGE.latin, file: "alfa-slab-one-400-latin" },
+      { unicodeRange: UNICODE_RANGE.latinExt, file: "alfa-slab-one-400-latin-ext" },
+    ],
+  },
+  {
+    family: fonts.ui.name,
+    dir: "nunito",
+    weight: fonts.ui.weightRegular,
+    style: "normal",
+    subsets: [
+      { unicodeRange: UNICODE_RANGE.latin, file: "nunito-700-latin" },
+      { unicodeRange: UNICODE_RANGE.latinExt, file: "nunito-700-latin-ext" },
+    ],
+  },
+  {
+    family: fonts.ui.name,
+    dir: "nunito",
+    weight: fonts.ui.weightBold,
+    style: "normal",
+    subsets: [
+      { unicodeRange: UNICODE_RANGE.latin, file: "nunito-800-latin" },
+      { unicodeRange: UNICODE_RANGE.latinExt, file: "nunito-800-latin-ext" },
+    ],
+  },
+  {
+    family: fonts.numeric.name,
+    dir: "jetbrains-mono",
+    weight: fonts.numeric.weight,
+    style: "normal",
+    subsets: [
+      { unicodeRange: UNICODE_RANGE.latin, file: "jetbrains-mono-700-latin" },
+      { unicodeRange: UNICODE_RANGE.latinExt, file: "jetbrains-mono-700-latin-ext" },
+    ],
+  },
+] as const;
 
 export const typeScale = {
   displayXl: { fontSize: 44, lineHeight: 1.1 },

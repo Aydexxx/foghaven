@@ -3,11 +3,13 @@
 :root {
   color-scheme: dark;
 
-  /* Georgia's stack reads as old-world type without fetching a web font —
-     index.html loads nothing external, and this keeps it that way. */
-  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
-  --font-body: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
-  --font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+  /* §7 Typography (docs/ART_BIBLE.md) — self-hosted, see theme/tokens.css
+     for the @font-face rules. These three local aliases are kept (rather
+     than repointing every selector below to --font-family-*) so this is the
+     only place a role-to-family mapping is ever made. */
+  --font-display: var(--font-family-display);
+  --font-body: var(--font-family-ui);
+  --font-mono: var(--font-family-numeric);
 
   --ink: #ece1c8;
   --ink-dim: #b3a487;
@@ -42,6 +44,9 @@
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 0.94 0 0 0 0 0.8 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 
   font-family: var(--font-body);
+  /* Nunito only ships weights 700/800 (see docs/ART_BIBLE.md §7) — there is
+     no lighter "regular" body weight in this design. */
+  font-weight: var(--font-weight-ui-regular);
 }
 
 body {

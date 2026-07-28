@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "lint:i18n": "eslint src --no-warn-ignored",
-    "tokens:build": "tsx scripts/generate-tokens.ts"
+    "tokens:build": "tsx scripts/generate-tokens.ts",
+    "check:locales": "tsx scripts/check-locale-parity.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^2.0.0",

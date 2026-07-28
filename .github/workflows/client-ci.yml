@@ -1,0 +1,35 @@
+name: Client CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck -w client
+
+      - name: Test
+        run: npm run test -w client
+
+      - name: Lint
+        run: npm run lint:i18n -w client
+
+      - name: Locale parity (en is the source of truth)
+        run: npm run check:locales -w client
+
+      - name: Build
+        run: npm run build -w client

@@ -14,6 +14,8 @@ import {
   semantic,
   lanternColors,
   fonts,
+  fontStacks,
+  fontFaces,
   typeScale,
   spacing,
   radius,
@@ -37,6 +39,23 @@ lines.push(" * GENERATED FILE — do not hand-edit.");
 lines.push(" * Source of truth: client/src/theme/tokens.ts");
 lines.push(" * Regenerate with: npm run tokens:build -w client");
 lines.push(" */");
+
+lines.push("/* §7 Typography — self-hosted @font-face declarations. */");
+for (const face of fontFaces) {
+  for (const subset of face.subsets) {
+    const base = `/fonts/${face.dir}/${subset.file}`;
+    lines.push("@font-face {");
+    lines.push(`  font-family: '${face.family}';`);
+    lines.push(`  font-style: ${face.style};`);
+    lines.push(`  font-weight: ${face.weight};`);
+    lines.push("  font-display: swap;");
+    lines.push(`  src: url('${base}.woff2') format('woff2'), url('${base}.woff') format('woff');`);
+    lines.push(`  unicode-range: ${subset.unicodeRange};`);
+    lines.push("}");
+  }
+}
+lines.push("");
+
 lines.push(":root {");
 
 lines.push("  /* §3.1 Core */");
@@ -54,12 +73,12 @@ lanternColors.forEach((lantern, index) => {
 });
 
 lines.push("  /* §7 Typography */");
-lines.push(`  --font-family-display: ${fonts.display.family};`);
+lines.push(`  --font-family-display: ${fontStacks.display};`);
 lines.push(`  --font-weight-display: ${fonts.display.weight};`);
-lines.push(`  --font-family-ui: ${fonts.ui.family};`);
+lines.push(`  --font-family-ui: ${fontStacks.ui};`);
 lines.push(`  --font-weight-ui-regular: ${fonts.ui.weightRegular};`);
 lines.push(`  --font-weight-ui-bold: ${fonts.ui.weightBold};`);
-lines.push(`  --font-family-numeric: ${fonts.numeric.family};`);
+lines.push(`  --font-family-numeric: ${fontStacks.numeric};`);
 lines.push(`  --font-weight-numeric: ${fonts.numeric.weight};`);
 for (const [key, scale] of Object.entries(typeScale)) {
   const name = kebab(key);

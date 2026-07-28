@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { ARCHETYPES } from "./archetypes";
 import { FRAME_SIZE, RIG_ORIGIN } from "./rig";
 import { buildCharacterSpriteSheet } from "./spriteSheet";
+import { phaserTextStyle } from "../../theme/phaserText";
 
 const SCALE = 3;
 const ROW_HEIGHT = FRAME_SIZE * SCALE + 40;
@@ -43,13 +44,13 @@ class PreviewScene extends Phaser.Scene {
       const headroomY = feetY - FRAME_SIZE * SCALE + 40;
 
       this.add
-        .text(20, feetY - 40, rig.id, { fontFamily: "monospace", fontSize: "16px", color: "#fff" })
+        .text(20, feetY - 40, rig.id, { ...phaserTextStyle("numeric", "label"), color: "#fff" })
         .setOrigin(0, 0.5);
 
       animKeys.forEach((anim, col) => {
         const x = 160 + col * COL_WIDTH;
         this.add
-          .text(x, headroomY, anim, { fontFamily: "monospace", fontSize: "12px", color: "#aaa" })
+          .text(x, headroomY, anim, { ...phaserTextStyle("numeric", "caption"), color: "#aaa" })
           .setOrigin(0.5, 0.5);
         const sprite = this.add
           .sprite(x, feetY, "characters")

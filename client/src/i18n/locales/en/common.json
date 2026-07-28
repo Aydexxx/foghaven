@@ -139,6 +139,7 @@
       "votingMsLabel": "Voting time",
       "tasksPerPlayerLabel": "Tasks per player",
       "confirmEjectsLabel": "Reveal ejected player's faction",
+      "voteMuteEnabledLabel": "Allow vote-to-mute",
       "autoLabel": "Auto",
       "secondsValue": "{{value}}s"
     },
