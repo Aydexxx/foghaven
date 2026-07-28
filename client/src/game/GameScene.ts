@@ -45,6 +45,7 @@ import { PhaseAtmosphere } from "./atmosphere/PhaseAtmosphere";
 import { inputEngine } from "../input/inputEngine";
 import { graphicsEngine } from "../graphics/graphicsEngine";
 import { displayColorFor, playerColorIndex } from "../graphics/colorBlindPalette";
+import { typeScale } from "../theme/tokens";
 
 /**
  * The sprite's anchor point, as a fraction of the frame — where the rig's
@@ -117,7 +118,7 @@ const TILESET_KEY = "town-tiles";
 
 /** How the room signage reads compared to a task's location label. */
 const ROOM_LABEL_COLOR = "#8f8fae";
-const ROOM_LABEL_FONT_SIZE = "13px";
+const ROOM_LABEL_FONT_SIZE = `${typeScale.caption.fontSize}px`;
 
 /** How smoothly the camera chases the local player — 1 would be instant. */
 const CAMERA_LERP = 0.15;
@@ -1550,7 +1551,7 @@ export class GameScene extends Phaser.Scene {
       this.reportPrompt = this.add
         .text(0, 0, i18n.t("game.reportPrompt"), {
           fontFamily: "sans-serif",
-          fontSize: "13px",
+          fontSize: `${typeScale.caption.fontSize}px`,
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },
@@ -1618,7 +1619,7 @@ export class GameScene extends Phaser.Scene {
       this.bellPrompt = this.add
         .text(0, 0, i18n.t("game.bellPrompt"), {
           fontFamily: "sans-serif",
-          fontSize: "13px",
+          fontSize: `${typeScale.caption.fontSize}px`,
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },
@@ -1702,7 +1703,7 @@ export class GameScene extends Phaser.Scene {
       this.repairPrompt = this.add
         .text(0, 0, i18n.t("game.repairPrompt"), {
           fontFamily: "sans-serif",
-          fontSize: "13px",
+          fontSize: `${typeScale.caption.fontSize}px`,
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },
@@ -1812,7 +1813,7 @@ export class GameScene extends Phaser.Scene {
       this.interactPrompt = this.add
         .text(0, 0, i18n.t("game.interactPrompt"), {
           fontFamily: "sans-serif",
-          fontSize: "13px",
+          fontSize: `${typeScale.caption.fontSize}px`,
           color: "#ffffff",
           backgroundColor: "#000000aa",
           padding: { x: 6, y: 3 },

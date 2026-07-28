@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { duration } from "../../theme/tokens";
 import type { MinigameProps } from "./types";
 
 const DIAL_COUNT = 3;
@@ -28,7 +29,7 @@ export function RotationGame({ onComplete }: MinigameProps) {
       next[index] = (next[index]! + STEP_DEG) % 360;
 
       if (next.every((deg, i) => deg === targets[i])) {
-        setTimeout(onComplete, 300);
+        setTimeout(onComplete, duration.slow);
       }
       return next;
     });

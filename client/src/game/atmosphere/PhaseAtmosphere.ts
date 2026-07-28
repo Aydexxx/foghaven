@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { TILE_SIZE } from "@foghaven/shared";
 import { graphicsEngine } from "../../graphics/graphicsEngine";
 import { LIGHT_SOURCES } from "./lightSources";
+import { duration } from "../../theme/tokens";
 
 /**
  * Everything "finish the atmosphere" asked for that lives inside the Phaser
@@ -73,7 +74,7 @@ const PUDDLE_TILES: Array<[number, number]> = [
 
 // --- Screen shake ---------------------------------------------------------
 
-const BODY_FOUND_SHAKE = { duration: 120, intensity: 0.0015 };
+const BODY_FOUND_SHAKE = { duration: duration.base, intensity: 0.0015 };
 const SABOTAGE_SHAKE = { duration: 220, intensity: 0.0025 };
 
 function buildGlowTexture(scene: Phaser.Scene): void {

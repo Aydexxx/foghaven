@@ -57,4 +57,29 @@ export default tseslint.config(
       "i18next/no-literal-string": "off",
     },
   },
+  {
+    // No hardcoded hex colors anywhere in the client outside theme/ — see
+    // docs/ART_BIBLE.md §3 and src/theme/tokens.ts. Catches both string hex
+    // ("#ffffff", "#000000aa") and Phaser's numeric hex (0xffffff).
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/theme/**"],
+    rules: {
+      // "warn" until the docs/TOKEN_DEBT.md repaint (Phase 7.13) actually
+      // moves these to art-bible tokens — set to "error" as the last step
+      // of that work, once there's nothing left for it to flag.
+      "no-restricted-syntax": [
+        "warn",
+        {
+          selector: "Literal[value=/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]",
+          message:
+            "No hardcoded hex colors outside theme/ — use a token from src/theme/tokens.ts (see docs/ART_BIBLE.md §3).",
+        },
+        {
+          selector: "Literal[raw=/^0[xX][0-9a-fA-F]{6,8}$/]",
+          message:
+            "No hardcoded hex colors outside theme/ — use a token from src/theme/tokens.ts (see docs/ART_BIBLE.md §3).",
+        },
+      ],
+    },
+  },
 );

@@ -1,0 +1,87 @@
+/**
+ * GENERATED FILE — do not hand-edit.
+ * Source of truth: client/src/theme/tokens.ts
+ * Regenerate with: npm run tokens:build -w client
+ */
+:root {
+  /* §3.1 Core */
+  --color-ink: #1A1620;
+  --color-void: #241F2E;
+  --color-fog-dark: #2E3A47;
+  --color-fog-mid: #3F5060;
+  --color-fog-light: #5C7285;
+  --color-mist: #8FA3B0;
+  --color-foam: #C3D2D8;
+  /* §3.2 Materials */
+  --color-wood-dark: #3B2A22;
+  --color-wood-mid: #6B4A34;
+  --color-wood-light: #9A7050;
+  --color-stone-dark: #3A3A42;
+  --color-stone-mid: #4A4A52;
+  --color-rope-tan: #B49A72;
+  --color-iron-cold: #5A6470;
+  /* §3.3 Light */
+  --color-flame-core: #FFF3C4;
+  --color-flame-glow: #FFC65C;
+  --color-flame-deep: #E08A2E;
+  /* §3.4 Semantic */
+  --color-town-green: #6FB08A;
+  --color-stranger-red: #C24A4A;
+  --color-blood-deep: #8E1B24;
+  --color-blood-bright: #E5453F;
+  --color-vote-gold: #E8B94A;
+  /* §3.5 Player lantern colours, in canonical order */
+  --color-lantern-amber: #FFB347; /* 1 of 14 */
+  --color-lantern-crimson: #FF6B6B; /* 2 of 14 */
+  --color-lantern-rose: #FF9FC4; /* 3 of 14 */
+  --color-lantern-violet: #B98CFF; /* 4 of 14 */
+  --color-lantern-cobalt: #6BA8FF; /* 5 of 14 */
+  --color-lantern-cyan: #5FE0DC; /* 6 of 14 */
+  --color-lantern-jade: #6FE09A; /* 7 of 14 */
+  --color-lantern-lime: #C8F06A; /* 8 of 14 */
+  --color-lantern-bone: #F2EAD8; /* 9 of 14 */
+  --color-lantern-rust: #E07A4A; /* 10 of 14 */
+  --color-lantern-ash: #9AA5B5; /* 11 of 14 */
+  --color-lantern-plum: #9B6BAA; /* 12 of 14 */
+  --color-lantern-moss: #8FA85C; /* 13 of 14 */
+  --color-lantern-coral: #FF8A7A; /* 14 of 14 */
+  /* §7 Typography */
+  --font-family-display: 'Alfa Slab One', serif;
+  --font-weight-display: 400;
+  --font-family-ui: 'Nunito', sans-serif;
+  --font-weight-ui-regular: 700;
+  --font-weight-ui-bold: 800;
+  --font-family-numeric: 'JetBrains Mono', monospace;
+  --font-weight-numeric: 700;
+  --font-size-display-xl: 44px;
+  --line-height-display-xl: 1.1;
+  --font-size-display-lg: 32px;
+  --line-height-display-lg: 1.15;
+  --font-size-title: 24px;
+  --line-height-title: 1.2;
+  --font-size-body: 18px;
+  --line-height-body: 1.4;
+  --font-size-label: 15px;
+  --line-height-label: 1.3;
+  --font-size-caption: 13px;
+  --line-height-caption: 1.3;
+  /* Spacing scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+  --space-xxxl: 48px;
+  /* Radius scale */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-xxl: 20px;
+  /* Duration scale */
+  --duration-fast: 60ms;
+  --duration-base: 120ms;
+  --duration-slow: 300ms;
+  --duration-scene: 1200ms;
+}

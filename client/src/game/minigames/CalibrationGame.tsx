@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { duration } from "../../theme/tokens";
 import type { MinigameProps } from "./types";
 
 /** Full sweep of the indicator, in milliseconds (there and back). */
@@ -53,10 +54,10 @@ export function CalibrationGame({ onComplete }: MinigameProps) {
     if (pos >= zone.start && pos <= zone.start + zone.width) {
       setLocked(true);
       cancelAnimationFrame(frameRef.current);
-      setTimeout(onComplete, 300);
+      setTimeout(onComplete, duration.slow);
     } else {
       setMiss(true);
-      setTimeout(() => setMiss(false), 300);
+      setTimeout(() => setMiss(false), duration.slow);
     }
   };
 

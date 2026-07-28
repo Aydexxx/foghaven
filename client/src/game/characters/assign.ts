@@ -18,12 +18,15 @@ import { ARCHETYPES } from "./archetypes";
  * exactly the step a plain polynomial hash skips.
  */
 export function archetypeForColor(color: string): (typeof ARCHETYPES)[number] {
+  // eslint-disable-next-line no-restricted-syntax -- FNV-1a offset basis, not a color
   let hash = 0x811c9dc5;
   for (let i = 0; i < color.length; i++) {
     hash ^= color.charCodeAt(i);
+    // eslint-disable-next-line no-restricted-syntax -- FNV-1a prime, not a color
     hash = Math.imul(hash, 0x01000193);
   }
   hash ^= hash >>> 16;
+  // eslint-disable-next-line no-restricted-syntax -- Murmur3 finalizer constant, not a color
   hash = Math.imul(hash, 0x85ebca6b);
   hash ^= hash >>> 13;
   const index = (hash >>> 0) % ARCHETYPES.length;

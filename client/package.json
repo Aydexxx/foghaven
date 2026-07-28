@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "npm run tokens:build && tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "lint:i18n": "eslint src --no-warn-ignored"
+    "lint:i18n": "eslint src --no-warn-ignored",
+    "tokens:build": "tsx scripts/generate-tokens.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^2.0.0",
