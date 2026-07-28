@@ -29,10 +29,6 @@ import {
 } from "@foghaven/shared";
 import type { BodyState, GameState, PlayerState } from "../net/types";
 import i18n from "../i18n";
-import { archetypeForColor } from "./characters/assign";
-import { PALETTE } from "./characters/palette";
-import { RIG_ORIGIN, FRAME_SIZE, type Shape } from "./characters/rig";
-import { buildCharacterSpriteSheet, type CharacterAnimSet } from "./characters/spriteSheet";
 import {
   ACCESSORY_VISUALS,
   DEATH_EFFECT_VISUALS,
@@ -40,6 +36,10 @@ import {
   OUTFIT_VISUALS,
   PET_VISUALS,
 } from "./characters/cosmeticVisuals";
+import { Havener, HAVENER_ATLAS_KEY, type HavenerState } from "./characters/Havener";
+import { lanternHexForColor } from "./characters/playerLantern";
+import type { AnchorName } from "./characters/anchors";
+import { ATLAS_DIR, ATLAS_PAGES } from "../assets/atlasManifest";
 import { audioEngine } from "../audio/audioEngine";
 import { PhaseAtmosphere } from "./atmosphere/PhaseAtmosphere";
 import { inputEngine } from "../input/inputEngine";
@@ -47,18 +47,6 @@ import { graphicsEngine } from "../graphics/graphicsEngine";
 import { displayColorFor, playerColorIndex } from "../graphics/colorBlindPalette";
 import { fonts, fontStacks } from "../theme/tokens";
 import { phaserTextStyle } from "../theme/phaserText";
-
-/**
- * The sprite's anchor point, as a fraction of the frame — where the rig's
- * ground-contact point sits within its cell (see `characters/rig.ts`).
- * Setting a sprite's origin to this, rather than the default centre,
- * anchors the character's *feet* to `(player.x, player.y)`: the same point
- * every distance check (task range, kill range, report range) already
- * measures from, so the visual upgrade changes nothing about where a
- * character logically stands.
- */
-const CHARACTER_ORIGIN_X = RIG_ORIGIN.x / FRAME_SIZE;
-const CHARACTER_ORIGIN_Y = RIG_ORIGIN.y / FRAME_SIZE;
 
 /** How far below the character's name sits above their head — clears even the alderman's top hat. */
 const LABEL_OFFSET_Y = 54;
@@ -102,6 +90,34 @@ const TASK_LABEL_OFFSET_Y = TASK_MARKER_SIZE;
 
 /** How see-through a ghost looks to other ghosts. */
 const GHOST_ALPHA = 0.4;
+
+/**
+ * Cosmetic slot → §4.3 anchor it attaches to on the Havener. This is the only
+ * mapping of loadout fields to anchors; the anchor offsets themselves live
+ * solely in `characters/anchors.ts`.
+ */
+type CosmeticSlot = "hat" | "accessory" | "outfit" | "pet";
+const COSMETIC_ANCHOR: Record<CosmeticSlot, AnchorName> = {
+  hat: "crown",
+  accessory: "face",
+  outfit: "chest",
+  pet: "feet",
+};
+/** Placeholder rectangle sizes per slot, in §4 128-source units (real art swaps in later). */
+const COSMETIC_PLACEHOLDER_SIZE: Record<CosmeticSlot, { w: number; h: number }> = {
+  hat: { w: 22, h: 10 },
+  accessory: { w: 14, h: 6 },
+  outfit: { w: 8, h: 12 },
+  pet: { w: 12, h: 10 },
+};
+/** Reused catalogs, only to colour each placeholder with the equipped item's own accent. */
+const COSMETIC_CATALOG: Record<CosmeticSlot, Readonly<Record<string, { fill: number }>>> = {
+  hat: HAT_VISUALS,
+  accessory: ACCESSORY_VISUALS,
+  outfit: OUTFIT_VISUALS,
+  pet: PET_VISUALS,
+};
+const COSMETIC_PLACEHOLDER_FALLBACK = Phaser.Display.Color.GetColor(150, 150, 160);
 
 const TOWN_HALL_MARKER_SIZE = 28;
 const TOWN_HALL_MARKER_COLOR = 0x8899ff;
@@ -167,28 +183,19 @@ interface BodyEntity {
 
 /** Phaser render objects plus per-player state and listener disposers. */
 interface PlayerEntity {
-  sprite: Phaser.GameObjects.Sprite;
+  /**
+   * The §4 layered composite. Owns z0–z7 (pet…glowOverlay) and every
+   * equipped cosmetic, which now attach to the container's anchors rather
+   * than riding as separate world-space overlays — see `setHavenerCosmetic`.
+   */
+  havener: Havener;
   label: Phaser.GameObjects.Text;
   /** The small player-colour badge riding along beside the sprite — see `createAccentBadge`. */
   badge: Phaser.GameObjects.Arc;
   /** The badge's number glyph — always shown, regardless of color-blind mode; see that setting's doc comment. */
   badgeNumber: Phaser.GameObjects.Text;
-  /**
-   * Cosmetic overlays — each one a small `Graphics` object drawn once at
-   * creation (equipped cosmetics never change mid-room, same as `name`) and
-   * repositioned every frame at a fixed offset from `pos`, the exact
-   * mechanism `badge` already uses. Undefined when that slot is empty; see
-   * `characters/cosmeticVisuals.ts` for why the offsets are fixed rather than
-   * tracking the current animation frame's bone transform.
-   */
-  hat?: Phaser.GameObjects.Graphics;
-  accessory?: Phaser.GameObjects.Graphics;
-  outfit?: Phaser.GameObjects.Graphics;
-  pet?: Phaser.GameObjects.Graphics;
   /** The equipped death-effect catalog id, if any — captured for `playDeathTransition` to read at the moment it fires. */
   deathEffectId?: string;
-  /** Which of the six costumes this player is wearing — see `characters/assign.ts`. */
-  anims: CharacterAnimSet;
   disposers: Array<() => void>;
   isLocal: boolean;
   /** Local player only: the client-side predicted position. */
@@ -324,9 +331,6 @@ export class GameScene extends Phaser.Scene {
   private readonly repairMarkers = new Map<CriticalRepairPointId, Phaser.GameObjects.Rectangle>();
   private repairPrompt?: Phaser.GameObjects.Text;
 
-  /** Every archetype's registered animation keys, by archetype id. */
-  private readonly characterAnims = new Map<string, CharacterAnimSet>();
-
   /**
    * The fog visual: a screen-space darkness with a soft-edged hole erased
    * around the local player each frame. Presentation only — what actually
@@ -369,6 +373,23 @@ export class GameScene extends Phaser.Scene {
     this.abilitySlots = data.abilitySlots;
   }
 
+  preload(): void {
+    // The Havener's body art comes from the 7.3 atlas (already the .clean.png
+    // versions of the approved sprites). Its absence is tolerated: on a
+    // FILE_LOAD_ERROR the Havener falls back to a full placeholder composite,
+    // so a checkout that hasn't run `npm run atlas` still renders and plays —
+    // this task is architecture-first, and the structure must not depend on
+    // the art being present.
+    const page = ATLAS_PAGES[0];
+    const json = page.replace(/\.png$/, ".json");
+    this.load.atlas(HAVENER_ATLAS_KEY, `/${ATLAS_DIR}/${page}`, `/${ATLAS_DIR}/${json}`);
+    this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      if (file.key === HAVENER_ATLAS_KEY) {
+        console.warn("[GameScene] Havener atlas not found — using placeholder character. Run `npm run atlas`.");
+      }
+    });
+  }
+
   create(): void {
     this.bindKeys();
     // Live rebind: the settings panel writes straight through `inputEngine`
@@ -402,12 +423,6 @@ export class GameScene extends Phaser.Scene {
       ),
     );
     this.createRoomLabels();
-
-    // Registered before any player sprite exists — `addPlayer` needs an
-    // animation to play the instant an entity is created.
-    for (const set of buildCharacterSpriteSheet(this)) {
-      this.characterAnims.set(set.archetypeId, set);
-    }
 
     // The world is far bigger than the viewport; the camera follows the
     // local player around it once they exist (see `addPlayer`) and is
@@ -499,10 +514,10 @@ export class GameScene extends Phaser.Scene {
     const out: Record<string, { x: number; y: number; local: boolean; visible: boolean }> = {};
     this.entities.forEach((entity, key) => {
       out[key] = {
-        x: entity.sprite.x,
-        y: entity.sprite.y,
+        x: entity.havener.x,
+        y: entity.havener.y,
         local: entity.isLocal,
-        visible: entity.sprite.visible,
+        visible: entity.havener.visible,
       };
     });
     return out;
@@ -739,14 +754,12 @@ export class GameScene extends Phaser.Scene {
           entity.buffer = entity.buffer.slice(-1);
         }
         entity.fogVisible = fresh;
-        entity.sprite.setVisible(fresh);
+        // The composite (body + every attached cosmetic) is one container, so
+        // one visibility toggle covers them all — no per-cosmetic bookkeeping.
+        entity.havener.setVisible(fresh);
         entity.badge.setVisible(fresh);
         entity.badgeNumber.setVisible(fresh);
         entity.label.setVisible(fresh);
-        entity.hat?.setVisible(fresh);
-        entity.accessory?.setVisible(fresh);
-        entity.outfit?.setVisible(fresh);
-        entity.pet?.setVisible(fresh);
         if (!fresh) {
           // Leaving fog is exactly leaving earshot too — same principle as
           // the position sync itself never sending what's out of range.
@@ -764,19 +777,14 @@ export class GameScene extends Phaser.Scene {
       if (!pos) {
         continue;
       }
-      entity.sprite.setPosition(pos.x, pos.y);
+      // One position drives the whole composite — its feet sit on `pos`
+      // (the container's local origin is the feet anchor), and every cosmetic
+      // rides along as a child. The nameplate/badge stay world-space siblings
+      // (§4.2 keeps the nameplate upright and unmirrored — never a child).
+      entity.havener.setPosition(pos.x, pos.y);
       entity.badge.setPosition(pos.x + BADGE_OFFSET.x, pos.y + BADGE_OFFSET.y);
       entity.badgeNumber.setPosition(pos.x + BADGE_OFFSET.x, pos.y + BADGE_OFFSET.y);
       entity.label.setPosition(pos.x, pos.y - LABEL_OFFSET_Y);
-      // Cosmetic shapes are authored in rig-local space already offset from
-      // the feet (a hat's points already sit up near y=-48, a pet's out near
-      // x=-20) — see `cosmeticVisuals.ts` — so positioning the overlay at
-      // `pos` directly, with no further offset, reproduces exactly the same
-      // placement the baked atlas would have if these were archetype props.
-      entity.hat?.setPosition(pos.x, pos.y);
-      entity.accessory?.setPosition(pos.x, pos.y);
-      entity.outfit?.setPosition(pos.x, pos.y);
-      entity.pet?.setPosition(pos.x, pos.y);
       // Read before `updateCharacterAnimation` overwrites `entity.lastPos`
       // to `pos` at its end.
       this.updateFootstepAudio(id, entity, pos, localPos);
@@ -856,22 +864,25 @@ export class GameScene extends Phaser.Scene {
     entity.lastPos = pos;
 
     if (Math.abs(dx) > MOVEMENT_EPSILON) {
-      entity.sprite.setFlipX(dx < 0);
+      // §4.5: two-direction facing, the side art mirrored. Only a real
+      // horizontal step flips it, so vertical-only movement holds the last
+      // facing rather than snapping to a default.
+      entity.havener.setFacing(dx < 0 ? "left" : "right");
     }
 
     if (entity.deathPlaying) {
       return;
     }
 
-    const key = this.isDeadPlayer(id)
-      ? entity.anims.ghost
+    const state: HavenerState = this.isDeadPlayer(id)
+      ? "ghost"
       : id === this.room.sessionId && this.taskModalOpen
-        ? entity.anims.task
+        ? "task"
         : Math.hypot(dx, dy) > MOVEMENT_EPSILON
-          ? entity.anims.walk
-          : entity.anims.idle;
+          ? "walk"
+          : "idle";
 
-    entity.sprite.play(key, true);
+    entity.havener.playState(state);
   }
 
   /** Interpolate a remote player between the two snapshots straddling renderTime. */
@@ -904,22 +915,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // The costume is derived from the player's already-public `color`, not
-    // assigned by the server — see `characters/assign.ts` for why that
-    // matters (no new network field, and archetype can never correlate
-    // with the one thing that actually is secret).
-    const archetype = archetypeForColor(player.color);
-    const anims = this.characterAnims.get(archetype.id);
-    if (!anims) {
-      // The sheet is built synchronously in `create()` before any player
-      // can exist, so this only fires if that ordering is ever broken.
-      throw new Error(`No animations registered for archetype "${archetype.id}"`);
-    }
-
-    const sprite = this.add
-      .sprite(player.x, player.y, "characters")
-      .setOrigin(CHARACTER_ORIGIN_X, CHARACTER_ORIGIN_Y);
-    sprite.play(anims.idle);
+    // §4.1: one identical Havener for everyone. Identity is the lantern's
+    // colour (§3.5), derived from the player's already-public `color` — no new
+    // network field, and it can never correlate with the one thing that is
+    // actually secret (their role). See `playerLantern.ts` for the §3.5 debt
+    // note on why that colour is not yet a unique per-player identity.
+    const havener = new Havener(this, player.x, player.y, lanternHexForColor(player.color));
 
     const badge = this.add.circle(
       player.x + BADGE_OFFSET.x,
@@ -958,11 +959,10 @@ export class GameScene extends Phaser.Scene {
 
     const isLocal = key === this.room.sessionId;
     const entity: PlayerEntity = {
-      sprite,
+      havener,
       label,
       badge,
       badgeNumber,
-      anims,
       disposers: [],
       isLocal,
       lastFreshAt: isLocal ? Number.POSITIVE_INFINITY : 0,
@@ -979,12 +979,12 @@ export class GameScene extends Phaser.Scene {
       // The world is bigger than the screen; follow whoever this client is
       // playing as, smoothed rather than pinned so small corrections (like
       // reconciliation snaps) don't visibly jerk the camera.
-      this.cameras.main.startFollow(sprite, true, CAMERA_LERP, CAMERA_LERP);
+      this.cameras.main.startFollow(havener, true, CAMERA_LERP, CAMERA_LERP);
     } else {
       // Hidden until the server actually delivers them: a remote entry can
       // be a stale relic (the fog retracts nothing), so existence in the
       // state map is not proof of presence — a fresh update is.
-      sprite.setVisible(false);
+      havener.setVisible(false);
       badge.setVisible(false);
       badgeNumber.setVisible(false);
       label.setVisible(false);
@@ -1001,13 +1001,13 @@ export class GameScene extends Phaser.Scene {
       player.listen("name", (value) => label.setText(value)),
     );
     entity.disposers.push(
-      // The costume itself is fixed at creation (see above); a colour
-      // change — which never happens today, but the schema allows it —
-      // only ever needs to move the identity badge, not re-derive an
-      // archetype for an already-animating sprite.
+      // A colour change — which never happens today, but the schema allows it
+      // — moves the identity badge AND re-tints the lantern, since §3.5 makes
+      // the lantern the carrier of that identity (`playerLantern.ts`).
       player.listen("color", (value) => {
         badge.setFillStyle(this.parseColor(displayColorFor(value, graphicsEngine.getSettings().colorBlindMode)));
         badgeNumber.setText(String(playerColorIndex(value) + 1));
+        havener.setLanternColor(lanternHexForColor(value));
       }),
     );
 
@@ -1019,24 +1019,16 @@ export class GameScene extends Phaser.Scene {
     // room" case to handle beyond that, since a loadout is fixed for the
     // room's lifetime the same way `name` is.
     entity.disposers.push(
-      player.listen("hatId", (value) =>
-        this.setCosmeticOverlay(entity, "hat", value ? HAT_VISUALS[value] : undefined),
-      ),
+      player.listen("hatId", (value) => this.setHavenerCosmetic(entity, "hat", value)),
     );
     entity.disposers.push(
-      player.listen("accessoryId", (value) =>
-        this.setCosmeticOverlay(entity, "accessory", value ? ACCESSORY_VISUALS[value] : undefined),
-      ),
+      player.listen("accessoryId", (value) => this.setHavenerCosmetic(entity, "accessory", value)),
     );
     entity.disposers.push(
-      player.listen("outfitId", (value) =>
-        this.setCosmeticOverlay(entity, "outfit", value ? OUTFIT_VISUALS[value] : undefined),
-      ),
+      player.listen("outfitId", (value) => this.setHavenerCosmetic(entity, "outfit", value)),
     );
     entity.disposers.push(
-      player.listen("petId", (value) =>
-        this.setCosmeticOverlay(entity, "pet", value ? PET_VISUALS[value] : undefined),
-      ),
+      player.listen("petId", (value) => this.setHavenerCosmetic(entity, "pet", value)),
     );
     // Not an overlay — read at the moment `playDeathTransition` fires, so it
     // only needs capturing, not rendering.
@@ -1058,67 +1050,62 @@ export class GameScene extends Phaser.Scene {
    * place, so this is presentation, not concealment.
    */
   private applyGhostStyle(entity: PlayerEntity, alive: boolean): void {
-    const alpha = alive ? 1 : GHOST_ALPHA;
-    entity.sprite.setAlpha(alpha);
+    // The composite owns its own ghost look (§4.4: translucent, dark lantern)
+    // via its ghost state; here we drive it and handle the two world-space
+    // siblings the container never contains — the badge (hidden for ghosts)
+    // and the nameplate.
     entity.badge.setAlpha(alive ? 1 : 0);
-    entity.label.setAlpha(alpha);
-    entity.hat?.setAlpha(alpha);
-    entity.accessory?.setAlpha(alpha);
-    entity.outfit?.setAlpha(alpha);
-    entity.pet?.setAlpha(alpha);
+    entity.label.setAlpha(alive ? 1 : GHOST_ALPHA);
+    entity.havener.playState(alive ? "idle" : "ghost");
   }
 
   /**
-   * Create (or replace) one cosmetic slot's overlay. A flat-shaded polygon
-   * drawn once — equipped cosmetics never change mid-room — then repositioned
-   * every frame in `render()` at a fixed offset from the player, the same
-   * mechanism the identity badge uses. `undefined` clears the slot, which is
-   * how an empty loadout field (no cosmetic equipped) is represented: nothing
-   * drawn, nothing to reposition.
+   * Attach, swap, or clear one cosmetic slot on the Havener, addressed by its
+   * §4.3 anchor (hat→crown, accessory→face, outfit→chest, pet→feet). Swapping
+   * replaces only that slot; sibling layers and the container are untouched.
+   *
+   * The visual is a placeholder rectangle tinted with the catalog entry's own
+   * accent colour (so a hat swap is visibly a *different* hat) — the existing
+   * `cosmeticVisuals` polygons are authored in the OLD rig's coordinate space
+   * and cannot be reused here at the §4 128-source scale. Real per-anchor
+   * cosmetic art is a swap-in later, exactly like the sliced body layers, with
+   * no change to this attach mechanism.
    */
-  private setCosmeticOverlay(
-    entity: PlayerEntity,
-    slot: "hat" | "accessory" | "outfit" | "pet",
-    shape: Shape | undefined,
-  ): void {
-    entity[slot]?.destroy();
-    if (!shape) {
-      entity[slot] = undefined;
+  private setHavenerCosmetic(entity: PlayerEntity, slot: CosmeticSlot, id: string): void {
+    const anchor = COSMETIC_ANCHOR[slot];
+    if (!id) {
+      entity.havener.detach(anchor);
       return;
     }
-    const g = this.add.graphics();
-    g.fillStyle(shape.fill);
-    g.fillPoints(shape.points, true);
-    g.lineStyle(1.5, shape.stroke ?? PALETTE.ink, 1);
-    g.strokePoints(shape.points, true, true);
-    // Cosmetics can arrive (via `listen`) well after the entity itself, at
-    // which point a remote player may already be fog-hidden — match that
-    // now rather than flashing visible for one frame until `render` next
-    // corrects it.
-    g.setVisible(entity.fogVisible);
-    entity[slot] = g;
+    const size = COSMETIC_PLACEHOLDER_SIZE[slot];
+    const color = COSMETIC_CATALOG[slot][id]?.fill ?? COSMETIC_PLACEHOLDER_FALLBACK;
+    const rect = this.add.rectangle(0, 0, size.w, size.h, color);
+    entity.havener.attach(anchor, rect);
   }
 
   /**
-   * The one-shot fall, played exactly once at the moment this client learns
+   * The one-shot death, played exactly once at the moment this client learns
    * a specific player has just died — see the three call sites in `addBody`
    * / `onPlayerConfirmedDead` / `becomeGhost`. While it plays, the per-frame
-   * animation selector in `render` leaves the sprite alone (see
-   * `entity.deathPlaying`); once Phaser reports the animation complete, it
-   * hands off to the looping ghost-drift animation on its own.
+   * animation selector in `render` leaves the composite alone (see
+   * `entity.deathPlaying`); when the Havener reports the settle done, it hands
+   * off to the looping ghost drift.
+   *
+   * The death here is the minimal placeholder settle: the full §4.4 sequence
+   * — the squash-and-fall and the signature detaching, rolling lantern whose
+   * glow fades out — is the 7.6 task and lives inside `Havener.playDeath`.
    */
   private playDeathTransition(entity: PlayerEntity): void {
     if (entity.deathPlaying) {
       return;
     }
     entity.deathPlaying = true;
-    entity.sprite.play(entity.anims.death);
     if (entity.deathEffectId) {
-      this.spawnDeathEffect(entity.deathEffectId, entity.sprite.x, entity.sprite.y);
+      this.spawnDeathEffect(entity.deathEffectId, entity.havener.x, entity.havener.y);
     }
-    entity.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+    entity.havener.playDeath(() => {
       entity.deathPlaying = false;
-      entity.sprite.play(entity.anims.ghost, true);
+      entity.havener.playState("ghost");
     });
   }
 
@@ -1373,7 +1360,7 @@ export class GameScene extends Phaser.Scene {
       if (!player) {
         continue;
       }
-      const distance = Phaser.Math.Distance.Between(pos.x, pos.y, entity.sprite.x, entity.sprite.y);
+      const distance = Phaser.Math.Distance.Between(pos.x, pos.y, entity.havener.x, entity.havener.y);
       if (distance <= bestDistance) {
         best = { id, name: player.name };
         bestDistance = distance;
@@ -1861,14 +1848,12 @@ export class GameScene extends Phaser.Scene {
     if (entity.hasFootstepVoice) {
       audioEngine.removeFootstepSource(key);
     }
-    entity.sprite.destroy();
+    // Destroying the container tears down every layer and attached cosmetic
+    // with it (and stops its idle tweens — see `Havener.destroy`).
+    entity.havener.destroy();
     entity.badge.destroy();
     entity.badgeNumber.destroy();
     entity.label.destroy();
-    entity.hat?.destroy();
-    entity.accessory?.destroy();
-    entity.outfit?.destroy();
-    entity.pet?.destroy();
     this.entities.delete(key);
   }
 

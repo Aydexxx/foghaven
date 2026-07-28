@@ -718,3 +718,12 @@ Not part of Phase 7, but don't lose them:
   than fake timers. Not worth refactoring mid-Phase-7, but it will get painful.
 - **`--ink-well`** is referenced but never defined, so its fallback always renders. Tracked
   in TOKEN_DEBT.md.
+
+- **MAX_PLAYERS vs lantern colour count.** Server allows up to 15 players; ART_BIBLE §3.5
+  defines exactly 14 lantern colours. A collision at max capacity already exists in the
+  legacy 10-colour system today, independent of Phase 7. Decision needed before 7.7:
+  either cap MAX_PLAYERS to 14 (recommended — trivial change, avoids adding a 15th colour
+  too close to existing ones) or design a 15th lantern colour.
+- **Preview/in-world visual unification.** The character now renders differently in-game
+  (new Havener rig) versus in Inventory/Profile/GameOver previews (old archetype rig).
+  Intentional for now, but needs a unification pass eventually.
