@@ -200,4 +200,12 @@ export const duration = {
   base: 120,
   slow: 300,
   scene: 1200,
+  /**
+   * ART_BIBLE §9: "Task progress bar advances | Never jumps. Always tweens
+   * over 400 ms." A token of its own rather than reusing `slow` because §9
+   * names this number specifically, and because the CSS transition and
+   * `juiceEvents.TASK_PROGRESS_TWEEN_MS` have to be the same value — a bar
+   * whose transition outlasts the effect driving it visibly stutters.
+   */
+  taskProgress: 400,
 } as const;

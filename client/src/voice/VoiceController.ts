@@ -20,10 +20,20 @@ import type { GameState, PlayerState } from "../net/types";
  * The mesh is deliberately dumb about *who* it may connect to — that decision
  * is the server's, delivered as a roster (`VoiceRosterMessage`). This class
  * only ever connects to the session ids the server put in that roster, and the
- * server never puts a peer across the living/dead wall into it. So the wall is
- * never something this code has to enforce or could accidentally break: a dead
- * player is simply never in a living player's roster, and the server refuses to
- * relay signalling to them anyway. See the server's `voicePeersFor`.
+ * server never puts a peer across the living/dead wall into it for a
+ * DISCLOSED death — a dead player whose death is public knowledge is simply
+ * never in a living player's roster, and the server refuses to relay
+ * signalling to them anyway. See the server's `voicePeersFor`.
+ *
+ * The one deliberate exception is a covert kill's undisclosed window: the
+ * victim's id stays in their former living peers' rosters as cover (so a
+ * roster's SHAPE never betrays a kill nobody has found out about yet), and
+ * this class dutifully keeps that connection alive like any other peer. What
+ * actually stops the victim being heard during that window is
+ * `msg.deathMuted` (see `applyRoster`) forcing their own outgoing mic off —
+ * this class does not and cannot special-case "is this peer secretly dead" on
+ * its own, by design; it only ever acts on what the server tells IT to do
+ * with ITS OWN mic.
  *
  * Negotiation uses the "perfect negotiation" pattern so the two ends can both
  * create their side of a connection at once (which is exactly what happens when
@@ -49,6 +59,8 @@ export interface VoiceUiState {
   selfMuted: boolean;
   /** The Silencer gagged this client for the meeting — mic forced off. */
   selfSilenced: boolean;
+  /** This client died and the kill is still undisclosed — mic forced off. See `VoiceRosterMessage.deathMuted`. */
+  deathMuted: boolean;
   pushToTalk: boolean;
   /** Whether the mic is actually transmitting right now (open, unmuted, PTT held). */
   transmitting: boolean;
@@ -93,6 +105,15 @@ export class VoiceController {
   private mode: VoiceMode = VOICE_MODE.PROXIMITY;
   private channel: VoiceChannel = VOICE_CHANNEL.LIVING;
   private selfSilenced = false;
+  /**
+   * Server directive: force the mic off because this client died and the
+   * kill is still undisclosed — see `VoiceRosterMessage.deathMuted`'s own
+   * doc. Distinct from `selfMuted` (the player's own manual toggle, below)
+   * and from `selfSilenced` (the Silencer ability): this one exists so a
+   * covertly killed player's roster entry can keep looking exactly like a
+   * living peer's without that player actually being audible.
+   */
+  private deathMuted = false;
 
   private selfMuted = false;
   private pushToTalk = false;
@@ -246,6 +267,7 @@ export class VoiceController {
     this.mode = msg.mode;
     this.channel = msg.channel;
     this.selfSilenced = msg.selfSilenced;
+    this.deathMuted = msg.deathMuted;
     this.lastRosterPeers = msg.peers;
     this.applyOutgoingState();
     this.reconcile(msg.peers);
@@ -483,12 +505,13 @@ export class VoiceController {
     }
   }
 
-  /** Whether the mic is currently sending audio: started, not muted, not gagged, and (in PTT) held. */
+  /** Whether the mic is currently sending audio: started, not muted, not gagged, not (secretly) dead, and (in PTT) held. */
   private isTransmitting(): boolean {
     return (
       this.started &&
       !this.selfMuted &&
       !this.selfSilenced &&
+      !this.deathMuted &&
       (!this.pushToTalk || this.pttActive)
     );
   }
@@ -512,6 +535,7 @@ export class VoiceController {
       mode: this.mode,
       selfMuted: this.selfMuted,
       selfSilenced: this.selfSilenced,
+      deathMuted: this.deathMuted,
       pushToTalk: this.pushToTalk,
       transmitting: this.isTransmitting(),
       micLevel: this.micLevel,

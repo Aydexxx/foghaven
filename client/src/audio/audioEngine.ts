@@ -2,6 +2,7 @@ import type { RoomSlug } from "@foghaven/shared";
 import { RoomAmbience } from "./synth/ambience";
 import { FootstepVoice } from "./synth/footstep";
 import {
+  playBellTollStinger,
   playBodyFoundStinger,
   playEjectionStinger,
   playKillStinger,
@@ -25,6 +26,7 @@ export type StingerKind =
   | "meetingStart"
   | "sabotageAlarm"
   | "ejection"
+  | "bellToll"
   | "win"
   | "loss"
   | "tunnel";
@@ -35,6 +37,7 @@ const STINGERS: Record<StingerKind, typeof playKillStinger> = {
   meetingStart: playMeetingStartStinger,
   sabotageAlarm: playSabotageAlarmStinger,
   ejection: playEjectionStinger,
+  bellToll: playBellTollStinger,
   win: playWinStinger,
   loss: playLossStinger,
   tunnel: playTunnelStinger,

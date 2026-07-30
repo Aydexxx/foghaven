@@ -161,6 +161,15 @@ export class Body extends Schema {
 }
 
 /**
+ * The `bodies` map's permanent padding entry (see the field's own doc for
+ * why it exists). Never a real session id — Colyseus session ids come from
+ * `generateId()` and never look like this — so it can never collide with an
+ * actual victim's key, and `GameRoom.handleReportBody` also rejects it by
+ * name as defense in depth on top of the filter below always hiding it.
+ */
+export const PADDING_BODY_ID = "__pad__";
+
+/**
  * Authoritative room state. `phase` drives the overall game flow and starts
  * in the lobby; `hostId` is the session id of the current host (the first
  * player to join, reassigned if they leave).
@@ -238,13 +247,32 @@ export class GameState extends Schema {
    * see every body; the living only those within their vision. (A body,
    * once seen, stays truthful in a client's stale copy — bodies never move
    * — so nothing more needs retracting when the viewer walks away.)
+   *
+   * Permanently contains one extra entry keyed `PADDING_BODY_ID`, invisible
+   * to every client including ghosts (the filter's first check, below) —
+   * seeded once in `GameRoom.onCreate` and never removed. This exists purely
+   * to close a measured packet-size side channel: a distant, fully-filtered
+   * client's per-tick patch is a few bytes LARGER the instant this map holds
+   * at least one entry than while it is empty, regardless of how many real
+   * bodies exist past that point (confirmed: 0 real bodies -> baseline, 1 or
+   * 2 real bodies -> same +2B, identical either way) — so with the map
+   * permanently non-empty from before any player can possibly die, that step
+   * has already happened for everyone before the first kill, and a real
+   * body's arrival changes nothing more a size-watching observer could key
+   * on. `GameRoom.clearRealBodies` is what lets a meeting clear every real
+   * body without ever touching this one — never call `bodies.clear()`
+   * directly, or the very step this exists to hide happens again on the next
+   * kill.
    */
   @filterChildren(function (
     this: GameState,
     client: { sessionId: string },
-    _key: string,
+    key: string,
     value: Body,
   ) {
+    if (key === PADDING_BODY_ID) {
+      return false;
+    }
     const viewer = this.players.get(client.sessionId);
     if (!viewer) {
       return true;
@@ -304,10 +332,19 @@ export class GameState extends Schema {
    * `players` map entirely, so looking their name up by id would come back
    * empty for everyone but the ghosts. Copying the name in at report time
    * sidesteps that. `meetingBodyId` is empty for an emergency meeting.
+   *
+   * `meetingBodyRoom` is the same idea applied to the body's location — the
+   * §10.3 meeting-call cutscene's title names the room a reported body was
+   * found in, and `startMeeting` clears the `bodies` map on the same tick it
+   * sets this, so there is no body left to read a position back off of by
+   * the time a client would want it. Computed once at report time via
+   * `roomSlugAt`, the same helper `killPlayer`'s `deathLocations` entry uses.
+   * Empty for an emergency meeting, same as `meetingBodyId`.
    */
   @type("string") meetingReporterId = "";
   @type("string") meetingBodyId = "";
   @type("string") meetingBodyName = "";
+  @type("string") meetingBodyRoom = "";
   @type("boolean") meetingIsEmergency = false;
 
   /** Which sub-stage of the meeting is running; empty outside a meeting. */

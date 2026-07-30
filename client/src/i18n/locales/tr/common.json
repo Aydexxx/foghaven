@@ -95,6 +95,9 @@
     "hint": "Düşük donanımlı veya mobil cihazlarda daha iyi performans için kapatın.",
     "colorBlindMode": "Renk körlüğü paleti",
     "colorBlindHint": "Renk körlüğüne duyarlı bir oyuncu paleti kullanır. Bu ayardan bağımsız olarak her oyuncu rozetinde zaten bir numara gösterilir.",
+    "reducedMotion": "Azaltılmış hareket",
+    "motionSystem": "Sistemle aynı ({{resolved}})",
+    "reducedMotionHint": "Ekran sarsıntısını, parlamaları ve ölçek efektlerini kaldırır. Zamanlama değişmez, bu yüzden oyunda avantaj veya dezavantaj sağlamaz.",
     "closeButton": "Kapat"
   },
   "keybindingSettings": {
@@ -431,9 +434,16 @@
     "voting": "Şimdi oy ver",
     "results": "Sonuçlar",
     "nobodyEjected": "Kimse atılmadı.",
-    "ejectedPlain": "{{name}} atıldı.",
-    "ejectedWasStranger": "{{name}} atıldı. Bir Yabancı'ymış.",
-    "ejectedWasNotStranger": "{{name}} atıldı. Yabancı değilmiş."
+    "call": {
+      "bodyTitle": "{{room}} bölgesinde bir ceset bulundu.",
+      "emergencyTitle": "{{name}} bir toplantı çağırdı."
+    },
+    "ejection": {
+      "castIntoFog": "{{name}} sise sürüldü.",
+      "wasStranger": "Bir Yabancı'ymış.",
+      "wasNotStranger": "Yabancı değilmiş.",
+      "skipHint": "Geçmek için herhangi bir tuşa basın"
+    }
   },
   "gameOver": {
     "intro": "Oyun Bitti",

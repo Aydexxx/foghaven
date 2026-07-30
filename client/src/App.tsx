@@ -26,6 +26,8 @@ import { readRoomSettings } from "./net/settings";
 import { connectHub, type FriendInviteMessage } from "./net/hub";
 import { audioEngine } from "./audio/audioEngine";
 import { useGameAudio } from "./audio/useGameAudio";
+import { useGameJuice } from "./juice/useGameJuice";
+import { useButtonJuice } from "./juice/useButtonJuice";
 import { AuthScreen } from "./ui/AuthScreen";
 import { MainMenu } from "./ui/MainMenu";
 import { LobbyRoom } from "./ui/LobbyRoom";
@@ -240,6 +242,14 @@ function App() {
   // place they live, independent of whichever screen the phase currently
   // has on display.
   useGameAudio(room, assignment?.role ?? null);
+
+  // Room-level §9 juice, mounted alongside the audio for the same reason —
+  // a kill has to land for the victim, who is not looking at the world.
+  useGameJuice(room);
+
+  // §9's "any button press" row. Room-independent — it covers the menus and
+  // the auth screen too, so it sits outside the `room` guard above.
+  useButtonJuice();
 
   // Proximity voice — lives at the app root so the WebRTC mesh survives the
   // game↔meeting screen swaps below rather than being torn down and rebuilt

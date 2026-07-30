@@ -43,6 +43,14 @@ import type { AnchorName } from "./characters/anchors";
 import { ATLAS_DIR, ATLAS_PAGES } from "../assets/atlasManifest";
 import { audioEngine } from "../audio/audioEngine";
 import { PhaseAtmosphere } from "./atmosphere/PhaseAtmosphere";
+import { playKillCutscene, type KillCutsceneHandle } from "./cutscenes/killCutscene";
+import {
+  juice,
+  VIGNETTE_BASE_INTENSITY,
+  VIGNETTE_CRITICAL_INTENSITY,
+} from "../juice/JuiceDirector";
+import { PhaserJuiceStage } from "../juice/PhaserJuiceStage";
+import * as juiceEvents from "../juice/juiceEvents";
 import { inputEngine } from "../input/inputEngine";
 import { graphicsEngine } from "../graphics/graphicsEngine";
 import { displayColorFor, playerColorIndex } from "../graphics/colorBlindPalette";
@@ -365,6 +373,11 @@ export class GameScene extends Phaser.Scene {
   /** The local role's PLAYING-phase abilities — see `GameSceneData`. */
   private abilitySlots: AbilitySlotInfo[] = [];
 
+  /** The §10.1 kill cutscene currently playing, if any — cancelled on teardown. */
+  private killCutscene?: KillCutsceneHandle;
+  /** How many splatters this round has stamped, so repeats vary their shape. */
+  private killStamps = 0;
+
   constructor() {
     super("game");
   }
@@ -413,8 +426,37 @@ export class GameScene extends Phaser.Scene {
     // (colour grade, light glows, particles) use explicit depths and don't
     // care where in this sequence they're built.
     this.atmosphere = new PhaseAtmosphere(this);
+    // The juice layer's world backend. Bound for exactly this scene's
+    // lifetime — `teardown` unbinds and resets it, so a hit-stop or vignette
+    // requested by a round that has ended can never bleed into the next one.
+    this.disposers.push(juice.bindStage(new PhaserJuiceStage(this)));
+    juiceEvents.enterWorld();
+
+    // §10.1's kill cutscene. Bound to exactly the two private messages the
+    // server already sends — `killConfirmed` reaches only the actor, `killed`
+    // only the victim (see `abilities/kill.ts` and `GameRoom.killPlayer`).
+    //
+    // Deliberately NOT driven off observed state. Playing this when a body
+    // appears or when someone's `alive` flips would fire it for bystanders and
+    // convert a two-person cutscene into a public announcement of the kill.
+    // The secrecy is a property of who receives a message, so the trigger has
+    // to be the message itself.
+    // Both parties play it at the LOCAL player's own position. Exact for the
+    // victim, who died where they stand; for the killer it is within
+    // `KILL_RANGE` of the body by definition, since the server refused the
+    // ability otherwise. Using the local position for both also means neither
+    // client needs the other's coordinates delivered to it — the cutscene adds
+    // no positional data to the kill window at all.
+    const playAtLocalPosition = () => {
+      this.startKillCutscene(this.entities.get(this.room.sessionId)?.predicted);
+    };
+    this.disposers.push(this.room.onMessage("killed", playAtLocalPosition));
+    this.disposers.push(this.room.onMessage("killConfirmed", playAtLocalPosition));
     this.disposers.push(
-      this.room.state.listen("sabotageActive", (active) => this.atmosphere.setSabotageActive(active)),
+      this.room.state.listen("sabotageActive", (active) => {
+        this.atmosphere.setSabotageActive(active);
+        juiceEvents.setSabotageActive(active);
+      }),
     );
     // The Stranger's tunnel is "never fully invisible" — a sound broadcasts
     // to every client (not fog-filtered) at both fixed endpoints; each
@@ -532,6 +574,15 @@ export class GameScene extends Phaser.Scene {
 
     // Freeze movement and task interaction while a mini-game modal is open —
     // the player is looking at a React overlay, not the world.
+    //
+    // NOTE the ordering with the hit-stop gate below: this block is
+    // deliberately OUTSIDE it. A hit-stop freezes what we draw and nothing
+    // about what we simulate or send — input keeps being sampled on the same
+    // fixed timestep, commands keep flowing with unbroken sequence numbers,
+    // and prediction keeps advancing, so the server never sees a gap and
+    // reconciliation has nothing to correct when the freeze lifts. Moving
+    // this inside the gate would be the single easiest way to turn a purely
+    // cosmetic effect into a desync.
     if (!this.taskModalOpen) {
       // Sample input and advance prediction on a fixed timestep, independent
       // of frame rate, so a command always represents exactly SIM_DT of
@@ -548,9 +599,21 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    this.render();
-    this.renderFog();
-    this.atmosphere.update(delta);
+    // The visual half. `isFrozen()` must be called every frame regardless of
+    // the outcome — it is also what drives the stage's freeze/unfreeze
+    // transitions.
+    //
+    // Skipping these three is safe precisely because none of them holds
+    // state that advances on its own: `render` interpolates against
+    // `performance.now()` every time it runs (never against an accumulated
+    // visual clock), so the first frame after a freeze draws everyone where
+    // they actually are now rather than resuming from where the freeze
+    // started. Nothing is owed and nothing has to be caught up.
+    if (!juice.isFrozen()) {
+      this.render();
+      this.renderFog();
+      this.atmosphere.update(delta);
+    }
 
     if (this.taskModalOpen) {
       this.interactPrompt?.setVisible(false);
@@ -1226,7 +1289,7 @@ export class GameScene extends Phaser.Scene {
         this.playDeathTransition(entity);
       }
       audioEngine.playStinger("bodyFound");
-      this.atmosphere.shakeBodyFound();
+      this.bodyDiscoveredJuice();
       return;
     }
 
@@ -1240,7 +1303,35 @@ export class GameScene extends Phaser.Scene {
     // handling); this is the cue for everyone else this body just became
     // visible to.
     audioEngine.playStinger("bodyFound");
-    this.atmosphere.shakeBodyFound();
+    this.bodyDiscoveredJuice();
+  }
+
+  /**
+   * §9's body-discovered beat. The standing vignette level is passed through
+   * rather than defaulted, so a body found *during* a sabotage reopens to the
+   * critical 55% and not to the 25% baseline — otherwise discovering a body
+   * would silently cancel the visual signal that a sabotage is still running.
+   */
+  /**
+   * Starts §10.1's five-beat kill cutscene at a world position, replacing any
+   * still in flight. A second kill landing inside 1.4s of the first is rare
+   * but not impossible (two strangers), and two overlapping timelines would
+   * fight over the vignette and leave it stuck closed.
+   */
+  private startKillCutscene(at: { x: number; y: number } | undefined): void {
+    if (!at) {
+      return;
+    }
+    this.killCutscene?.cancel();
+    this.killCutscene = playKillCutscene(this, { x: at.x, y: at.y }, this.killStamps++);
+  }
+
+  private bodyDiscoveredJuice(): void {
+    juiceEvents.bodyDiscovered(
+      this.room.state.sabotageActive
+        ? VIGNETTE_CRITICAL_INTENSITY
+        : VIGNETTE_BASE_INTENSITY,
+    );
   }
 
   /**
@@ -1919,6 +2010,15 @@ export class GameScene extends Phaser.Scene {
       dispose();
     }
     this.disposers.length = 0;
+    // Before the juice reset below, so a cutscene mid-flight can't re-close
+    // the vignette on a timer that outlives the scene.
+    this.killCutscene?.cancel();
+    this.killCutscene = undefined;
+    // After the stage is unbound (a disposer above), so the reset can't be
+    // handed to a stage belonging to a scene that is going away. Clears any
+    // in-flight hit-stop, the vignette and the sabotage pulse — all three
+    // would otherwise still be on screen behind the meeting or round-end UI.
+    juiceEvents.leaveWorld();
     for (const key of [...this.entities.keys()]) {
       this.removePlayer(key);
     }

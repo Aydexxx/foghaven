@@ -354,6 +354,12 @@ Feel is 30% art and 70% timing. Budget real hours for this section — it is the
 
 Persistent vignette at 25%, rising to 55% during critical sabotage.
 
+**Canonical source:** every row above is implemented in `client/src/juice/juiceEvents.ts`, built on the five primitives in `client/src/juice/JuiceDirector.ts` (`shake`, `hitStop`, `flash`, `punch`, `vignette`). The numbers in this table live there as named constants — if the two disagree, the code wins and this table is stale. Same rule as §3.5 and §4.6.
+
+**Nothing may bypass the director.** An ad-hoc `cameras.main.shake()` or a one-off tween in gameplay code is a bug, not a shortcut: effects that skip the director also skip the reduced-motion setting, which is applied centrally rather than at each call site. This is enforced by `client/src/juice/noAdHocEffects.test.ts`, not just by convention.
+
+**Reduced motion** scales displacement amplitudes to zero (shake, punch, flash) while preserving every duration exactly. Two effects are deliberately *not* suppressed, because both carry game state rather than motion and removing them would change what a player knows and when: `hitStop` (a duration, and already a reduction in motion) and the vignette level (the standing signal that a sabotage is running). A player with reduced motion must never gain or lose information or timing.
+
 ---
 
 ## 10. Signature Cutscenes

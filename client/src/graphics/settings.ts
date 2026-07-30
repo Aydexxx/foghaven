@@ -28,15 +28,70 @@ export interface GraphicsSettings {
    * same character archetype indistinguishable by hue alone.
    */
   colorBlindMode: boolean;
+  /**
+   * Reduced motion, as a preference rather than a plain boolean: `"system"`
+   * (the default) follows the OS `prefers-reduced-motion` media query, and
+   * `"on"`/`"off"` are explicit player overrides of it.
+   *
+   * Tri-state rather than a boolean because "the player has never touched
+   * this" and "the player deliberately turned it off" have to stay
+   * distinguishable — collapsing them would mean either ignoring the OS
+   * setting or making it impossible to opt back into motion on a machine
+   * that requests reduced motion globally.
+   *
+   * This scales effect AMPLITUDES only, never durations — see
+   * `JuiceDirector` for why preserving durations is a fairness requirement
+   * and not just a stylistic one.
+   */
+  reducedMotion: MotionPreference;
 }
+
+export type MotionPreference = "system" | "on" | "off";
+
+const MOTION_PREFERENCES: readonly MotionPreference[] = ["system", "on", "off"];
 
 export const DEFAULT_GRAPHICS_SETTINGS: GraphicsSettings = {
   effectsEnabled: true,
   colorBlindMode: false,
+  reducedMotion: "system",
 };
 
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function motionPreference(value: unknown, fallback: MotionPreference): MotionPreference {
+  return MOTION_PREFERENCES.includes(value as MotionPreference)
+    ? (value as MotionPreference)
+    : fallback;
+}
+
+/**
+ * Whether the OS currently asks for reduced motion. Guarded for non-browser
+ * environments (tests, SSR) and for the older browsers where `matchMedia`
+ * exists but the query is unsupported — both fall back to "no", which is the
+ * pre-existing behaviour rather than a silent global disabling of motion.
+ */
+export function systemPrefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** Resolves the tri-state preference against the OS query into a plain yes/no. */
+export function resolveReducedMotion(preference: MotionPreference): boolean {
+  if (preference === "on") {
+    return true;
+  }
+  if (preference === "off") {
+    return false;
+  }
+  return systemPrefersReducedMotion();
 }
 
 /**
@@ -62,6 +117,7 @@ export function loadGraphicsSettings(): GraphicsSettings {
     return {
       effectsEnabled: bool(parsed.effectsEnabled, firstRunDefaults.effectsEnabled),
       colorBlindMode: bool(parsed.colorBlindMode, firstRunDefaults.colorBlindMode),
+      reducedMotion: motionPreference(parsed.reducedMotion, firstRunDefaults.reducedMotion),
     };
   } catch {
     return { ...firstRunDefaults };

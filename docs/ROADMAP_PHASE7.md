@@ -21,10 +21,10 @@ Remember: `.env` is gitignored, so it must be created by hand on each machine.
 | 7.5 | Character rig architecture | B | Done — `f89213f` |
 | 7.6 | Animation state machine | B | Done — `5d4fd2b` |
 | 7.7 | Lantern & per-player light | B | Done — `b7dd8e4` |
-| 7.8 | Juice layer | C | |
-| 7.9 | Kill cutscene | C | |
-| 7.10 | Ejection cutscene | C | |
-| 7.11 | Meeting call cutscene | C | |
+| 7.8 | Juice layer | C | Done — pending commit |
+| 7.9 | Kill cutscene | C | Done — pending commit. Audit found 2 death-related leaks (voice roster shape, packet size); both fixed — pending commit |
+| 7.10 | Ejection cutscene | C | Done — pending commit |
+| 7.11 | Meeting call cutscene | C | Done — pending commit |
 | — | **Playtest checkpoint** | — | play a real round with friends |
 | 7.12 | Component kit | D | |
 | 7.13 | Lobby as a playable room | D | |

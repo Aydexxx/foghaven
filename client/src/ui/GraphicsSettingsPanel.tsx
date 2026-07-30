@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useGraphicsSettings } from "../graphics/useGraphicsSettings";
+import type { MotionPreference } from "../graphics/graphicsEngine";
 
 interface GraphicsSettingsPanelProps {
   onClose: () => void;
@@ -14,7 +15,8 @@ interface GraphicsSettingsPanelProps {
  */
 export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
   const { t } = useTranslation();
-  const { settings, setEffectsEnabled, setColorBlindMode } = useGraphicsSettings();
+  const { settings, reducedMotionActive, setEffectsEnabled, setColorBlindMode, setReducedMotion } =
+    useGraphicsSettings();
 
   return (
     <div className="audio-settings-overlay" role="dialog" aria-label={t("graphicsSettings.heading")}>
@@ -54,6 +56,30 @@ export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
           </button>
         </div>
         <p className="hint">{t("graphicsSettings.colorBlindHint")}</p>
+
+        <div className="audio-settings-row">
+          <label className="audio-settings-label" htmlFor="graphics-reduced-motion">
+            {t("graphicsSettings.reducedMotion")}
+          </label>
+          <span />
+          <select
+            id="graphics-reduced-motion"
+            className="audio-settings-select"
+            value={settings.reducedMotion}
+            onChange={(event) => setReducedMotion(event.target.value as MotionPreference)}
+          >
+            <option value="system">
+              {t("graphicsSettings.motionSystem", {
+                resolved: reducedMotionActive
+                  ? t("graphicsSettings.on")
+                  : t("graphicsSettings.off"),
+              })}
+            </option>
+            <option value="on">{t("graphicsSettings.on")}</option>
+            <option value="off">{t("graphicsSettings.off")}</option>
+          </select>
+        </div>
+        <p className="hint">{t("graphicsSettings.reducedMotionHint")}</p>
 
         <button type="button" className="secondary" onClick={onClose}>
           {t("graphicsSettings.closeButton")}

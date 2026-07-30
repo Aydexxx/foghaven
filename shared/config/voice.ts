@@ -10,12 +10,28 @@
  * SFU), signalled over the existing Colyseus room. Two properties matter and
  * both are enforced server-side, never in the renderer:
  *
- *   1. The dead/living wall. A living client and a dead client must never share
- *      a peer connection — not muted, not silent, *absent*. The server refuses
- *      to relay a signalling message across that boundary, so the connection is
- *      never negotiated. This mirrors exactly how `GameState.players` and the
- *      chat channels keep the two populations apart: the data stops at the
- *      server, it is not hidden on the client.
+ *   1. The dead/living wall, for a DISCLOSED death — one every other client
+ *      already knows about (a body's been reported, a meeting's been called).
+ *      A living client and a disclosed-dead client must never share a peer
+ *      connection — not muted, not silent, *absent*. The server refuses to
+ *      relay a signalling message across that boundary, so the connection is
+ *      never negotiated.
+ *
+ *      A freshly, COVERTLY killed player is the one deliberate, temporary
+ *      exception: they stay in their former living peers' rosters — not
+ *      absent — until the kill is disclosed, so a distant client can't infer
+ *      a death from its roster shrinking by one (see `GameRoom.voicePeersFor`
+ *      and its `undisclosedKills` set). What actually stops them talking in
+ *      that window is `VoiceRosterMessage.deathMuted`, a private directive to
+ *      their own client to kill their own outgoing mic — not the wall. Once
+ *      disclosed, the roster catches up to reality and the ordinary wall
+ *      above applies again, absolute.
+ *
+ *      Either way this mirrors how `GameState.players` and the chat channels
+ *      keep the two populations apart: the data (or, during the undisclosed
+ *      window, the ability to transmit) stops at the server's decision, never
+ *      something the client is trusted to enforce on itself except by
+ *      following a direct instruction.
  *
  *   2. Proximity vs. equal volume is a *mode* the server names per phase
  *      (proximity while playing, equal in a meeting); the client applies the
@@ -113,8 +129,11 @@ export interface VoiceConfigMessage {
  * anyone new gets a connection, anyone gone gets torn down.
  *
  * `peers` already has the dead/living wall applied — a living client's roster
- * never contains a dead session id, and vice versa — so the client never has to
- * (and never gets to) make that call itself.
+ * never contains a *disclosed*-dead session id, and vice versa — so the client
+ * never has to (and never gets to) make that call itself. The one deliberate
+ * exception is a covert kill's undisclosed window, where the victim's id stays
+ * in their former living peers' rosters as cover; `deathMuted` is what
+ * actually silences them for that window, not an absence from `peers`.
  */
 export interface VoiceRosterMessage {
   /** Session ids this client is allowed to connect to, wall already applied. */
@@ -131,6 +150,31 @@ export interface VoiceRosterMessage {
    * in chat, where a gagged player simply says nothing.
    */
   selfSilenced: boolean;
+  /**
+   * Whether the server is force-muting this client's outgoing mic because
+   * they died and the death has not been disclosed yet (no body reported, no
+   * meeting called). The client disables its own outgoing mic while true, the
+   * same mechanism `selfSilenced` already uses.
+   *
+   * This exists because of a deliberate, narrow trade-off: `peers` keeps
+   * listing a covertly-killed player's former living peers for a while after
+   * death (see `GameRoom.voicePeersFor` and its `undisclosedKills` set) so a
+   * distant observer can't infer a kill from their roster shrinking by one.
+   * But an unmuted dead player left in that state could keep TALKING to the
+   * living they're still nominally connected to — which is a much bigger
+   * leak than the one being closed. `deathMuted` is what prevents that: the
+   * roster entry survives for cover, but the mic is dead from the instant
+   * `alive` flips, full stop, regardless of disclosure.
+   *
+   * Deliberately delivered only to the muted client itself, same reasoning as
+   * `selfSilenced` — nothing here is a signal to anyone watching a roster.
+   * Only ever true during the undisclosed window; once a meeting starts, this
+   * client is either genuinely in the (real) ghost roster or, once ejected/
+   * revealed, simply gone from a living roster the ordinary way — either way
+   * `deathMuted` returns to false and a dead player's normal ability to talk
+   * to OTHER dead players in the graveyard channel is untouched.
+   */
+  deathMuted: boolean;
 }
 
 /**

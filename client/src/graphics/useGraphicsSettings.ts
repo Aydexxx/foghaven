@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
-import { graphicsEngine, type GraphicsSettings } from "./graphicsEngine";
+import { graphicsEngine, type GraphicsSettings, type MotionPreference } from "./graphicsEngine";
 
 /**
  * Reactive access to the graphics engine's settings, for the settings panel.
@@ -10,8 +10,11 @@ import { graphicsEngine, type GraphicsSettings } from "./graphicsEngine";
  */
 export function useGraphicsSettings(): {
   settings: GraphicsSettings;
+  /** The tri-state preference already resolved against the OS query. */
+  reducedMotionActive: boolean;
   setEffectsEnabled: (enabled: boolean) => void;
   setColorBlindMode: (enabled: boolean) => void;
+  setReducedMotion: (preference: MotionPreference) => void;
 } {
   const settings = useSyncExternalStore(
     useCallback((onChange) => graphicsEngine.subscribe(onChange), []),
@@ -20,12 +23,17 @@ export function useGraphicsSettings(): {
 
   return {
     settings,
+    reducedMotionActive: graphicsEngine.prefersReducedMotion(),
     setEffectsEnabled: useCallback(
       (enabled: boolean) => graphicsEngine.setEffectsEnabled(enabled),
       [],
     ),
     setColorBlindMode: useCallback(
       (enabled: boolean) => graphicsEngine.setColorBlindMode(enabled),
+      [],
+    ),
+    setReducedMotion: useCallback(
+      (preference: MotionPreference) => graphicsEngine.setReducedMotion(preference),
       [],
     ),
   };

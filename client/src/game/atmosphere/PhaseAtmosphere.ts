@@ -2,14 +2,14 @@ import Phaser from "phaser";
 import { TILE_SIZE } from "@foghaven/shared";
 import { graphicsEngine } from "../../graphics/graphicsEngine";
 import { LIGHT_SOURCES } from "./lightSources";
-import { duration } from "../../theme/tokens";
 
 /**
  * Everything "finish the atmosphere" asked for that lives inside the Phaser
  * world: the per-phase colour grade (cold blue while playing, a pulsing red
  * alarm during a sabotage), static light sources bleeding into the fog,
- * ambient particles (drifting fog wisps, light rain), shimmering puddles,
- * and the two subtle screen-shake beats.
+ * ambient particles (drifting fog wisps, light rain) and shimmering puddles.
+ *
+ * Screen shake is NOT here — see the "Screen shake" section below.
  *
  * Kept as its own class rather than folded into `GameScene` so that file
  * doesn't grow past what it already is — `GameScene` only ever calls into
@@ -73,9 +73,15 @@ const PUDDLE_TILES: Array<[number, number]> = [
 ];
 
 // --- Screen shake ---------------------------------------------------------
-
-const BODY_FOUND_SHAKE = { duration: duration.base, intensity: 0.0015 };
-const SABOTAGE_SHAKE = { duration: 220, intensity: 0.0025 };
+//
+// Deliberately empty since 7.8. This class used to call
+// `scene.cameras.main.shake()` directly for the body-found and sabotage
+// beats; both now go through `JuiceDirector` (ART_BIBLE §9), which is the one
+// place allowed to touch the camera. Routing them back through here would
+// reintroduce exactly the "two systems fighting over one camera" problem the
+// director exists to prevent — and would silently escape the reduced-motion
+// setting, which is applied inside the director rather than at each call
+// site.
 
 function buildGlowTexture(scene: Phaser.Scene): void {
   if (scene.textures.exists(GLOW_KEY)) {
@@ -353,26 +359,15 @@ export class PhaseAtmosphere {
     }
   }
 
+  /**
+   * Colour-grade response only. The screen shake that used to live here moved
+   * to `JuiceDirector` in 7.8 — see the note above the removed constants.
+   */
   setSabotageActive(active: boolean): void {
     if (active === this.sabotageActive) {
       return;
     }
     this.sabotageActive = active;
-    if (active) {
-      this.shake(SABOTAGE_SHAKE.duration, SABOTAGE_SHAKE.intensity);
-    }
-  }
-
-  /** Subtle camera shake, only when effects are enabled — see the "keep it SUBTLE" requirement on both call sites. */
-  shake(duration: number, intensity: number): void {
-    if (!this.effectsEnabled) {
-      return;
-    }
-    this.scene.cameras.main.shake(duration, intensity);
-  }
-
-  shakeBodyFound(): void {
-    this.shake(BODY_FOUND_SHAKE.duration, BODY_FOUND_SHAKE.intensity);
   }
 
   update(delta: number): void {

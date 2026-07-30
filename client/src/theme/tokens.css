@@ -150,4 +150,5 @@
   --duration-base: 120ms;
   --duration-slow: 300ms;
   --duration-scene: 1200ms;
+  --duration-task-progress: 400ms;
 }

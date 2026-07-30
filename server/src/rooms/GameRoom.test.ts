@@ -40,6 +40,7 @@ import {
   PLAYER_SPEED,
   RANDOM_TASKS_PER_PLAYER,
   REPORT_BODY_RANGE,
+  roomSlugAt,
   ROLES,
   ROLE_REVEAL_MS,
   type RoleAssignment,
@@ -61,13 +62,26 @@ import {
   settingById,
 } from "@foghaven/shared";
 import { GameRoom } from "./GameRoom";
-import { Body } from "./schema/GameState";
+import { Body, PADDING_BODY_ID } from "./schema/GameState";
 import type { GameState, Player } from "./schema/GameState";
 import { InMemoryAuthProvider, setAuthProvider } from "../auth/provider";
 import { InMemoryFriendProvider, setFriendProvider } from "../friends/provider";
 
 /** Distance a single legitimate input command is allowed to move a player. */
 const STEP = PLAYER_SPEED * SIM_DT;
+
+/**
+ * `room.state.bodies` permanently holds one extra entry (`PADDING_BODY_ID`,
+ * seeded in `onCreate`, never removed — see that field's own doc for the
+ * packet-size leak it closes). Every test that used to assert a real body
+ * count against the raw `.size` goes through this instead, so the assertion
+ * still reads as "how many actual corpses" rather than every call site
+ * silently baking in a +1 that has nothing to do with what the test is
+ * checking.
+ */
+function realBodyCount(room: ServerRoom<GameState>): number {
+  return room.state.bodies.size - (room.state.bodies.has(PADDING_BODY_ID) ? 1 : 0);
+}
 
 let colyseus: ColyseusTestServer;
 
@@ -947,6 +961,7 @@ describe("GameRoom tasks", () => {
         "hostId",
         "meetingBodyId",
         "meetingBodyName",
+        "meetingBodyRoom",
         "meetingIsEmergency",
         "meetingReporterId",
         "meetingStage",
@@ -1047,7 +1062,7 @@ describe("GameRoom kill", () => {
     await tick(3);
 
     expect(victim.player.alive).toBe(true);
-    expect(room.state.bodies.size).toBe(0);
+    expect(realBodyCount(room)).toBe(0);
   });
 
   it("ignores a fabricated position sent with the kill and uses the server's own", async () => {
@@ -1135,7 +1150,7 @@ describe("GameRoom kill", () => {
     await tick(3);
 
     expect(victim!.player.alive).toBe(true);
-    expect(room.state.bodies.size).toBe(0);
+    expect(realBodyCount(room)).toBe(0);
   });
 
   it("does not let a dead stranger kill", async () => {
@@ -1182,19 +1197,19 @@ describe("GameRoom kill", () => {
     killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
     await tick(3);
     expect(victim.player.alive).toBe(false);
-    expect(room.state.bodies.size).toBe(1);
+    expect(realBodyCount(room)).toBe(1);
 
     // Re-killing the corpse must not produce a second body.
     armAbility(room, killer.client.sessionId, "kill");
     killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
     await tick(3);
-    expect(room.state.bodies.size).toBe(1);
+    expect(realBodyCount(room)).toBe(1);
 
     // Nor may a stranger kill themselves.
     killer.client.send("ability", { abilityId: "kill", targetId: killer.client.sessionId });
     await tick(3);
     expect(killer.player.alive).toBe(true);
-    expect(room.state.bodies.size).toBe(1);
+    expect(realBodyCount(room)).toBe(1);
   });
 
   it("ignores a malformed kill message without throwing", async () => {
@@ -1207,7 +1222,7 @@ describe("GameRoom kill", () => {
     killer.client.send("ability", { abilityId: "kill", targetId: "nobody" });
     await tick(3);
 
-    expect(room.state.bodies.size).toBe(0);
+    expect(realBodyCount(room)).toBe(0);
   });
 
   it("lets a ghost keep doing tasks", async () => {
@@ -1412,6 +1427,11 @@ describe("GameRoom meetings", () => {
     expect(room.state.meetingBodyId).toBe(victim.client.sessionId);
     expect(room.state.meetingBodyName).toBe(victim.name);
     expect(room.state.meetingIsEmergency).toBe(false);
+    // The §10.3 meeting-call cutscene's body-report title names this room —
+    // captured at report time, since `startMeeting` clears `bodies` on the
+    // same tick, leaving no position to recompute it from afterward.
+    expect(room.state.meetingBodyRoom).toBe(roomSlugAt(victim.player.x, victim.player.y));
+    expect(room.state.meetingBodyRoom).not.toBe("");
   });
 
   it("rejects a body report from out of range", async () => {
@@ -1474,6 +1494,8 @@ describe("GameRoom meetings", () => {
     expect(room.state.meetingIsEmergency).toBe(true);
     expect(room.state.meetingBodyId).toBe("");
     expect(room.state.meetingBodyName).toBe("");
+    // No body room for an emergency — nothing to name in that title variant.
+    expect(room.state.meetingBodyRoom).toBe("");
   });
 
   it("rejects ringing the bell from out of range", async () => {
@@ -1558,7 +1580,7 @@ describe("GameRoom meetings", () => {
       killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
       await tick(4);
     }
-    expect(room.state.bodies.size).toBe(2);
+    expect(realBodyCount(room)).toBe(2);
 
     const reporter = townsfolk[2]!;
     reporter.player.x = townsfolk[0]!.player.x;
@@ -1567,7 +1589,7 @@ describe("GameRoom meetings", () => {
     await tick(3);
 
     expect(room.state.phase).toBe(PHASE.MEETING);
-    expect(room.state.bodies.size).toBe(0);
+    expect(realBodyCount(room)).toBe(0);
   });
 
   it("teleports every player to the Town Hall when a meeting starts", async () => {
@@ -1810,7 +1832,7 @@ describe("GameRoom voting", () => {
     expect(room.state.ejectedPlayerName).toBe(target.name);
     expect(target.player.alive).toBe(false);
     // Ejected players are thrown out, not killed where they stood.
-    expect(room.state.bodies.size).toBe(0);
+    expect(realBodyCount(room)).toBe(0);
     expect([...room.state.deadPlayerIds]).toContain(target.client.sessionId);
   });
 
@@ -2285,7 +2307,7 @@ describe("GameRoom return to lobby", () => {
     expect(room.state.finalRoster.size).toBe(0);
     expect(room.state.taskBarCompleted).toBe(0);
     expect(room.state.taskBarTotal).toBe(0);
-    expect(room.state.bodies.size).toBe(0);
+    expect(realBodyCount(room)).toBe(0);
     expect(room.state.deadPlayerIds.length).toBe(0);
     expect(room.state.players.size).toBe(seats.length);
     seats.forEach((s) => {
@@ -3286,7 +3308,7 @@ describe("GameRoom doctor (chaos preset)", () => {
     // Absorbed: no death, no body, no confirmation — but the cooldown was
     // consumed, so the failed kill still cost the stranger their window.
     expect(victim.player.alive).toBe(true);
-    expect(room.state.bodies.size).toBe(0);
+    expect(realBodyCount(room)).toBe(0);
     expect(stranger.killConfirmedCount).toBe(0);
     expect(stranger.abilityStateMessages.at(-1)?.cooldownMs).toBe(KILL_COOLDOWN_MS);
     // And nothing told the victim anything happened at all.

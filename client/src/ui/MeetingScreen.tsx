@@ -17,6 +17,8 @@ import { privateStateFor } from "../net/client";
 import { ChatPanel } from "./ChatPanel";
 import { VotePanel, type Candidate } from "./VotePanel";
 import { useCountdown } from "./useCountdown";
+import { EjectionCutscene } from "./ejection/EjectionCutscene";
+import { MeetingCallCutscene } from "./meetingCall/MeetingCallCutscene";
 import { OnboardingHintToast } from "./OnboardingHintToast";
 import { useOnboardingHint } from "../onboarding/useOnboardingHint";
 
@@ -41,7 +43,17 @@ interface MeetingSnapshot {
   isEmergency: boolean;
   reporterName: string;
   bodyName: string;
+  /** The room a reported body was found in — empty for an emergency. See the server schema's own doc. */
+  bodyRoom: string;
   candidates: Candidate[];
+  /**
+   * Every currently-living player's lantern hex, in roster order — the §10.3
+   * meeting-call cutscene's ring. Kept separate from `candidates` (which is
+   * specifically the voting roster's shape) rather than added onto
+   * `Candidate`, so a concern specific to one cutscene doesn't leak a field
+   * onto a type `VotePanel` also depends on.
+   */
+  livingLanternColors: string[];
   isGhost: boolean;
   ejectedName: string;
   ejectedWasStranger: boolean;
@@ -53,11 +65,13 @@ function readSnapshot(room: Room<GameState>): MeetingSnapshot {
   const dead = new Set<string>(room.state.deadPlayerIds);
 
   const candidates: Candidate[] = [];
+  const livingLanternColors: string[] = [];
   room.state.players.forEach((player, id) => {
     // The graveyard is the reliable liveness signal here — a living client's
     // copy of a dead player is a frozen snapshot that still says alive.
     if (!dead.has(id)) {
       candidates.push({ id, name: player.name, hasVoted: player.hasVoted });
+      livingLanternColors.push(player.lanternColor);
     }
   });
 
@@ -79,7 +93,9 @@ function readSnapshot(room: Room<GameState>): MeetingSnapshot {
     // Sent as a name rather than looked up by id: the reported player is dead
     // by now and so is filtered out of a living client's `players` map.
     bodyName: room.state.meetingBodyName,
+    bodyRoom: room.state.meetingBodyRoom,
     candidates,
+    livingLanternColors,
     isGhost: dead.has(room.sessionId),
     ejectedName: room.state.ejectedPlayerName,
     ejectedWasStranger: room.state.ejectedWasStranger,
@@ -216,18 +232,6 @@ export function MeetingScreen({
         victim: snapshot.bodyName,
       });
 
-  const ejectionLine = useMemo(() => {
-    if (!snapshot.ejectedName) {
-      return t("meeting.nobodyEjected");
-    }
-    if (!snapshot.ejectionConfirmed) {
-      return t("meeting.ejectedPlain", { name: snapshot.ejectedName });
-    }
-    return snapshot.ejectedWasStranger
-      ? t("meeting.ejectedWasStranger", { name: snapshot.ejectedName })
-      : t("meeting.ejectedWasNotStranger", { name: snapshot.ejectedName });
-  }, [snapshot.ejectedName, snapshot.ejectionConfirmed, snapshot.ejectedWasStranger, t]);
-
   const ability = meetingAbilitySlot?.ability ?? null;
   const abilitySpent = abilityUsesLeft !== null && abilityUsesLeft <= 0;
   const showAlderman =
@@ -244,9 +248,24 @@ export function MeetingScreen({
   // fill role (Villager) is a legitimate guess like any other.
   const guessableRoles = useMemo(() => ROLE_DEFINITIONS.map((definition) => definition.id), []);
 
+  // Resolved here (not inside the cutscene) because `rooms.*` is a plain
+  // lookup table independent of which meeting-call variant is playing —
+  // `meetingCallTitle` only needs to decide which key/param to use, not how
+  // a room slug becomes a display string. Empty for an emergency, same as
+  // the underlying `bodyRoom` field.
+  const bodyRoomName = snapshot.bodyRoom ? t(`rooms.${snapshot.bodyRoom}`) : "";
+
   return (
     <div className="meeting-layout">
       <OnboardingHintToast text={onboardingHint} />
+      {snapshot.stage === MEETING_STAGE.DISCUSSION && (
+        <MeetingCallCutscene
+          isEmergency={snapshot.isEmergency}
+          callerName={snapshot.reporterName}
+          bodyRoomName={bodyRoomName}
+          livingLanternColors={snapshot.livingLanternColors}
+        />
+      )}
       <div className="panel meeting">
         <h1>{t("meeting.heading")}</h1>
         <p className="hint">{contextLine}</p>
@@ -451,9 +470,22 @@ export function MeetingScreen({
         {snapshot.stage === MEETING_STAGE.RESULTS && (
           <>
             <p className="meeting-stage-label">{t("meeting.results")}</p>
-            <p className="ejection-line" data-ejection>
-              {ejectionLine}
-            </p>
+            {snapshot.ejectedName ? (
+              // Keyed on `stageStartedAt` so a second ejection later in the
+              // same match — or even a different meeting reusing the same
+              // player name — remounts fresh rather than reusing a
+              // finished-and-settled instance from a previous meeting.
+              <EjectionCutscene
+                key={stageStartedAt}
+                name={snapshot.ejectedName}
+                ejectionConfirmed={snapshot.ejectionConfirmed}
+                ejectedWasStranger={snapshot.ejectedWasStranger}
+              />
+            ) : (
+              <p className="ejection-line" data-ejection>
+                {t("meeting.nobodyEjected")}
+              </p>
+            )}
             <ul className="tally-list">
               {snapshot.tallies.map((tally) => (
                 <li key={tally.targetId}>

@@ -82,6 +82,8 @@ export interface GameState extends Schema {
   meetingReporterId: string;
   meetingBodyId: string;
   meetingBodyName: string;
+  /** The room a reported body was found in — see the server schema's own doc. Empty for an emergency meeting. */
+  meetingBodyRoom: string;
   meetingIsEmergency: boolean;
   meetingStage: string;
   deadPlayerIds: ArraySchema<string>;

@@ -15,6 +15,11 @@ import { createNoiseBuffer } from "./noise";
  *     that repeats, and the loudest, most urgent one in the set.
  *   - ejection: a falling filtered sweep into a thud — motion, not a hit;
  *     nothing else here has a pitch that slides.
+ *   - bellToll: the same struck-metal partials as `meetingStart`, but ONE
+ *     short strike rather than a swell — §10.2's ejection cutscene calls for
+ *     "one bell toll", not the meeting bell's ring-out, so this shares the
+ *     timbre (both are "the same bell") while staying clearly distinct in
+ *     shape (this decays in under a second; `meetingStart` rings for 2.4s).
  *   - win: a bright ascending major arpeggio, high register.
  *   - loss: a slow descending minor pair, low register — win played backwards
  *     and inverted, so the two payoff stingers read as opposites at a glance.
@@ -101,6 +106,22 @@ export function playMeetingStartStinger({ ctx, destination }: StingerCtx): void 
   ];
   for (const [mult, peak] of partials) {
     tone(ctx, destination, fundamental * mult, "sine", now, 0.01, peak, 2.4);
+  }
+}
+
+export function playBellTollStinger({ ctx, destination }: StingerCtx): void {
+  const now = ctx.currentTime;
+  const fundamental = 220;
+  // The same inharmonic partial set as `playMeetingStartStinger` — it is
+  // meant to read as the same physical bell — but a fraction of the release,
+  // so this hits once and dies rather than ringing on.
+  const partials: Array<[number, number]> = [
+    [1, 0.42],
+    [2.4, 0.2],
+    [3.9, 0.1],
+  ];
+  for (const [mult, peak] of partials) {
+    tone(ctx, destination, fundamental * mult, "sine", now, 0.005, peak, 0.6);
   }
 }
 

@@ -95,6 +95,9 @@
     "hint": "Turn off for better performance on low-end or mobile devices.",
     "colorBlindMode": "Color-blind palette",
     "colorBlindHint": "Uses a color-blind-safe player palette. Every player badge already shows a number regardless of this setting.",
+    "reducedMotion": "Reduced motion",
+    "motionSystem": "Match system ({{resolved}})",
+    "reducedMotionHint": "Removes screen shake, flashes and scale effects. Timing is unchanged, so this gives no advantage or disadvantage in play.",
     "closeButton": "Close"
   },
   "keybindingSettings": {
@@ -431,9 +434,16 @@
     "voting": "Vote now",
     "results": "Results",
     "nobodyEjected": "Nobody was ejected.",
-    "ejectedPlain": "{{name}} was ejected.",
-    "ejectedWasStranger": "{{name}} was ejected. They were a Stranger.",
-    "ejectedWasNotStranger": "{{name}} was ejected. They were not a Stranger."
+    "call": {
+      "bodyTitle": "A body was found in the {{room}}.",
+      "emergencyTitle": "{{name}} called a meeting."
+    },
+    "ejection": {
+      "castIntoFog": "{{name}} was cast into the fog.",
+      "wasStranger": "They were a Stranger.",
+      "wasNotStranger": "They were not a Stranger.",
+      "skipHint": "Press any key to skip"
+    }
   },
   "gameOver": {
     "intro": "Game Over",

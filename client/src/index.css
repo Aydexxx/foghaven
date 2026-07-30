@@ -547,10 +547,22 @@ button.secondary {
   overflow: hidden;
 }
 
+/* §9: "Never jumps. Always tweens over 400 ms." The transition is what makes
+   that true — the width prop itself is set straight from server state, so
+   without this the bar would snap on every task completion. */
 .task-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--success), var(--success-bright));
-  transition: width var(--duration-slow) ease;
+  transition: width var(--duration-task-progress) ease;
+}
+
+/* Reduced motion keeps the DURATION and drops only the easing curve's
+   overshoot — the bar still takes 400ms to travel, so the moment it reads as
+   "complete" is identical for every player. Removing the transition here
+   instead would make the bar jump, which §9 forbids outright and which would
+   also hand this player the completion signal 400ms early. */
+:root[data-reduced-motion="on"] .task-bar-fill {
+  transition: width var(--duration-task-progress) linear;
 }
 
 .task-bar-count {
@@ -1268,6 +1280,231 @@ button.secondary {
   color: var(--ink);
 }
 
+/* §10.2 ejection cutscene. Full-bleed within the meeting panel, 16:9-ish —
+   "wide cinematic composition" per the art bible's own cutscene-pier prompt. */
+.ejection-cutscene {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  /* Two background-image layers: the swappable real-art URL (a CSS custom
+     property set from JS — see `EjectionCutscene.tsx`) on top, a cold
+     blue-grey placeholder gradient underneath. A missing/404 image only
+     blanks its OWN layer; the gradient layer is unaffected, so this needs no
+     load-error handling to degrade safely — the same tolerance
+     `GameScene.preload` gives the missing Havener atlas. */
+  background-image:
+    var(--ejection-backdrop-url, none),
+    linear-gradient(180deg, var(--color-fog-dark) 0%, var(--color-fog-mid) 55%, var(--color-fog-light) 100%);
+  background-size: cover;
+  background-position: center;
+}
+
+/* A faint horizon glow, standing in for "a faint distant glow in the mist" —
+   the one warm note the art bible allows in an otherwise cold-blue plate. */
+.ejection-backdrop-placeholder {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 40% 25% at 65% 45%, rgba(255, 198, 92, 0.08), transparent 70%);
+  pointer-events: none;
+}
+
+/* The walking silhouette. A rounded capsule, not an angular shape — §2 rule 4
+   reserves hard corners for danger, and an ejection is sombre, not a threat. */
+.ejection-figure {
+  position: absolute;
+  left: 14%;
+  bottom: 18%;
+  width: 22px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--ink);
+  transform: scale(1);
+  transition: transform linear;
+  transition-duration: 1600ms; /* EJECTION_BEATS.walkMs — see ejectionTimeline.ts */
+}
+
+.ejection-lantern {
+  position: absolute;
+  right: -3px;
+  bottom: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-flame-glow);
+  box-shadow: 0 0 6px 2px var(--color-flame-glow);
+  opacity: 1;
+  transition:
+    opacity 400ms linear,
+    box-shadow 400ms linear;
+}
+
+/* Beat 1+2+3: walk away and shrink, together. */
+.ejection-beat-still .ejection-figure,
+.ejection-beat-bell .ejection-figure,
+.ejection-beat-reveal .ejection-figure {
+  transform: translateX(60%) scale(0.35);
+}
+
+/* Beat 5: the light goes out. */
+.ejection-beat-bell .ejection-lantern,
+.ejection-beat-reveal .ejection-lantern {
+  opacity: 0;
+  box-shadow: none;
+}
+
+/* Reduced motion keeps every beat's DURATION identical (the JS timeline never
+   reads this) and removes only the walk's translate/scale tween — the figure
+   simply appears already at its shrunk resting spot once the walk beat ends,
+   the same "amplitude to zero, duration preserved" rule as `JuiceDirector`. */
+.ejection-reduced-motion .ejection-figure {
+  transition: none;
+}
+.ejection-reduced-motion .ejection-lantern {
+  transition: none;
+}
+
+.ejection-reveal-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-lg);
+  text-align: center;
+  background: rgba(6, 4, 2, 0.55);
+  animation: ejection-reveal-fade-in 400ms ease-out;
+}
+
+.ejection-reduced-motion .ejection-reveal-text {
+  animation: none;
+}
+
+@keyframes ejection-reveal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ejection-reveal-text p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--ink);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.ejection-skip-hint {
+  position: absolute;
+  right: var(--space-md);
+  bottom: var(--space-sm);
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  opacity: 0.8;
+}
+
+/* §10.3 meeting call. Full-screen over the whole `.meeting-layout` (the
+   discussion panel AND the chat panel) — the art bible's own "Full-screen."
+   The discussion UI underneath is always fully rendered; this only ever
+   covers and then uncovers it, never replaces or delays it — see the
+   component's own doc for why that is what makes the transition continuous. */
+.meeting-call-cutscene {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transform: translateY(0);
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1); /* MEETING_CALL_BEATS.slideMs */
+}
+
+/* Beat 4: retreat upward, off-screen, uncovering the discussion UI beneath. */
+.meeting-call-beat-slide {
+  transform: translateY(-100%);
+}
+
+/* Reduced motion swaps the slide for a same-duration cross-fade — the reveal
+   still lands at the identical wall-clock offset, only the displacement (the
+   thing reduced motion actually governs) is gone. */
+.meeting-call-reduced-motion {
+  transition: opacity 500ms linear;
+}
+.meeting-call-reduced-motion.meeting-call-beat-slide {
+  transform: none;
+  opacity: 0;
+}
+
+.meeting-call-ring {
+  position: absolute;
+  inset: 8%;
+}
+
+.meeting-call-lantern {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px; /* centers the dot on its computed left/top */
+  border-radius: 999px;
+  opacity: 0;
+  transform: scale(0.3);
+  transition:
+    opacity 500ms ease-out,
+    transform 500ms ease-out; /* MEETING_CALL_BEATS.ringMs */
+}
+
+/* Beat 1: every lantern flares to full brightness at once. */
+.meeting-call-beat-bell .meeting-call-lantern,
+.meeting-call-beat-title .meeting-call-lantern,
+.meeting-call-beat-slide .meeting-call-lantern {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.meeting-call-reduced-motion .meeting-call-lantern {
+  transition: none;
+}
+
+.meeting-call-title {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  max-width: 80%;
+  padding: 0 var(--space-lg);
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  text-align: center;
+  color: var(--ink);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  /* §9's button-press curve reused here for the "slams in" feel — a punch
+     the title settles out of, not eases into. */
+  animation: meeting-call-title-slam 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.meeting-call-reduced-motion .meeting-call-title {
+  animation: none;
+}
+
+@keyframes meeting-call-title-slam {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Watchman's camera reveal — its own quiet panel above the stage content. */
 .camera-reveal {
   width: 100%;
@@ -1715,6 +1952,18 @@ button.secondary {
 .audio-settings-label {
   font-size: 0.9rem;
   color: var(--ink-dim);
+}
+
+/* The tri-state reduced-motion picker. Sized to sit in the same right-hand
+   column as the on/off buttons in the rows above it. */
+.audio-settings-select {
+  background: var(--paper-sunken);
+  border: 1px solid var(--timber-light);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
 }
 
 .audio-mute-button {

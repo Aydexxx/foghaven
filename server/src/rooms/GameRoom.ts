@@ -92,7 +92,7 @@ import {
   lanternColors,
   LANTERN_TOGGLE_COOLDOWN_MS,
 } from "@foghaven/shared";
-import { GameState, Player, Body, VoteTally, RevealedPlayer } from "./schema/GameState";
+import { GameState, Player, Body, VoteTally, RevealedPlayer, PADDING_BODY_ID } from "./schema/GameState";
 import { generateRoomCode, randomSpawn, pickRandom } from "./util";
 import { ABILITIES, cameras, voteWeights, type AbilityContext } from "../abilities";
 import { getAuthProvider, type Identity } from "../auth/provider";
@@ -180,6 +180,38 @@ export class GameRoom extends Room<GameState> {
    * bookkeeping, not game state.
    */
   private readonly voiceReady = new Set<string>();
+
+  /**
+   * Session ids killed while `PLAYING` whose death has not yet been publicly
+   * disclosed (no body reported, no meeting called) — server-only, voice
+   * bookkeeping, not game state. `voicePeersFor` treats anyone in this set as
+   * still "alive" for the purposes of ROSTER SHAPE ONLY, so a distant living
+   * client's peer count doesn't shrink the instant a stranger strikes; what
+   * actually silences the victim during this window is
+   * `VoiceRosterMessage.deathMuted`, computed straight from the real `alive`
+   * flag in `sendVoiceRoster`, independent of this set.
+   *
+   * A kill during `MEETING` (the constable's shot) never enters here — the
+   * graveyard is published immediately in that case (see `killPlayer`), so
+   * there is nothing left to keep undisclosed. Cleared entirely the instant
+   * any meeting starts (`startMeeting`), which is exactly when every death so
+   * far becomes legitimately public knowledge via `deadPlayerIds`.
+   */
+  private readonly undisclosedKills = new Set<string>();
+
+  /**
+   * The last `VoiceRosterMessage` actually sent to each client, serialised —
+   * server-only, voice bookkeeping. `sendVoiceRoster` skips the send when the
+   * newly computed roster is identical to this, because `broadcastVoiceRosters`
+   * fires unconditionally on every event that COULD move some client's wall
+   * (a kill, an ejection, a phase change, a voice peer joining or leaving) —
+   * most of which change nothing for most clients. Without this, a distant
+   * witness would receive a content-identical `voiceRoster` message on the
+   * exact tick of a covert kill: the CONTENT leak is what `isVoiceAlive`
+   * closes, but an unprompted extra message is itself a timing signal, and
+   * this is what closes that half.
+   */
+  private readonly lastSentVoiceRoster = new Map<string, string>();
 
   /**
    * Secret roles, keyed by session id. This map is the single source of truth
@@ -422,6 +454,15 @@ export class GameRoom extends Room<GameState> {
     this.log.info("room created");
 
     this.setState(new GameState());
+
+    // Seeded once, for the room's entire lifetime, before any player can
+    // possibly die — see the field's own doc on `GameState.bodies` for why.
+    // Never touched again after this; `clearRealBodies` is the only other
+    // code allowed to modify `bodies`, and it is written to never remove
+    // this specific key.
+    const padding = new Body();
+    padding.playerId = PADDING_BODY_ID;
+    this.state.bodies.set(PADDING_BODY_ID, padding);
 
     // The default role set. Presets and per-role toggles only ever move
     // these two fields — see `handleSetPreset` / `handleSetRoleEnabled`.
@@ -816,6 +857,8 @@ export class GameRoom extends Room<GameState> {
     this.blockedMessageCount.delete(sessionId);
     this.diedAt.delete(sessionId);
     this.voiceReady.delete(sessionId);
+    this.undisclosedKills.delete(sessionId);
+    this.lastSentVoiceRoster.delete(sessionId);
     // Ballots this player cast against others go with them, so a departed
     // player can't keep contributing to a vote-mute threshold.
     for (const ballots of this.muteVotes.values()) {
@@ -1786,6 +1829,21 @@ export class GameRoom extends Room<GameState> {
   }
 
   /**
+   * Removes every REAL body — a meeting starting, or a full return to the
+   * lobby — while leaving `PADDING_BODY_ID` untouched. The only sanctioned
+   * way to empty `bodies`: a bare `this.state.bodies.clear()` would also
+   * delete the padding entry, reopening the exact packet-size side channel
+   * it exists to close the very next time someone dies.
+   */
+  private clearRealBodies(): void {
+    for (const key of [...this.state.bodies.keys()]) {
+      if (key !== PADDING_BODY_ID) {
+        this.state.bodies.delete(key);
+      }
+    }
+  }
+
+  /**
    * Mark a player dead and leave a body where they fell. Flipping `alive`
    * is what makes them vanish from every living client's state — see the
    * `filterChildren` on `GameState.players`.
@@ -1838,12 +1896,21 @@ export class GameRoom extends Room<GameState> {
     // fog during a meeting, so nothing is protected by waiting.
     if (this.state.phase === PHASE.MEETING && !this.state.deadPlayerIds.includes(victim.id)) {
       this.state.deadPlayerIds.push(victim.id);
+    } else if (this.state.phase === PHASE.PLAYING) {
+      // A covert kill — undisclosed until the next body report or meeting
+      // call. See `undisclosedKills`'s own doc for what this does and does
+      // not protect.
+      this.undisclosedKills.add(victim.id);
     }
 
-    // The instant they die, the voice wall moves: every living peer is told to
-    // drop the connection to them, and the victim's own roster becomes the
-    // graveyard. This is why the dead cannot be overheard — the living tear the
-    // peer connection down, and the server will refuse to re-establish it.
+    // The instant they die, the victim's own roster becomes the graveyard —
+    // except a covert (PLAYING-phase) kill deliberately does NOT move the
+    // wall for anyone else yet: `voicePeersFor` keeps listing the victim in
+    // their former living peers' rosters (via `undisclosedKills`) so a
+    // distant client can't infer a kill from a roster shrinking by one. What
+    // silences the victim regardless is `deathMuted`, computed from the real
+    // `alive` flag in `sendVoiceRoster` — their mic is dead from this instant
+    // even though their id lingers in other rosters as cover.
     this.broadcastVoiceRosters();
 
     // A kill during PLAYING has no results screen in the way, so a win here
@@ -1869,7 +1936,12 @@ export class GameRoom extends Room<GameState> {
 
     const raw = (message ?? {}) as { bodyId?: unknown };
     const bodyId = typeof raw.bodyId === "string" ? raw.bodyId : undefined;
-    if (!bodyId) {
+    // The padding entry is filtered out for every client (see `GameState`'s
+    // doc on `bodies`), so a legitimate client can never learn this id from
+    // the wire — but it costs nothing to also refuse it by name outright,
+    // rather than relying solely on "the map's own filter always hides it"
+    // to keep it unreportable.
+    if (!bodyId || bodyId === PADDING_BODY_ID) {
       return;
     }
 
@@ -1901,6 +1973,7 @@ export class GameRoom extends Room<GameState> {
       reporterId: client.sessionId,
       bodyId,
       bodyName: body.name,
+      bodyRoom: roomSlugAt(body.x, body.y),
       isEmergency: false,
     });
   }
@@ -1947,6 +2020,7 @@ export class GameRoom extends Room<GameState> {
       reporterId: client.sessionId,
       bodyId: "",
       bodyName: "",
+      bodyRoom: "",
       isEmergency: true,
     });
   }
@@ -1995,11 +2069,13 @@ export class GameRoom extends Room<GameState> {
     reporterId: string;
     bodyId: string;
     bodyName: string;
+    bodyRoom: RoomSlug | "";
     isEmergency: boolean;
   }): void {
     this.state.meetingReporterId = ctx.reporterId;
     this.state.meetingBodyId = ctx.bodyId;
     this.state.meetingBodyName = ctx.bodyName;
+    this.state.meetingBodyRoom = ctx.bodyRoom;
     this.state.meetingIsEmergency = ctx.isEmergency;
 
     // Movement is locked the instant this flips — see the phase checks in
@@ -2028,8 +2104,15 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
+    // Every covert kill so far is exactly as public as the graveyard just
+    // published above now, so nothing is left to hide from a voice roster —
+    // clearing this is what lets `voicePeersFor` move the wall for them the
+    // very next `broadcastVoiceRosters()` (below), the same tick everyone
+    // else learns they're gone.
+    this.undisclosedKills.clear();
+
     // One body found pulls everyone in, so the rest are moot for this round.
-    this.state.bodies.clear();
+    this.clearRealBodies();
 
     // Deliver every active watchman's footage before the round store (and
     // the cameras living in it) is cleared below — this is the one and only
@@ -2666,6 +2749,7 @@ export class GameRoom extends Room<GameState> {
     this.state.meetingReporterId = "";
     this.state.meetingBodyId = "";
     this.state.meetingBodyName = "";
+    this.state.meetingBodyRoom = "";
     this.state.meetingIsEmergency = false;
     this.state.deadPlayerIds.clear();
     this.state.voteResults.clear();
@@ -2678,7 +2762,7 @@ export class GameRoom extends Room<GameState> {
     this.state.winningFaction = "";
     this.state.winReason = "";
     this.state.finalRoster.clear();
-    this.state.bodies.clear();
+    this.clearRealBodies();
 
     this.state.players.forEach((player) => {
       player.alive = true;
@@ -3084,6 +3168,21 @@ export class GameRoom extends Room<GameState> {
   }
 
   /**
+   * Whether `id` counts as "alive" for voice-ROSTER-SHAPE purposes — real
+   * liveness, OR a covert kill still in its undisclosed window. This is
+   * deliberately NOT the same question `player.alive` answers: that flag
+   * governs the game (fog, movement, the actual living/dead split everywhere
+   * else), and flips the instant a kill lands, full stop. This method answers
+   * a narrower one — "should `voicePeersFor` still list this player as a live
+   * conversational peer" — so a covertly killed player can go on appearing in
+   * their former living peers' rosters, unheard from (see `deathMuted` in
+   * `sendVoiceRoster`), until the death is disclosed.
+   */
+  private isVoiceAlive(player: Player, id: string): boolean {
+    return player.alive || this.undisclosedKills.has(id);
+  }
+
+  /**
    * THE authoritative peer set for one client: everyone they are allowed to
    * hold a voice connection with right now. This single function is the wall —
    * every other piece of the voice system (the roster it pushes, the
@@ -3092,9 +3191,13 @@ export class GameRoom extends Room<GameState> {
    *
    * The rules mirror the chat channels precisely: voice must be active; both
    * players present and connected; both opted into voice; and — the line that
-   * matters — a living player and a dead player are never in each other's set.
-   * A living client's roster therefore never contains a dead session id, so its
-   * mesh can never so much as attempt the connection.
+   * matters — a (voice-)living player and a (voice-)dead player are never in
+   * each other's set. Note "voice-alive" rather than `.alive` directly: a
+   * living client's roster keeps listing a covertly killed former peer for as
+   * long as that kill stays undisclosed (see `isVoiceAlive`), which is the
+   * whole point — the roster's SHAPE must not change on a kill nobody has
+   * found out about yet. Their mic is dead regardless; that is enforced by
+   * `deathMuted`, not by removing them here.
    */
   private voicePeersFor(sessionId: string): string[] {
     if (!this.isVoiceActive() || !this.voiceReady.has(sessionId)) {
@@ -3104,13 +3207,14 @@ export class GameRoom extends Room<GameState> {
     if (!self || !self.connected) {
       return [];
     }
+    const selfVoiceAlive = this.isVoiceAlive(self, sessionId);
     const peers: string[] = [];
     this.state.players.forEach((other, id) => {
       if (id === sessionId || !other.connected || !this.voiceReady.has(id)) {
         return;
       }
-      // The wall. Living hears living, dead hears dead, and never across.
-      if (other.alive !== self.alive) {
+      // The wall, in voice-alive terms — see this method's own doc.
+      if (this.isVoiceAlive(other, id) !== selfVoiceAlive) {
         return;
       }
       peers.push(id);
@@ -3138,7 +3242,24 @@ export class GameRoom extends Room<GameState> {
         self !== undefined &&
         self.alive &&
         this.silencedThisMeeting.has(client.sessionId),
+      // The real `alive` flag, not `isVoiceAlive` — this is what actually
+      // silences a covert-kill victim from the instant they die, independent
+      // of how long their roster entry lingers elsewhere as cover. Bounded to
+      // the undisclosed window: once disclosed, `undisclosedKills` no longer
+      // contains them and this goes false, because by then their `peers` is
+      // the real ghost roster and there is nothing left to protect against.
+      deathMuted:
+        self !== undefined && !self.alive && this.undisclosedKills.has(client.sessionId),
     };
+
+    // Skip the send entirely if nothing in it actually changed for this
+    // client — see `lastSentVoiceRoster`'s own doc for why this is a
+    // security property here, not just an optimisation.
+    const signature = JSON.stringify(roster);
+    if (this.lastSentVoiceRoster.get(client.sessionId) === signature) {
+      return;
+    }
+    this.lastSentVoiceRoster.set(client.sessionId, signature);
     client.send("voiceRoster", roster);
   }
 

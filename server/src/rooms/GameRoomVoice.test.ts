@@ -199,8 +199,17 @@ describe("GameRoom voice roster", () => {
   });
 });
 
-describe("GameRoom voice dead/living wall (leak test)", () => {
-  it("removes a killed player from every living roster and gives them the graveyard channel", async () => {
+describe("GameRoom voice dead/living wall — covert kill cover + deathMuted", () => {
+  /**
+   * The headline fix for the 7.9 audit's voice-roster leak: a covert kill
+   * (one during PLAYING, not yet reported or swept up by a meeting) must not
+   * change ANY living player's roster shape, or a distant client could infer
+   * a kill from their peer count dropping by one. The victim keeps
+   * appearing, unheard from — `deathMuted` is what silences them, not
+   * `peers`. Only once the kill is disclosed (a meeting starts) does the
+   * roster catch up to reality.
+   */
+  it("keeps a covertly killed player in every living roster, muted rather than absent, until disclosed", async () => {
     const room = await colyseus.createRoom<GameState>("game");
     const seats = await seatAndPlay(room);
     await enableVoice(seats);
@@ -208,8 +217,11 @@ describe("GameRoom voice dead/living wall (leak test)", () => {
     const { strangers, townsfolk } = splitRoles(seats);
     const killer = strangers[0]!;
     const victim = townsfolk[0]!;
+    const survivor = townsfolk[1]!;
     victim.player.x = killer.player.x;
     victim.player.y = killer.player.y;
+
+    const rosterBefore = [...survivor.roster!.peers].sort();
 
     armAbility(room, killer.client.sessionId, "kill");
     killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
@@ -217,24 +229,56 @@ describe("GameRoom voice dead/living wall (leak test)", () => {
 
     expect(victim.player.alive).toBe(false);
 
-    // No living roster names the dead player — not muted, absent.
+    // Every living player's roster is UNCHANGED — same shape, victim still
+    // named, nobody told to tear the connection down.
     for (const s of seats) {
       if (s === victim) {
         continue;
       }
       expect(s.roster!.channel).toBe(VOICE_CHANNEL.LIVING);
-      expect(s.roster!.peers).not.toContain(victim.client.sessionId);
+      expect(s.roster!.peers).toContain(victim.client.sessionId);
+      expect(s.roster!.deathMuted).toBe(false);
+    }
+    expect([...survivor.roster!.peers].sort()).toEqual(rosterBefore);
+
+    // The victim's OWN roster is the tell: real death (channel flips, mic
+    // forced off) without the cover changing — they still see the same
+    // living peers they did alive, they just cannot be heard.
+    expect(victim.roster!.channel).toBe(VOICE_CHANNEL.DEAD);
+    expect(victim.roster!.deathMuted).toBe(true);
+    for (const s of seats) {
+      if (s === victim) {
+        continue;
+      }
+      expect(victim.roster!.peers).toContain(s.client.sessionId);
     }
 
-    // The victim's own roster is the graveyard channel and contains no living
-    // id — with only one dead player, it is simply empty.
-    expect(victim.roster!.channel).toBe(VOICE_CHANNEL.DEAD);
+    // Disclosure: report the body, which starts a meeting. The body's stored
+    // position is a snapshot taken at death (see `killPlayer`), so the
+    // reporter has to move to where the KILL happened, not to wherever the
+    // (now-irrelevant) live victim position is.
+    survivor.player.x = killer.player.x;
+    survivor.player.y = killer.player.y;
+    survivor.client.send("report_body", { bodyId: victim.client.sessionId });
+    await tick(3);
+    expect(room.state.phase).toBe(PHASE.MEETING);
+
+    // NOW the roster catches up: the living lose the victim, the victim's
+    // own roster becomes the (empty, alone) graveyard, and the mute directive
+    // is no longer needed — the real wall is doing the job instead.
+    for (const s of seats) {
+      if (s === victim) {
+        continue;
+      }
+      expect(s.roster!.peers).not.toContain(victim.client.sessionId);
+    }
+    expect(victim.roster!.deathMuted).toBe(false);
     for (const s of seats) {
       expect(victim.roster!.peers).not.toContain(s.client.sessionId);
     }
   });
 
-  it("puts two dead players in each other's graveyard roster, and no living player's", async () => {
+  it("puts two covertly dead players in the LIVING group during the undisclosed window, then in each other's graveyard once disclosed", async () => {
     const room = await colyseus.createRoom<GameState>("game", { autoDispose: false });
     const seats = await seatAndPlay(room, 6);
     await enableVoice(seats);
@@ -242,6 +286,7 @@ describe("GameRoom voice dead/living wall (leak test)", () => {
     const { strangers, townsfolk } = splitRoles(seats);
     const killer = strangers[0]!;
     const [victimA, victimB] = townsfolk;
+    const stillLiving = townsfolk.slice(2);
 
     for (const victim of [victimA!, victimB!]) {
       victim.player.x = killer.player.x;
@@ -251,19 +296,40 @@ describe("GameRoom voice dead/living wall (leak test)", () => {
       await tick(3);
     }
 
-    // The two dead hear each other.
+    // Undisclosed: the two dead still look exactly like living peers to
+    // everyone, including to a genuinely living player's roster — NOT
+    // grouped off together, because that grouping is itself the tell.
+    for (const s of [...stillLiving, killer]) {
+      expect(s.roster!.peers).toContain(victimA!.client.sessionId);
+      expect(s.roster!.peers).toContain(victimB!.client.sessionId);
+    }
+    expect(victimA!.roster!.deathMuted).toBe(true);
+    expect(victimB!.roster!.deathMuted).toBe(true);
+
+    // Disclosure via the emergency bell (no body needed for this path).
+    const caller = stillLiving[0]!;
+    caller.player.x = TOWN_HALL.x;
+    caller.player.y = TOWN_HALL.y;
+    caller.client.send("call_meeting");
+    await tick(3);
+    expect(room.state.phase).toBe(PHASE.MEETING);
+
+    // NOW the real wall applies: the two dead hear only each other, and no
+    // living player's roster contains either of them.
     expect(victimA!.roster!.peers).toContain(victimB!.client.sessionId);
     expect(victimB!.roster!.peers).toContain(victimA!.client.sessionId);
-
-    // And no living player's roster contains either of them.
-    const living = seats.filter((s) => s !== victimA && s !== victimB);
-    for (const s of living) {
+    expect(victimA!.roster!.deathMuted).toBe(false);
+    expect(victimB!.roster!.deathMuted).toBe(false);
+    for (const s of seats) {
+      if (s === victimA || s === victimB) {
+        continue;
+      }
       expect(s.roster!.peers).not.toContain(victimA!.client.sessionId);
       expect(s.roster!.peers).not.toContain(victimB!.client.sessionId);
     }
   });
 
-  it("refuses to relay a voice signal from a dead player to a living one", async () => {
+  it("still relays signalling for a covertly dead player during the undisclosed window — the roster is the cover, deathMuted is the enforcement", async () => {
     const room = await colyseus.createRoom<GameState>("game");
     const seats = await seatAndPlay(room);
     await enableVoice(seats);
@@ -278,6 +344,53 @@ describe("GameRoom voice dead/living wall (leak test)", () => {
     armAbility(room, killer.client.sessionId, "kill");
     killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
     await tick(3);
+
+    survivor.voiceSignals.length = 0;
+    victim.voiceSignals.length = 0;
+
+    // A signal in either direction still goes through — refusing it here,
+    // while the victim still visibly appears in `survivor`'s roster, would
+    // itself be an observable tell distinguishing a covert kill from an
+    // ordinary connection. `deathMuted` (asserted above) is what actually
+    // keeps the victim from being heard, not a dropped signal.
+    victim.client.send("voice_signal", {
+      to: survivor.client.sessionId,
+      description: { type: "offer", sdp: "still-connected" },
+    });
+    survivor.client.send("voice_signal", {
+      to: victim.client.sessionId,
+      description: { type: "offer", sdp: "still-connected" },
+    });
+    await tick(3);
+
+    expect(survivor.voiceSignals).toHaveLength(1);
+    expect(victim.voiceSignals).toHaveLength(1);
+  });
+
+  it("refuses to relay a voice signal from a DISCLOSED-dead player to a living one", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    await enableVoice(seats);
+
+    const { strangers, townsfolk } = splitRoles(seats);
+    const killer = strangers[0]!;
+    const victim = townsfolk[0]!;
+    const survivor = townsfolk[1]!;
+    victim.player.x = killer.player.x;
+    victim.player.y = killer.player.y;
+
+    armAbility(room, killer.client.sessionId, "kill");
+    killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
+    await tick(3);
+
+    // Disclose it — the real wall only applies from here. The body's stored
+    // position is a snapshot from death (see `killPlayer`), so the reporter
+    // moves to the kill site, not to the (now-irrelevant) live victim position.
+    survivor.player.x = killer.player.x;
+    survivor.player.y = killer.player.y;
+    survivor.client.send("report_body", { bodyId: victim.client.sessionId });
+    await tick(3);
+    expect(room.state.phase).toBe(PHASE.MEETING);
 
     survivor.voiceSignals.length = 0;
     victim.voiceSignals.length = 0;
