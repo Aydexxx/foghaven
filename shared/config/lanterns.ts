@@ -31,7 +31,7 @@ export const lanternColors = [
   { id: "ash", name: "Ash", hex: "#9AA5B5" },
   { id: "plum", name: "Plum", hex: "#9B6BAA" },
   { id: "moss", name: "Moss", hex: "#8FA85C" },
-  { id: "coral", name: "Coral", hex: "#FF8A7A" },
+  { id: "coral", name: "Coral", hex: "#FFA48F" },
 ] as const;
 
 export type LanternColor = (typeof lanternColors)[number];

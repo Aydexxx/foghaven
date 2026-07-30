@@ -112,9 +112,11 @@ All lantern colours sit in a narrow high-luminance band so no player is harder t
 | Ash | `#9AA5B5` |
 | Plum | `#9B6BAA` |
 | Moss | `#8FA85C` |
-| Coral | `#FF8A7A` |
+| Coral | `#FFA48F` |
 
 **Accessibility:** Amber/Rust and Rose/Coral are close. Colour must never be the *only* channel — every player card and nameplate also shows the player name, and colourblind mode adds a two-letter code beside the lantern (`AM`, `RU`, `RO`, `CO`).
+
+**Canonical source:** the table above documents intent; `shared/config/lanterns.ts` is the implementation. If the two ever disagree, the code wins and this table is stale — update it to match. As with `character-base-01` (§4.6), there is one source of truth, not two independently maintained copies.
 
 ---
 
