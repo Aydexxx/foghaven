@@ -19,6 +19,7 @@ import {
 import { archetypeForColor } from "../game/characters/assign";
 import { VICTORY_POSE_VISUALS } from "../game/characters/cosmeticVisuals";
 import { RigPreview } from "./RigPreview";
+import { Button, Card, Panel } from "./primitives";
 
 interface InventoryPanelProps {
   token: string;
@@ -117,38 +118,39 @@ export function InventoryPanel({ token, username, onClose }: InventoryPanelProps
 
   return (
     <div className="inventory-overlay" role="dialog" aria-label={t("inventory.heading")}>
-      <div className="inventory-panel">
+      <Panel className="inventory-panel">
         <div className="inventory-header">
           <h2>{t("inventory.heading")}</h2>
           <span className="inventory-coins">{t("inventory.coins", { count: coins })}</span>
-          <button type="button" className="link-button" onClick={onClose}>
+          <Button type="button" variant="link" onClick={onClose}>
             {t("inventory.closeButton")}
-          </button>
+          </Button>
         </div>
 
         <div className="inventory-preview">
-          <RigPreview
-            archetypeId={previewArchetype}
-            hat={loadout.hatId}
-            accessory={loadout.accessoryId}
-            outfit={loadout.outfitId}
-            pet={loadout.petId}
-            pose={loadout.victoryPoseId ? VICTORY_POSE_VISUALS[loadout.victoryPoseId] : undefined}
-            size={128}
-          />
+          <Card>
+            <RigPreview
+              archetypeId={previewArchetype}
+              hat={loadout.hatId}
+              accessory={loadout.accessoryId}
+              outfit={loadout.outfitId}
+              pet={loadout.petId}
+              pose={loadout.victoryPoseId ? VICTORY_POSE_VISUALS[loadout.victoryPoseId] : undefined}
+              size={128}
+            />
+          </Card>
           <p className="hint">{t("inventory.previewHint")}</p>
         </div>
 
         <div className="inventory-tabs">
           {COSMETIC_TYPES.map((type) => (
-            <button
+            <Button
               key={type}
-              type="button"
               className={tab === type ? "inventory-tab inventory-tab-active" : "inventory-tab"}
               onClick={() => setTab(type)}
             >
               {t(`cosmetics.types.${type}`)}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -158,68 +160,70 @@ export function InventoryPanel({ token, username, onClose }: InventoryPanelProps
             .map((def) => {
               const item = owned.get(def.id);
               return (
-                <li
-                  key={def.id}
-                  className={item?.equipped ? "inventory-item inventory-item-equipped" : "inventory-item"}
-                >
-                  <RigPreview {...previewPropsFor(previewArchetype, def.type, def.id)} size={72} />
-                  <span className="inventory-item-name">{t(`cosmetics.items.${def.id}`, def.name)}</span>
-                  {item?.equipped && (
-                    <span className="inventory-equipped-tag">{t("inventory.equippedTag")}</span>
-                  )}
+                <li key={def.id}>
+                  <Card selected={item?.equipped} className="inventory-item">
+                    <RigPreview {...previewPropsFor(previewArchetype, def.type, def.id)} size={72} />
+                    <span className="inventory-item-name">{t(`cosmetics.items.${def.id}`, def.name)}</span>
+                    {item?.equipped && (
+                      <span className="inventory-equipped-tag">{t("inventory.equippedTag")}</span>
+                    )}
 
-                  {item?.equipped ? (
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={busyId === def.id}
-                      onClick={() =>
-                        run(def.id, async () => {
-                          await unequipCosmetic(token, def.type);
-                          await refresh();
-                        })
-                      }
-                    >
-                      {t("inventory.unequipButton")}
-                    </button>
-                  ) : item ? (
-                    <button
-                      type="button"
-                      disabled={busyId === def.id}
-                      onClick={() =>
-                        run(def.id, async () => {
-                          await equipCosmetic(token, def.id);
-                          await refresh();
-                        })
-                      }
-                    >
-                      {t("inventory.equipButton")}
-                    </button>
-                  ) : (
-                    // Reached only for a paid item with no ownership row —
-                    // starters are always present in `owned` already (see
-                    // `CosmeticProvider.listOwned`), so there is no separate
-                    // "claim your free item" step to design for here.
-                    <button
-                      type="button"
-                      disabled={busyId === def.id || coins < def.priceCoins}
-                      onClick={() =>
-                        run(def.id, async () => {
-                          await purchaseCosmetic(token, def.id);
-                          await refresh();
-                        })
-                      }
-                    >
-                      {t("inventory.buyButton", { price: def.priceCoins })}
-                    </button>
-                  )}
+                    {item?.equipped ? (
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="secondary"
+                        disabled={busyId === def.id}
+                        onClick={() =>
+                          run(def.id, async () => {
+                            await unequipCosmetic(token, def.type);
+                            await refresh();
+                          })
+                        }
+                      >
+                        {t("inventory.unequipButton")}
+                      </Button>
+                    ) : item ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        disabled={busyId === def.id}
+                        onClick={() =>
+                          run(def.id, async () => {
+                            await equipCosmetic(token, def.id);
+                            await refresh();
+                          })
+                        }
+                      >
+                        {t("inventory.equipButton")}
+                      </Button>
+                    ) : (
+                      // Reached only for a paid item with no ownership row —
+                      // starters are always present in `owned` already (see
+                      // `CosmeticProvider.listOwned`), so there is no separate
+                      // "claim your free item" step to design for here.
+                      <Button
+                        type="button"
+                        variant="primary"
+                        disabled={busyId === def.id || coins < def.priceCoins}
+                        onClick={() =>
+                          run(def.id, async () => {
+                            await purchaseCosmetic(token, def.id);
+                            await refresh();
+                          })
+                        }
+                      >
+                        {t("inventory.buyButton", { price: def.priceCoins })}
+                      </Button>
+                    )}
+                  </Card>
                 </li>
               );
             })}
         </ul>
 
         {error && <p className="error">{t(error)}</p>}
-      </div>
+      </Panel>
     </div>
   );
 }

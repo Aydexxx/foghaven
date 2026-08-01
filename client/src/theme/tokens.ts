@@ -209,3 +209,27 @@ export const duration = {
    */
   taskProgress: 400,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Derived values
+// ---------------------------------------------------------------------------
+
+/**
+ * Alpha overlays and washes computed from §3 colours via `color-mix()`,
+ * rather than new hex literals. Each is a formula, not a palette entry — §5
+ * ("Palette lock") governs *colours*, not opacity, so these don't need a §3
+ * addition, but the formula itself is worth naming once here instead of
+ * being re-derived (or silently drifting) wherever a panel needs a drop
+ * shadow. `generate-tokens.ts` mirrors these into `--shadow-deep`,
+ * `--shadow-soft`, `--highlight`, and `--danger-well` in `tokens.css`.
+ */
+export const derived = {
+  /** Panel/card drop shadow, resting depth. */
+  shadowDeep: "color-mix(in srgb, var(--color-ink) 55%, transparent)",
+  /** Panel/card drop shadow, subtle depth (inputs, inline chrome). */
+  shadowSoft: "color-mix(in srgb, var(--color-ink) 30%, transparent)",
+  /** ART_BIBLE §8 Panel: "Inner top highlight: 2px fogLight at 15% alpha". */
+  highlight: "color-mix(in srgb, var(--color-fog-light) 15%, transparent)",
+  /** Low-alpha strangerRed wash over void — background well for danger text/banners. */
+  dangerWell: "color-mix(in srgb, var(--color-stranger-red) 20%, var(--color-void))",
+} as const;

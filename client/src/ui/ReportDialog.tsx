@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { REPORT_REASONS, REPORT_NOTE_MAX_LENGTH, type ReportReason } from "@foghaven/shared";
+import { Button, Panel } from "./primitives";
 
 interface ReportDialogProps {
   /** Who is being reported — display name only; the server resolves the account itself. */
@@ -35,7 +36,7 @@ export function ReportDialog({ targetName, onSubmit, onClose }: ReportDialogProp
 
   return (
     <div className="report-overlay" role="dialog" aria-label={t("report.heading")}>
-      <form className="report-panel" onSubmit={submit}>
+      <Panel as="form" className="report-panel" onSubmit={submit}>
         <h2>{t("report.heading", { name: targetName })}</h2>
 
         <ul className="report-reasons">
@@ -67,16 +68,16 @@ export function ReportDialog({ targetName, onSubmit, onClose }: ReportDialogProp
         </label>
 
         <div className="report-actions">
-          <button type="submit" disabled={!reason}>
+          <Button type="submit" variant="primary" disabled={!reason}>
             {t("report.submitButton")}
-          </button>
-          <button type="button" className="secondary" onClick={onClose}>
+          </Button>
+          <Button type="button" variant="default" className="secondary" onClick={onClose}>
             {t("report.cancelButton")}
-          </button>
+          </Button>
         </div>
 
         <p className="hint">{t("report.disclaimer")}</p>
-      </form>
+      </Panel>
     </div>
   );
 }

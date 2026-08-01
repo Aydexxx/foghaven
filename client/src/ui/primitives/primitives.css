@@ -1,0 +1,207 @@
+/*
+ * ART_BIBLE §8 — Panel, Button, Card, Slider. The only styled primitives in
+ * the client (see Panel.tsx/Button.tsx/Card.tsx/Slider.tsx for the "why" of
+ * each rule). Every value below reads from theme/tokens.css; nothing here is
+ * a hardcoded hex, px scale value, or ms duration.
+ */
+
+/* --- Panel --------------------------------------------------------------- */
+
+.ph-panel {
+  border: 4px solid var(--color-ink);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-void) 94%, transparent);
+  box-shadow: inset 0 2px 0 var(--highlight);
+}
+
+/* --- Button ---------------------------------------------------------------
+ * The 5px ink bar is a `box-shadow`, not a border or a second element: it
+ * needs to collapse to zero height on press without the button's own
+ * border-box (and therefore its layout) changing size.
+ */
+
+.ph-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  box-sizing: border-box;
+  min-height: var(--space-xxxl);
+  min-width: 96px;
+  padding: 0 var(--space-lg);
+  border: 4px solid var(--color-ink);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-family-ui);
+  font-weight: var(--font-weight-ui-bold);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  cursor: pointer;
+  box-shadow: 0 5px 0 0 var(--color-ink);
+  transition: transform var(--duration-fast) linear, box-shadow var(--duration-fast) linear;
+}
+
+.ph-button:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 0 0 0 var(--color-ink);
+}
+
+.ph-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+  filter: grayscale(0.3);
+}
+
+.ph-button--default {
+  background: var(--color-wood-mid);
+  color: var(--color-foam);
+}
+
+.ph-button--primary {
+  background: var(--color-flame-glow);
+  color: var(--color-ink);
+}
+
+.ph-button--destructive {
+  background: var(--color-stranger-red);
+  color: var(--color-foam);
+}
+
+/* A quiet, link-styled button — no border/fill/bar, still a real <button>
+   so it still gets the global press-punch. */
+.ph-button--link {
+  min-height: auto;
+  min-width: 0;
+  padding: var(--space-xs);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-mist);
+  font-weight: var(--font-weight-ui-regular);
+  font-size: var(--font-size-caption);
+  text-decoration: underline;
+}
+
+.ph-button--link:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+/* --- Card ------------------------------------------------------------- */
+
+.ph-card {
+  position: relative;
+  border: 3px solid var(--color-ink);
+  border-radius: var(--radius-md);
+}
+
+.ph-card--selected {
+  border-width: 4px;
+  border-color: var(--color-vote-gold);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-vote-gold) 35%, transparent);
+}
+
+.ph-card--dead {
+  filter: saturate(0.2);
+}
+
+.ph-card--dead::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.6;
+  background:
+    linear-gradient(45deg, transparent 46%, var(--color-ink) 48%, var(--color-ink) 52%, transparent 54%),
+    linear-gradient(-45deg, transparent 46%, var(--color-ink) 48%, var(--color-ink) 52%, transparent 54%);
+}
+
+/* --- Slider ---------------------------------------------------------------
+ * `appearance: none` hands the whole box to us, so the input's own height
+ * (48px, the tap-target floor) is what actually gets clicked/dragged — the
+ * visually thin 8px track just sits centred inside it.
+ */
+
+.ph-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--space-xxxl);
+}
+
+.ph-slider__label {
+  font-family: var(--font-family-ui);
+  font-weight: var(--font-weight-ui-regular);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  color: var(--color-mist);
+}
+
+.ph-slider__input {
+  flex: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  height: var(--space-xxxl);
+  min-width: 96px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ph-slider__input:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.ph-slider__input::-webkit-slider-runnable-track {
+  height: var(--space-sm);
+  border-radius: var(--radius-xxl);
+  background: linear-gradient(
+    to right,
+    var(--color-flame-glow) 0%,
+    var(--color-flame-glow) var(--ph-slider-fill, 0%),
+    var(--color-void) var(--ph-slider-fill, 0%),
+    var(--color-void) 100%
+  );
+}
+
+.ph-slider__input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: var(--color-rope-tan);
+  border: 3px solid var(--color-ink);
+}
+
+.ph-slider__input::-moz-range-track {
+  height: var(--space-sm);
+  border-radius: var(--radius-xxl);
+  background: var(--color-void);
+}
+
+.ph-slider__input::-moz-range-progress {
+  height: var(--space-sm);
+  border-radius: var(--radius-xxl);
+  background: var(--color-flame-glow);
+}
+
+.ph-slider__input::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-rope-tan);
+  border: 3px solid var(--color-ink);
+}
+
+.ph-slider__value {
+  min-width: 3.5ch;
+  text-align: right;
+  font-family: var(--font-family-numeric);
+  font-weight: var(--font-weight-numeric);
+  font-size: var(--font-size-caption);
+  color: var(--color-foam);
+}

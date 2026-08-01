@@ -48,6 +48,14 @@ export interface VoicePeerView {
   muted: boolean;
   /** Whether the underlying peer connection is currently connected. */
   connected: boolean;
+  /**
+   * Whether this peer's incoming audio is currently above
+   * `SPEAKING_THRESHOLD` (with a short hold so mid-sentence gaps don't
+   * flicker it). Independent of `muted` — a peer you've locally muted still
+   * reports whether THEY are talking, same as a real voice app's speaker
+   * ring keeps lighting up for someone you've muted on your own end.
+   */
+  speaking: boolean;
 }
 
 /** The slice of controller state the UI renders. Pushed on every change. */
@@ -77,6 +85,13 @@ interface PeerConnection {
   ignoreOffer: boolean;
   /** WebAudio gain node the proximity/equal volume is written to. */
   gain?: GainNode;
+  /**
+   * Analyses this peer's incoming audio for the speaking indicator — tapped
+   * from the same `MediaStreamAudioSourceNode` as `gain`, upstream of it, so
+   * a peer this client has locally muted still correctly reads as speaking
+   * (this answers "are they talking", not "can I hear them").
+   */
+  analyser?: AnalyserNode;
   /** A muted sink element — a Chrome quirk needs the remote stream attached to one for WebAudio to pull it. */
   sink?: HTMLAudioElement;
 }
@@ -85,8 +100,19 @@ interface PeerConnection {
 const GAIN_TICK_MS = 120;
 /** Time constant for gain ramps, so volume glides rather than clicking. */
 const GAIN_RAMP_S = 0.08;
-/** How often the mic level meter samples, in ms. */
+/** How often the mic level meter samples, in ms. Also drives the per-peer speaking check — same cadence, one timer. */
 const MIC_LEVEL_TICK_MS = 100;
+
+/** RMS level (same 0..1 scale as `micLevel`) above which a peer's incoming audio counts as speech rather than background noise. */
+const SPEAKING_THRESHOLD = 0.12;
+
+/**
+ * How long a peer keeps reading as "speaking" after their audio last crossed
+ * `SPEAKING_THRESHOLD`. Natural speech has brief gaps between words that would
+ * otherwise flicker the indicator on and off several times a sentence; holding
+ * it for a short tail smooths that into one steady "talking now" light.
+ */
+const SPEAKING_HOLD_MS = 300;
 
 export class VoiceController {
   private readonly room: Room<GameState>;
@@ -122,6 +148,11 @@ export class VoiceController {
   private readonly peers = new Map<string, PeerConnection>();
   private readonly mutedPeers = new Set<string>();
   private lastRosterPeers: string[] = [];
+
+  /** Last `Date.now()` a peer's incoming audio crossed `SPEAKING_THRESHOLD`. Absent = never (yet). */
+  private readonly lastLoudAt = new Map<string, number>();
+  /** The speaking flag last pushed in a snapshot, per peer — so a tick that changes nothing skips `emit()`, same as `updateMicLevel` does for the local level. */
+  private readonly wasSpeaking = new Map<string, boolean>();
 
   private gainTimer?: ReturnType<typeof setInterval>;
   private micTimer?: ReturnType<typeof setInterval>;
@@ -359,6 +390,13 @@ export class VoiceController {
     source.connect(gain).connect(this.audioCtx.destination);
     peer.gain = gain;
 
+    // The speaking indicator taps the same source, independently of gain —
+    // see the field's own doc for why muting locally must not blind it.
+    const analyser = this.audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    peer.analyser = analyser;
+
     // WebAudio in Chromium won't pull from a `MediaStreamSource` fed by WebRTC
     // unless the stream is also sunk to a media element. Mute it so playback
     // itself comes only from the WebAudio graph above (where the gain lives).
@@ -389,6 +427,8 @@ export class VoiceController {
       peer.sink.srcObject = null;
     }
     this.peers.delete(peerId);
+    this.lastLoudAt.delete(peerId);
+    this.wasSpeaking.delete(peerId);
   }
 
   private async handleSignal(msg: VoiceSignalMessage): Promise<void> {
@@ -499,10 +539,53 @@ export class VoiceController {
     // Only show level when the mic is actually going out — a muted mic reading
     // "hot" would just be confusing.
     const level = this.isTransmitting() ? Math.min(1, rms * 2.5) : 0;
+    let changed = false;
     if (Math.abs(level - this.micLevel) > 0.02) {
       this.micLevel = level;
+      changed = true;
+    }
+    if (this.updatePeerSpeaking()) {
+      changed = true;
+    }
+    if (changed) {
       this.emit();
     }
+  }
+
+  /**
+   * Recompute the speaking flag for every connected peer from their own
+   * analyser. Returns whether any peer's flag actually flipped, so the
+   * caller can skip a state push on a tick where nothing changed — same
+   * "only emit on real change" discipline `updateMicLevel` applies to the
+   * local level.
+   */
+  private updatePeerSpeaking(): boolean {
+    const now = Date.now();
+    let changed = false;
+    for (const [peerId, peer] of this.peers) {
+      if (!peer.analyser) {
+        continue;
+      }
+      const buffer = new Uint8Array(peer.analyser.fftSize);
+      peer.analyser.getByteTimeDomainData(buffer);
+      let sumSquares = 0;
+      for (const sample of buffer) {
+        const centered = (sample - 128) / 128;
+        sumSquares += centered * centered;
+      }
+      const rms = Math.sqrt(sumSquares / buffer.length);
+      const level = Math.min(1, rms * 2.5);
+      if (level > SPEAKING_THRESHOLD) {
+        this.lastLoudAt.set(peerId, now);
+      }
+      const loudAt = this.lastLoudAt.get(peerId);
+      const speaking = loudAt !== undefined && now - loudAt < SPEAKING_HOLD_MS;
+      if (this.wasSpeaking.get(peerId) !== speaking) {
+        this.wasSpeaking.set(peerId, speaking);
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   /** Whether the mic is currently sending audio: started, not muted, not gagged, not (secretly) dead, and (in PTT) held. */
@@ -543,6 +626,7 @@ export class VoiceController {
         id,
         muted: this.mutedPeers.has(id),
         connected: peer.pc.connectionState === "connected",
+        speaking: this.wasSpeaking.get(id) ?? false,
       })),
     };
   }

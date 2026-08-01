@@ -13,6 +13,7 @@ import { AuthError, deleteAccount } from "../net/auth";
 import { archetypeForColor } from "../game/characters/assign";
 import { VICTORY_POSE_VISUALS } from "../game/characters/cosmeticVisuals";
 import { RigPreview } from "./RigPreview";
+import { Button, Card, Panel } from "./primitives";
 
 interface ProfilePanelProps {
   token: string;
@@ -123,12 +124,12 @@ export function ProfilePanel({
 
   return (
     <div className="profile-overlay" role="dialog" aria-label={t("profile.heading")}>
-      <div className="profile-panel">
+      <Panel className="profile-panel">
         <div className="profile-header">
           <h2>{t("profile.heading")}</h2>
-          <button type="button" className="link-button" onClick={onClose}>
+          <Button type="button" variant="link" onClick={onClose}>
             {t("profile.closeButton")}
-          </button>
+          </Button>
         </div>
 
         {loading && <p className="hint">{t("profile.loading")}</p>}
@@ -137,15 +138,17 @@ export function ProfilePanel({
         {!loading && !error && (
           <>
             <div className="profile-preview">
-              <RigPreview
-                archetypeId={previewArchetype}
-                hat={loadout.hatId || undefined}
-                accessory={loadout.accessoryId || undefined}
-                outfit={loadout.outfitId || undefined}
-                pet={loadout.petId || undefined}
-                pose={loadout.victoryPoseId ? VICTORY_POSE_VISUALS[loadout.victoryPoseId] : undefined}
-                size={112}
-              />
+              <Card>
+                <RigPreview
+                  archetypeId={previewArchetype}
+                  hat={loadout.hatId || undefined}
+                  accessory={loadout.accessoryId || undefined}
+                  outfit={loadout.outfitId || undefined}
+                  pet={loadout.petId || undefined}
+                  pose={loadout.victoryPoseId ? VICTORY_POSE_VISUALS[loadout.victoryPoseId] : undefined}
+                  size={112}
+                />
+              </Card>
               <p className="profile-username">{username}</p>
             </div>
 
@@ -206,21 +209,21 @@ export function ProfilePanel({
             </div>
 
             <div className="profile-legal-links">
-              <button type="button" className="link-button" onClick={onOpenPrivacy}>
+              <Button type="button" variant="link" onClick={onOpenPrivacy}>
                 {t("legal.privacy.title")}
-              </button>
-              <button type="button" className="link-button" onClick={onOpenTerms}>
+              </Button>
+              <Button type="button" variant="link" onClick={onOpenTerms}>
                 {t("legal.terms.title")}
-              </button>
+              </Button>
             </div>
 
             <div className="profile-danger-zone">
               <h3>{t("profile.deleteAccount.heading")}</h3>
               <p className="hint">{t("profile.deleteAccount.description")}</p>
               {!confirmingDelete ? (
-                <button type="button" className="danger" onClick={() => setConfirmingDelete(true)}>
+                <Button type="button" variant="destructive" className="danger" onClick={() => setConfirmingDelete(true)}>
                   {t("profile.deleteAccount.startButton")}
-                </button>
+                </Button>
               ) : (
                 <form onSubmit={handleDelete} className="profile-delete-form">
                   <label className="field">
@@ -235,11 +238,12 @@ export function ProfilePanel({
                     />
                   </label>
                   <div className="profile-delete-actions">
-                    <button type="submit" className="danger" disabled={deleteBusy || !deletePassword}>
+                    <Button type="submit" variant="destructive" className="danger" disabled={deleteBusy || !deletePassword}>
                       {deleteBusy ? t("profile.deleteAccount.busy") : t("profile.deleteAccount.confirmButton")}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      variant="default"
                       className="secondary"
                       disabled={deleteBusy}
                       onClick={() => {
@@ -249,7 +253,7 @@ export function ProfilePanel({
                       }}
                     >
                       {t("profile.deleteAccount.cancelButton")}
-                    </button>
+                    </Button>
                   </div>
                   {deleteError && <p className="error">{deleteError}</p>}
                 </form>
@@ -257,7 +261,7 @@ export function ProfilePanel({
             </div>
           </>
         )}
-      </div>
+      </Panel>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { ClientTask } from "@foghaven/shared";
+import { Panel } from "./primitives";
 
 interface TaskListProps {
   tasks: ClientTask[];
@@ -18,7 +19,7 @@ export function TaskList({ tasks }: TaskListProps) {
   }
 
   return (
-    <div className="task-list">
+    <Panel className="task-list">
       <h2>{t("taskList.heading")}</h2>
       <ul>
         {tasks.map((task) => {
@@ -36,6 +37,6 @@ export function TaskList({ tasks }: TaskListProps) {
           );
         })}
       </ul>
-    </div>
+    </Panel>
   );
 }

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MinigameProps } from "./types";
-
-const TILE_COLORS = ["#e6194b", "#3cb44b", "#4363d8", "#f58231"];
+import { MINIGAME_TILE_COLORS as TILE_COLORS } from "../../theme/minigameTileColors";
 const SEQUENCE_LENGTH = 4;
 const FLASH_MS = 550;
 const GAP_MS = 250;

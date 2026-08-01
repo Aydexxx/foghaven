@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Room } from "colyseus.js";
-import {
-  MIN_PLAYERS,
-  PRESET,
-  PRESET_CUSTOM,
-  ROLE_DEFINITIONS,
-  SETTING_DEFINITIONS,
-  type Preset,
-} from "@foghaven/shared";
+import { MIN_PLAYERS } from "@foghaven/shared";
 import type { GameState } from "../net/types";
 import { readRoomSettings } from "../net/settings";
+import { LobbyCanvas } from "../game/LobbyCanvas";
+import { LobbySettingsPanel } from "./LobbySettingsPanel";
+import { Button, Panel } from "./primitives";
+
+/** One line of the assistive-technology roster mirror — see its use below. */
+interface RosterEntry {
+  id: string;
+  name: string;
+  connected: boolean;
+  ready: boolean;
+}
 
 interface LobbyRoomProps {
   room: Room<GameState>;
@@ -19,30 +23,35 @@ interface LobbyRoomProps {
   onOpenFriends?: () => void;
 }
 
-interface RosterEntry {
-  id: string;
-  name: string;
-  connected: boolean;
-}
-
-const PRESETS: Preset[] = [PRESET.CLASSIC, PRESET.CHAOS, PRESET.PURE];
-
 /**
- * The waiting room: room code, a live roster, the role settings, and a Start
- * button that only the host ever sees. Everything is a *request* — the
- * server decides whether a start, a preset, or a role toggle actually takes
- * effect; non-hosts see the same settings read-only, straight from the
- * public state the server maintains.
+ * The waiting room — a walkable Tavern rather than a form (ART_BIBLE §5.2).
  *
- * The role list renders from the shared registry (`ROLE_DEFINITIONS`), so a
- * new role appears here with no change to this file.
+ * The room itself is the primary interface: players spawn as their Havener,
+ * walk around, see each other, and declare themselves ready by standing on
+ * the marked flagstone by the door. This component owns only what can't live
+ * in the world — the persistent room-code/invite HUD, the start and leave
+ * controls, and the settings overlay the Tavern's table opens.
+ *
+ * The roster moved into the world wholesale: names are nameplates, the host
+ * wears a voteGold crown, ready players carry a green check, and a player
+ * inside their reconnection grace period is drawn faded with an "away" tag
+ * rather than listed. See `LobbyScene`.
+ *
+ * Everything here remains a *request*. The server decides whether a start
+ * actually happens, and re-derives the ready count from live positions when
+ * it does — this component's `canStart` only keeps the button from promising
+ * something that would then quietly not happen.
  */
 export function LobbyRoom({ room, onLeave, onOpenFriends }: LobbyRoomProps) {
   const { t } = useTranslation();
-  const [players, setPlayers] = useState<RosterEntry[]>([]);
   const [hostId, setHostId] = useState(room.state.hostId);
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [readyCount, setReadyCount] = useState(0);
+  const [presentCount, setPresentCount] = useState(0);
+  const [localReady, setLocalReady] = useState(false);
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [enabledRoleIds, setEnabledRoleIds] = useState<string[]>([]);
   const [preset, setPreset] = useState(room.state.rolePreset);
   const [settings, setSettings] = useState<Record<string, number | boolean>>(() =>
@@ -51,11 +60,27 @@ export function LobbyRoom({ room, onLeave, onOpenFriends }: LobbyRoomProps) {
 
   useEffect(() => {
     const sync = () => {
-      const current: RosterEntry[] = [];
-      room.state.players.forEach((player, id) =>
-        current.push({ id, name: player.name, connected: player.connected }),
-      );
-      setPlayers(current);
+      let ready = 0;
+      let present = 0;
+      const entries: RosterEntry[] = [];
+      room.state.players.forEach((player, id) => {
+        entries.push({
+          id,
+          name: player.name,
+          connected: player.connected,
+          ready: player.ready,
+        });
+        if (player.connected) {
+          present++;
+          if (player.ready) {
+            ready++;
+          }
+        }
+      });
+      setRoster(entries);
+      setReadyCount(ready);
+      setPresentCount(present);
+      setLocalReady(room.state.players.get(room.sessionId)?.ready ?? false);
 
       const ids: string[] = [];
       room.state.enabledRoleIds.forEach((id) => ids.push(id));
@@ -75,12 +100,9 @@ export function LobbyRoom({ room, onLeave, onOpenFriends }: LobbyRoomProps) {
   }, [room]);
 
   const isHost = hostId === room.sessionId;
-  // Mirrors the server's own rule: a player inside their reconnection grace
-  // period is dropped when the round starts, so they must not be what makes it
-  // startable. The server re-checks this regardless — this only keeps the
-  // button from promising something that would then quietly not happen.
-  const presentCount = players.filter((player) => player.connected).length;
-  const canStart = presentCount >= MIN_PLAYERS;
+  // Mirrors the server's own rule exactly (`handleStart`): the gate is how
+  // many players are standing on the flagstone, not how many are in the room.
+  const canStart = readyCount >= MIN_PLAYERS;
 
   const copyCode = async () => {
     try {
@@ -114,180 +136,82 @@ export function LobbyRoom({ room, onLeave, onOpenFriends }: LobbyRoomProps) {
   };
 
   return (
-    <div className="panel">
-      <h1>{t("lobbyRoom.heading")}</h1>
+    <div className="lobby-room" role="region" aria-label={t("lobbyRoom.heading")}>
+      <LobbyCanvas room={room} onOpenSettings={() => setShowSettings(true)} />
 
-      <div className="room-code">
-        <span className="room-code-value">{room.roomId}</span>
-        <button type="button" className="secondary" onClick={copyCode}>
-          {copied ? t("lobbyRoom.copied") : t("lobbyRoom.copyButton")}
-        </button>
-      </div>
-
-      <div className="invite-row">
-        <button type="button" className="secondary" onClick={copyInviteLink}>
-          {linkCopied ? t("lobbyRoom.copied") : t("lobbyRoom.copyInviteLinkButton")}
-        </button>
-        {onOpenFriends && (
-          <button type="button" className="secondary" onClick={onOpenFriends}>
-            {t("lobbyRoom.inviteFriendsButton")}
-          </button>
-        )}
-      </div>
-
-      <ul className="roster">
-        {players.map((player) => (
-          <li key={player.id} className={player.connected ? undefined : "roster-away"}>
-            <span>{player.name}</span>
-            {!player.connected && (
-              <span className="away-tag">{t("lobbyRoom.disconnectedTag")}</span>
-            )}
-            {player.id === hostId && <span className="host-tag">{t("lobbyRoom.hostTag")}</span>}
+      {/*
+        The roster now lives in the world — nameplates, a crown, green checks.
+        A canvas is opaque to assistive technology, so the same information is
+        mirrored here as real text. This is not decoration: before this screen
+        became a room, the roster WAS a list, and dropping it entirely would
+        be a genuine regression for anyone using a screen reader.
+      */}
+      <ul className="visually-hidden" aria-live="polite">
+        {roster.map((player) => (
+          <li key={player.id}>
+            {player.name}
+            {player.id === hostId ? ` — ${t("lobbyRoom.hostTag")}` : ""}
+            {player.ready ? ` — ${t("lobbyRoom.readyTag")}` : ""}
+            {!player.connected ? ` — ${t("lobbyRoom.disconnectedTag")}` : ""}
           </li>
         ))}
       </ul>
 
-      <div className="role-settings">
-        <h2>{t("lobbyRoom.rolesHeading")}</h2>
+      {/* Pinned, persistent, and deliberately small — the room is the screen. */}
+      <Panel className="lobby-hud">
+        <div className="lobby-hud-code">
+          <span className="room-code-value">{room.roomId}</span>
+          <Button onClick={copyCode}>
+            {copied ? t("lobbyRoom.copied") : t("lobbyRoom.copyButton")}
+          </Button>
+        </div>
 
-        <div className="preset-row">
-          {PRESETS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={preset === option ? "preset-button preset-button-active" : "preset-button"}
-              onClick={() => room.send("set_preset", { preset: option })}
-              disabled={!isHost}
-            >
-              {t(`lobbyRoom.preset.${option}`)}
-            </button>
-          ))}
-          {preset === PRESET_CUSTOM && (
-            <span className="preset-custom-tag">{t("lobbyRoom.preset.custom")}</span>
+        <div className="lobby-hud-invites">
+          <Button onClick={copyInviteLink}>
+            {linkCopied ? t("lobbyRoom.copied") : t("lobbyRoom.copyInviteLinkButton")}
+          </Button>
+          {onOpenFriends && (
+            <Button onClick={onOpenFriends}>{t("lobbyRoom.inviteFriendsButton")}</Button>
           )}
         </div>
 
-        <ul className="role-toggle-list">
-          {ROLE_DEFINITIONS.map((definition) => {
-            const enabled = enabledRoleIds.includes(definition.id);
-            // The fill role holds every leftover seat; the server refuses to
-            // disable it, so don't offer to.
-            const locked = definition.fill === true;
-            return (
-              <li key={definition.id} className="role-toggle-row">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={enabled}
-                    disabled={!isHost || locked}
-                    onChange={(event) =>
-                      room.send("set_role_enabled", {
-                        roleId: definition.id,
-                        enabled: event.target.checked,
-                      })
-                    }
-                  />
-                  <span className="role-toggle-name">
-                    {t(`roleInfo.${definition.id}.name`)}
-                  </span>
-                </label>
-                <span className={`faction-tag faction-tag-${definition.faction}`}>
-                  {t(`factions.${definition.faction}`)}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+        <p className="lobby-hud-ready" data-ready={localReady}>
+          {t("lobbyRoom.readyCount", { count: readyCount, min: MIN_PLAYERS })}
+        </p>
+        <p className="hint lobby-hud-hint">
+          {localReady ? t("lobbyRoom.youAreReady") : t("lobbyRoom.readyHint")}
+        </p>
+        <p className="hint lobby-hud-hint">
+          {t("lobbyRoom.playerCount", { count: presentCount, min: MIN_PLAYERS })}
+        </p>
 
-      <div className="balance-settings">
-        <h2>{t("lobbyRoom.balanceHeading")}</h2>
+        {isHost && (
+          <Button variant="primary" onClick={() => room.send("start")} disabled={!canStart}>
+            {t("lobbyRoom.startButton")}
+          </Button>
+        )}
 
-        <ul className="setting-list">
-          {SETTING_DEFINITIONS.map((definition) => {
-            const value = settings[definition.id];
+        {/* The table in the room is the intended way in — this is the
+            equivalent-access fallback, so the settings can never become
+            unreachable for someone who can't easily walk to the table. */}
+        <Button onClick={() => setShowSettings(true)}>{t("lobbyRoom.openSettingsButton")}</Button>
 
-            if (definition.type === "boolean") {
-              return (
-                <li key={definition.id} className="setting-row">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={value === true}
-                      disabled={!isHost}
-                      onChange={(event) =>
-                        room.send("set_setting", {
-                          id: definition.id,
-                          value: event.target.checked,
-                        })
-                      }
-                    />
-                    <span>{t(`lobbyRoom.settings.${definition.id}Label`)}</span>
-                  </label>
-                </li>
-              );
-            }
+        <Button variant="destructive" onClick={onLeave}>
+          {t("lobbyRoom.leaveButton")}
+        </Button>
+      </Panel>
 
-            // Number setting: ms-unit settings are shown/stepped in whole
-            // seconds (nobody wants to read "45000") — the only per-setting
-            // knowledge this UI needs, and it's read straight off the
-            // registry's own `unit` field, not hardcoded per id.
-            const divisor = definition.unit === "ms" ? 1000 : 1;
-            const raw = typeof value === "number" ? value : (definition.default as number);
-            const displayValue = raw / divisor;
-            const displayMin = (definition.min ?? 0) / divisor;
-            const displayMax = (definition.max ?? raw) / divisor;
-            const displayStep = (definition.step ?? 1) / divisor;
-            const isAuto = definition.id === "strangerCount" && raw === 0;
-
-            return (
-              <li key={definition.id} className="setting-row">
-                <label>
-                  <span className="setting-label">
-                    {t(`lobbyRoom.settings.${definition.id}Label`)}
-                    {": "}
-                    <strong>
-                      {isAuto
-                        ? t("lobbyRoom.settings.autoLabel")
-                        : definition.unit === "ms"
-                          ? t("lobbyRoom.settings.secondsValue", { value: displayValue })
-                          : displayValue}
-                    </strong>
-                  </span>
-                  <input
-                    type="range"
-                    min={displayMin}
-                    max={displayMax}
-                    step={displayStep}
-                    value={displayValue}
-                    disabled={!isHost}
-                    onChange={(event) =>
-                      room.send("set_setting", {
-                        id: definition.id,
-                        value: Number(event.target.value) * divisor,
-                      })
-                    }
-                  />
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      <p className="hint">
-        {t("lobbyRoom.playerCount", { count: presentCount, min: MIN_PLAYERS })}
-      </p>
-
-      {isHost && (
-        <button type="button" onClick={() => room.send("start")} disabled={!canStart}>
-          {t("lobbyRoom.startButton")}
-        </button>
+      {showSettings && (
+        <LobbySettingsPanel
+          room={room}
+          isHost={isHost}
+          preset={preset}
+          enabledRoleIds={enabledRoleIds}
+          settings={settings}
+          playerCount={presentCount}
+          onClose={() => setShowSettings(false)}
+        />
       )}
-
-      <button type="button" className="secondary" onClick={onLeave}>
-        {t("lobbyRoom.leaveButton")}
-      </button>
     </div>
   );
 }

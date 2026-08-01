@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import type { ClientTask, MinigameType } from "@foghaven/shared";
 import type { MinigameProps } from "../game/minigames/types";
+import { Button, Panel } from "./primitives";
 
 // Lazy so none of the six mini-games' code ships in the initial bundle —
 // only one is ever shown at a time, and a given session may never open some
@@ -44,22 +45,17 @@ export function MinigameModal({ task, onComplete, onCancel }: MinigameModalProps
 
   return (
     <div className="minigame-overlay">
-      <div className="minigame-panel" role="dialog" aria-modal="true" aria-label={task.room}>
+      <Panel className="minigame-panel" role="dialog" aria-modal="true" aria-label={task.room}>
         <header className="minigame-panel-header">
           <span>{task.room}</span>
-          <button
-            type="button"
-            className="minigame-panel-close"
-            onClick={onCancel}
-            aria-label={t("minigame.cancel")}
-          >
+          <Button className="minigame-panel-close" onClick={onCancel} aria-label={t("minigame.cancel")}>
             ✕
-          </button>
+          </Button>
         </header>
         <Suspense fallback={<p className="minigame-instructions">{t("app.loading")}</p>}>
           <Minigame onComplete={onComplete} onCancel={onCancel} />
         </Suspense>
-      </div>
+      </Panel>
     </div>
   );
 }

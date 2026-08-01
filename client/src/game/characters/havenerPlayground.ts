@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { Havener, HAVENER_ATLAS_KEY, type Facing, type HavenerState } from "./Havener";
 import { HAVENER_ANIM_CONFIG, walkConfigLeaves, type ConfigLeaf } from "./havenerAnimConfig";
 import { colors, lanternColors } from "../../theme/tokens";
+import { hexNum } from "../../theme/phaserColor";
 import { ATLAS_DIR, ATLAS_PAGES } from "../../assets/atlasManifest";
 
 /**
@@ -20,10 +21,6 @@ import { ATLAS_DIR, ATLAS_PAGES } from "../../assets/atlasManifest";
  * loop is currently playing (`Havener.restartCurrentState`), so the change is
  * visible without re-clicking a button.
  */
-
-function hexNum(hex: string): number {
-  return Phaser.Display.Color.HexStringToColor(hex).color;
-}
 
 const VIEWPORT_W = 420;
 const VIEWPORT_H = 360;

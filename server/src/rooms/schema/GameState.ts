@@ -76,6 +76,39 @@ export class Player extends Schema {
   @type("boolean") hasVoted = false;
 
   /**
+   * Whether this player is standing on the lobby's ready flagstone
+   * (`isOnReadyPad`). Lobby-only: recomputed from position every tick while
+   * the phase is LOBBY, and cleared for everyone as the round starts.
+   *
+   * DERIVED, never messaged. There is deliberately no "set_ready" the client
+   * can send — ready is a pure function of a position the server already
+   * owns, so the only way to become ready is to actually walk onto the stone.
+   * That removes a whole trust boundary rather than adding one to police: a
+   * client cannot claim to be ready any more than it can claim a position.
+   *
+   * Public for the same reason `connected` is — the green check over a
+   * ready player's head is the entire point, and the room can already see
+   * exactly who is standing on the stone.
+   */
+  @type("boolean") ready = false;
+
+  /**
+   * Whether this player has locked in a role during the ROLE_SELECT phase.
+   *
+   * This is the ONLY thing about role selection that is public, and it is
+   * deliberately a bare boolean: the room is meant to see who is still
+   * deciding, and nothing else. What they were offered, how many cards they
+   * were shown, and what they took all stay in server-only maps on
+   * `GameRoom` and travel to exactly one socket (`RoleOptionsMessage`).
+   *
+   * Safe to be public because it carries no faction signal: every player is
+   * offered the same number of cards (`roleSelectOptionCount`) and is
+   * prompted in the same shared window, so neither the fact of finishing nor
+   * the moment of it distinguishes a Stranger from a Townsfolk.
+   */
+  @type("boolean") hasPickedRole = false;
+
+  /**
    * Sequence number of the last input this player's position reflects. The
    * client uses it to discard acknowledged inputs during reconciliation.
    */

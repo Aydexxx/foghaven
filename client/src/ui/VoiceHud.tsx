@@ -3,6 +3,7 @@ import type { Room } from "colyseus.js";
 import { VOICE_CHANNEL, VOICE_MODE } from "@foghaven/shared";
 import type { GameState } from "../net/types";
 import type { UseVoice } from "../voice/useVoice";
+import { Button, Panel } from "./primitives";
 
 interface VoiceHudProps {
   room: Room<GameState>;
@@ -27,15 +28,10 @@ export function VoiceHud({ room, voice }: VoiceHudProps) {
   // Not joined yet: a single opt-in button (plus any error from a denied mic).
   if (!voice.enabled) {
     return (
-      <div className="voice-hud voice-hud-collapsed">
-        <button
-          type="button"
-          className="voice-join"
-          onClick={voice.enable}
-          disabled={voice.enabling}
-        >
+      <Panel className="voice-hud voice-hud-collapsed">
+        <Button variant="primary" className="voice-join" onClick={voice.enable} disabled={voice.enabling}>
           🎙️ {voice.enabling ? t("voice.joining") : t("voice.join")}
-        </button>
+        </Button>
         {voice.error && (
           <p className="voice-error" role="alert">
             {voice.error === "voice/unsupported"
@@ -45,7 +41,7 @@ export function VoiceHud({ room, voice }: VoiceHudProps) {
                 : t("voice.failed")}
           </p>
         )}
-      </div>
+      </Panel>
     );
   }
 
@@ -60,7 +56,7 @@ export function VoiceHud({ room, voice }: VoiceHudProps) {
   const meterWidth = `${Math.round(state.micLevel * 100)}%`;
 
   return (
-    <div className="voice-hud">
+    <Panel className="voice-hud">
       <header className="voice-hud-header">
         <span className="voice-channel">{channelLabel}</span>
         <span className="voice-mode">{modeLabel}</span>
@@ -79,14 +75,13 @@ export function VoiceHud({ room, voice }: VoiceHudProps) {
         >
           <span className="voice-meter-fill" style={{ width: meterWidth }} />
         </div>
-        <button
-          type="button"
+        <Button
           className={`voice-mic-toggle${state.selfMuted ? " is-muted" : ""}`}
           onClick={voice.toggleSelfMute}
           aria-pressed={state.selfMuted}
         >
           {state.selfMuted ? t("voice.unmuteSelf") : t("voice.muteSelf")}
-        </button>
+        </Button>
       </div>
 
       <label className="voice-ptt">
@@ -109,14 +104,13 @@ export function VoiceHud({ room, voice }: VoiceHudProps) {
               return (
                 <li key={peer.id} className={peer.connected ? "is-connected" : "is-connecting"}>
                   <span className="voice-peer-name">{name}</span>
-                  <button
-                    type="button"
+                  <Button
                     className={`voice-peer-mute${peer.muted ? " is-muted" : ""}`}
                     onClick={() => voice.togglePeerMute(peer.id)}
                     aria-pressed={peer.muted}
                   >
                     {peer.muted ? t("voice.unmutePeer") : t("voice.mutePeer")}
-                  </button>
+                  </Button>
                 </li>
               );
             })}
@@ -124,9 +118,9 @@ export function VoiceHud({ room, voice }: VoiceHudProps) {
         )}
       </div>
 
-      <button type="button" className="voice-leave" onClick={voice.disable}>
+      <Button className="voice-leave" onClick={voice.disable}>
         {t("voice.leave")}
-      </button>
-    </div>
+      </Button>
+    </Panel>
   );
 }

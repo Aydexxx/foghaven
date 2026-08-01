@@ -3,6 +3,7 @@ import {
   DISCUSSION_MS,
   VOTING_MS,
   CONFIRM_EJECTS,
+  VOTES_ARE_PUBLIC,
 } from "./gameConfig";
 import { RANDOM_TASKS_PER_PLAYER } from "./tasks";
 
@@ -103,6 +104,37 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
     id: "voteMuteEnabled",
     type: "boolean",
     default: true,
+  },
+  {
+    // Whether players choose their own role from a private hand after
+    // factions are dealt, instead of simply being handed one. Off falls back
+    // to the exact random assignment that predates selection — the phase is
+    // skipped, not merely auto-picked, so a lobby that doesn't want the extra
+    // 20 seconds pays nothing for it.
+    //
+    // Public, like every other setting: which is fine, and in fact required.
+    // Whether selection is running is something the whole room can already
+    // see (there is a phase for it); what stays secret is only ever what any
+    // individual was offered and took.
+    id: "roleSelectionEnabled",
+    type: "boolean",
+    default: true,
+  },
+  {
+    // Whether the results screen names who voted for whom. Off (the default)
+    // is what `VOTES_ARE_PUBLIC` used to hardcode for every room; this makes
+    // it a real per-lobby choice instead, the same move `confirmEjects`
+    // already made for `CONFIRM_EJECTS`.
+    //
+    // While the ballot is open this changes NOTHING about the wire: an
+    // individual vote is never broadcast either way, public or anonymous —
+    // see `GameRoom.resolveVotes`, which is the one place ballots become
+    // tallies and the only place this setting is read. Anonymity is a
+    // disclosure decision made once, at resolution; it is not a reason for a
+    // vote to ever leave the server mid-ballot.
+    id: "votesArePublic",
+    type: "boolean",
+    default: VOTES_ARE_PUBLIC,
   },
 ] as const;
 

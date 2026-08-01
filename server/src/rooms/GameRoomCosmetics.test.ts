@@ -10,6 +10,7 @@ import {
   ROLES,
   TICK_RATE,
   WIN_REASON,
+  LOBBY_READY_PAD_POINT,
 } from "@foghaven/shared";
 import { GameRoom } from "./GameRoom";
 import type { GameState } from "./schema/GameState";
@@ -155,6 +156,13 @@ describe("cosmetics ride the same fog gate as position", () => {
       );
     }
 
+    // Ready is physical: the start is refused unless MIN_PLAYERS are
+    // standing on the Tavern flagstone (see isOnReadyPad).
+    for (const c of clients) {
+      const p = room.state.players.get(c.sessionId)!;
+      p.x = LOBBY_READY_PAD_POINT.x;
+      p.y = LOBBY_READY_PAD_POINT.y;
+    }
     clients[0]!.send("start");
     await tick(4);
     await new Promise((resolve) => setTimeout(resolve, 3200)); // clear ROLE_REVEAL

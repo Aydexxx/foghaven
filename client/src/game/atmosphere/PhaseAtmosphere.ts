@@ -2,6 +2,12 @@ import Phaser from "phaser";
 import { TILE_SIZE } from "@foghaven/shared";
 import { graphicsEngine } from "../../graphics/graphicsEngine";
 import { LIGHT_SOURCES } from "./lightSources";
+import { colors } from "../../theme/tokens";
+import { hexNum, hexToRgbTriplet } from "../../theme/phaserColor";
+
+const RAIN_RGB = hexToRgbTriplet(colors.foam);
+const PUDDLE_BASE_RGB = hexToRgbTriplet(colors.ink);
+const PUDDLE_SHEEN_RGB = hexToRgbTriplet(colors.foam);
 
 /**
  * Everything "finish the atmosphere" asked for that lives inside the Phaser
@@ -24,9 +30,9 @@ import { LIGHT_SOURCES } from "./lightSources";
 
 // --- Colour grade ---------------------------------------------------------
 
-const TASK_GRADE_COLOR = 0x1c3a5c;
+const TASK_GRADE_COLOR = hexNum(colors.fogDark);
 const TASK_GRADE_ALPHA = 0.16;
-const SABOTAGE_GRADE_COLOR = 0x6e0f14;
+const SABOTAGE_GRADE_COLOR = hexNum(colors.bloodDeep);
 const SABOTAGE_GRADE_BASE_ALPHA = 0.22;
 const SABOTAGE_PULSE_ALPHA = 0.07;
 /** Alarm pulse rate, in radians/ms. */
@@ -93,6 +99,9 @@ function buildGlowTexture(scene: Phaser.Scene): void {
   }
   const ctx = canvas.getContext();
   const half = GLOW_SIZE / 2;
+  // Deliberately pure white, not a token: this texture is multiplicatively
+  // tinted per-instance by WARM_LAMP/WARM_WINDOW/BEAM_WHITE at draw time (see
+  // lightSources.ts), and only a white base reproduces that tint exactly.
   const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
   gradient.addColorStop(0, "rgba(255,255,255,1)");
   gradient.addColorStop(0.4, "rgba(255,255,255,0.5)");
@@ -112,9 +121,9 @@ function buildRainTexture(scene: Phaser.Scene): void {
   }
   const ctx = canvas.getContext();
   const gradient = ctx.createLinearGradient(0, 0, 0, RAIN_H);
-  gradient.addColorStop(0, "rgba(220,230,240,0)");
-  gradient.addColorStop(0.5, "rgba(220,230,240,0.8)");
-  gradient.addColorStop(1, "rgba(220,230,240,0)");
+  gradient.addColorStop(0, `rgba(${RAIN_RGB},0)`);
+  gradient.addColorStop(0.5, `rgba(${RAIN_RGB},0.8)`);
+  gradient.addColorStop(1, `rgba(${RAIN_RGB},0)`);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, RAIN_W, RAIN_H);
   canvas.refresh();
@@ -135,9 +144,9 @@ function buildPuddleTexture(scene: Phaser.Scene): void {
   ctx.translate(cx, cy);
   ctx.scale(1, PUDDLE_H / PUDDLE_W);
   const base = ctx.createRadialGradient(0, 0, 0, 0, 0, cx);
-  base.addColorStop(0, "rgba(10,14,20,0.55)");
-  base.addColorStop(0.75, "rgba(10,14,20,0.4)");
-  base.addColorStop(1, "rgba(10,14,20,0)");
+  base.addColorStop(0, `rgba(${PUDDLE_BASE_RGB},0.55)`);
+  base.addColorStop(0.75, `rgba(${PUDDLE_BASE_RGB},0.4)`);
+  base.addColorStop(1, `rgba(${PUDDLE_BASE_RGB},0)`);
   ctx.fillStyle = base;
   ctx.beginPath();
   ctx.arc(0, 0, cx, 0, Math.PI * 2);
@@ -146,8 +155,8 @@ function buildPuddleTexture(scene: Phaser.Scene): void {
 
   // A soft sheen band suggesting a reflected, overcast sky.
   const sheen = ctx.createRadialGradient(cx, cy * 0.7, 0, cx, cy * 0.7, cx * 0.5);
-  sheen.addColorStop(0, "rgba(210,220,235,0.28)");
-  sheen.addColorStop(1, "rgba(210,220,235,0)");
+  sheen.addColorStop(0, `rgba(${PUDDLE_SHEEN_RGB},0.28)`);
+  sheen.addColorStop(1, `rgba(${PUDDLE_SHEEN_RGB},0)`);
   ctx.fillStyle = sheen;
   ctx.fillRect(0, 0, PUDDLE_W, PUDDLE_H);
   canvas.refresh();
@@ -270,7 +279,7 @@ export class PhaseAtmosphere {
         speedY: { min: -4, max: 4 },
         scale: { min: 1.1, max: 2.2 },
         alpha: { min: 0.04, max: 0.1 },
-        tint: 0x9db4c9,
+        tint: hexNum(colors.mist),
         frequency: 650,
         blendMode: Phaser.BlendModes.ADD,
       })

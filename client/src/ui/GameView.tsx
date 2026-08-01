@@ -23,6 +23,7 @@ import { AbilityHintToast } from "./AbilityHintToast";
 import { CriticalSabotageBanner } from "./CriticalSabotageBanner";
 import { OnboardingHintToast } from "./OnboardingHintToast";
 import { useOnboardingHint } from "../onboarding/useOnboardingHint";
+import { Button, Panel } from "./primitives";
 
 interface GameViewProps {
   room: Room<GameState>;
@@ -256,9 +257,7 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
           {t("game.playersLabel")}: {playerCount}
         </span>
         {isGhost && <span className="hud-ghost">{t("game.ghostBanner")}</span>}
-        <button type="button" onClick={onLeave}>
-          {t("game.leaveButton")}
-        </button>
+        <Button onClick={onLeave}>{t("game.leaveButton")}</Button>
       </header>
 
       <TaskBar completed={taskBar.completed} total={taskBar.total} />
@@ -273,7 +272,9 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
 
       <div className="game-stage">
         {commsSabotageActive ? (
-          <p className="task-list-offline">{t("sabotage.comms.taskListOffline")}</p>
+          <Panel as="p" className="task-list-offline">
+            {t("sabotage.comms.taskListOffline")}
+          </Panel>
         ) : (
           <TaskList tasks={tasks} />
         )}

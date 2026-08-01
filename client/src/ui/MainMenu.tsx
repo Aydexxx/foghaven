@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { Room } from "colyseus.js";
 import type { GameState } from "../net/types";
 import { classifyJoinError, createRoom, joinRoomByCode } from "../net/client";
+import { Button, Panel } from "./primitives";
 
 interface MainMenuProps {
   name: string;
@@ -97,7 +98,7 @@ export function MainMenu({
 
   if (mode === "join") {
     return (
-      <form className="panel" onSubmit={handleJoin}>
+      <Panel as="form" className="panel" onSubmit={handleJoin}>
         <h1>{t("mainMenu.joinHeading")}</h1>
 
         <label className="field">
@@ -112,12 +113,12 @@ export function MainMenu({
           />
         </label>
 
-        <button type="submit" disabled={busy || !code.trim()}>
+        <Button type="submit" variant="primary" disabled={busy || !code.trim()}>
           {busy ? t("mainMenu.joiningButton") : t("mainMenu.joinButton")}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="secondary"
+          variant="default"
           onClick={() => {
             setMode("menu");
             setError(null);
@@ -125,15 +126,15 @@ export function MainMenu({
           disabled={busy}
         >
           {t("mainMenu.backButton")}
-        </button>
+        </Button>
 
         {error && <p className="error">{t(error)}</p>}
-      </form>
+      </Panel>
     );
   }
 
   return (
-    <div className="panel">
+    <Panel className="panel">
       <h1>{t("app.title")}</h1>
       <p className="hint">
         {t("mainMenu.greeting", { name })}
@@ -145,42 +146,42 @@ export function MainMenu({
       {/* Guests may only join a friend's room, never create one — the server
           enforces this at onAuth, so hiding it here is just matching UX. */}
       {!isGuest && (
-        <button type="button" onClick={handleCreate} disabled={busy}>
+        <Button type="button" variant="primary" onClick={handleCreate} disabled={busy}>
           {busy ? t("mainMenu.creatingButton") : t("mainMenu.createButton")}
-        </button>
+        </Button>
       )}
-      <button
+      <Button
         type="button"
-        className="secondary"
+        variant="default"
         onClick={() => setMode("join")}
         disabled={busy}
       >
         {t("mainMenu.joinByCodeButton")}
-      </button>
+      </Button>
 
       {isGuest && <p className="hint">{t("mainMenu.guestNoCreateHint")}</p>}
 
       {!isGuest && onOpenFriends && (
-        <button type="button" className="secondary" onClick={onOpenFriends} disabled={busy}>
+        <Button type="button" variant="default" onClick={onOpenFriends} disabled={busy}>
           {t("mainMenu.friendsButton")}
-        </button>
+        </Button>
       )}
       {!isGuest && onOpenInventory && (
-        <button type="button" className="secondary" onClick={onOpenInventory} disabled={busy}>
+        <Button type="button" variant="default" onClick={onOpenInventory} disabled={busy}>
           {t("mainMenu.inventoryButton")}
-        </button>
+        </Button>
       )}
       {!isGuest && onOpenProfile && (
-        <button type="button" className="secondary" onClick={onOpenProfile} disabled={busy}>
+        <Button type="button" variant="default" onClick={onOpenProfile} disabled={busy}>
           {t("mainMenu.profileButton")}
-        </button>
+        </Button>
       )}
 
-      <button type="button" className="link-button" onClick={onSignOut} disabled={busy}>
+      <Button type="button" variant="link" onClick={onSignOut} disabled={busy}>
         {isGuest ? t("mainMenu.signInButton") : t("mainMenu.signOutButton")}
-      </button>
+      </Button>
 
       {error && <p className="error">{t(error)}</p>}
-    </div>
+    </Panel>
   );
 }

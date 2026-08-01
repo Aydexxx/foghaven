@@ -60,6 +60,11 @@ import {
   CRITICAL_REPAIR_POINTS,
   SETTING_DEFINITIONS,
   settingById,
+  LOBBY_READY_PAD_POINT,
+  LOBBY_SPAWN_ZONE,
+  SPAWN_ZONE,
+  TILE_SIZE,
+  isOnReadyPad,
 } from "@foghaven/shared";
 import { GameRoom } from "./GameRoom";
 import { Body, PADDING_BODY_ID } from "./schema/GameState";
@@ -309,21 +314,75 @@ function otherTownsfolk<T extends { roleMessages: RoleAssignment[] }>(
   return splitRoles(seats).townsfolk.filter((s) => s !== exclude);
 }
 
-/** Seat `count` players and start the game as the host, returning every seat. */
+/**
+ * Turn role selection off for a test that isn't about it.
+ *
+ * On by default in production, but it inserts a 20-second choice phase
+ * between the start and the reveal — every suite below that just wants a
+ * round running would otherwise wait it out, and get no roles until it
+ * resolved. The dedicated "role selection" describe re-enables it.
+ *
+ * Must be sent by the host, in the lobby, before `start`.
+ */
+function disableRoleSelection(host: { client: { send: (t: string, m?: unknown) => void } }): void {
+  host.client.send("set_setting", { id: "roleSelectionEnabled", value: false });
+}
+
+/** Put every seated player on the ready flagstone, so the room can be started. */
+function readyUp(seats: readonly { player: Player }[]): void {
+  for (const s of seats) {
+    s.player.x = LOBBY_READY_PAD_POINT.x;
+    s.player.y = LOBBY_READY_PAD_POINT.y;
+  }
+}
+
+/**
+ * Seat `count` players and start the game as the host, returning every seat.
+ *
+ * Ready is physical now: the host's start is refused unless `MIN_PLAYERS`
+ * are standing on the Tavern's flagstone, so this walks everyone onto it
+ * first. Note the round itself then scatters them across the plaza
+ * (`handleStart`'s round-start respawn), so no test may assume a player is
+ * still where this left them — set positions explicitly after starting.
+ */
 async function seatAndStart(room: ServerRoom<GameState>, count = MIN_PLAYERS) {
   const seats = [];
   for (let i = 0; i < count; i++) {
     seats.push(await seat(room));
   }
+  disableRoleSelection(seats[0]!);
+  await tick(1);
+  readyUp(seats);
   seats[0]!.client.send("start");
   await tick(4);
   return seats;
+}
+
+/**
+ * Put every player back on the same spot once the round is live.
+ *
+ * `seat()` co-locates players at the map centre so range-based abilities
+ * (kill, report, investigate) can be exercised without every test doing its
+ * own positioning. The round-start respawn scatters them across the plaza —
+ * correct for the game, but it lands *after* `seat()` has placed them, so
+ * without this the helper's promise of "everyone is next to each other"
+ * would quietly stop holding and range checks would fail at random.
+ *
+ * Tests that care where the round actually starts people assert against
+ * `seatAndStart` (before this runs) — see "moves everyone out to the plaza".
+ */
+function gatherAtCentre(seats: readonly { player: Player }[]): void {
+  for (const s of seats) {
+    s.player.x = MAP.width / 2;
+    s.player.y = MAP.height / 2;
+  }
 }
 
 /** Seat `count` players, start the game, and wait until the world is live. */
 async function seatAndPlay(room: ServerRoom<GameState>, count = MIN_PLAYERS) {
   const seats = await seatAndStart(room, count);
   await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
+  gatherAtCentre(seats);
   return seats;
 }
 
@@ -339,9 +398,12 @@ async function seatChaosAndPlay(room: ServerRoom<GameState>, count = 8) {
     seats.push(await seat(room));
   }
   seats[0]!.client.send("set_preset", { preset: PRESET.CHAOS });
+  disableRoleSelection(seats[0]!);
   await tick(2);
+  readyUp(seats);
   seats[0]!.client.send("start");
   await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
+  gatherAtCentre(seats);
   return seats;
 }
 
@@ -534,6 +596,7 @@ describe("GameRoom start", () => {
       seats.push(await seat(room));
     }
 
+    readyUp(seats);
     seats[1]!.client.send("start");
     await tick(3);
 
@@ -543,14 +606,115 @@ describe("GameRoom start", () => {
 
   it("ignores a start request below the minimum player count", async () => {
     const room = await colyseus.createRoom<GameState>("game");
-    const { client: host, roleMessages } = await seat(room);
+    const hostSeat = await seat(room);
+    const { client: host, roleMessages } = hostSeat;
 
-    // Below MIN_PLAYERS — only the host is seated.
+    // Below MIN_PLAYERS — only the host is seated, and they ARE ready, so
+    // the head count is the only thing left that can refuse this.
+    readyUp([hostSeat]);
     host.send("start");
     await tick(3);
 
     expect(room.state.phase).toBe(PHASE.LOBBY);
     expect(roleMessages).toHaveLength(0);
+  });
+
+  it("refuses to start when enough players are present but not enough are ready", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = [];
+    for (let i = 0; i < MIN_PLAYERS; i++) {
+      seats.push(await seat(room));
+    }
+    // Everyone present, nobody on the flagstone — the pre-7.14 rule would
+    // have started here. Ready is what gates it now.
+    expect(room.state.players.size).toBe(MIN_PLAYERS);
+
+    seats[0]!.client.send("start");
+    await tick(3);
+
+    expect(room.state.phase).toBe(PHASE.LOBBY);
+    expect(seats.every((s) => s.roleMessages.length === 0)).toBe(true);
+  });
+
+  it("refuses to start one player short of the ready minimum", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = [];
+    for (let i = 0; i < MIN_PLAYERS + 1; i++) {
+      seats.push(await seat(room));
+    }
+    // One short: plenty of players in the room, MIN_PLAYERS-1 on the stone.
+    readyUp(seats.slice(0, MIN_PLAYERS - 1));
+    await tick(2);
+
+    seats[0]!.client.send("start");
+    await tick(3);
+
+    expect(room.state.phase).toBe(PHASE.LOBBY);
+  });
+
+  it("derives ready from position every tick, in both directions", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const { player } = await seat(room);
+
+    expect(player.ready).toBe(false);
+
+    player.x = LOBBY_READY_PAD_POINT.x;
+    player.y = LOBBY_READY_PAD_POINT.y;
+    await tick(2);
+    expect(player.ready).toBe(true);
+
+    // Stepping off must clear it again — a one-way flag would let a player
+    // ready up and wander away while still counting toward the start.
+    player.x = LOBBY_SPAWN_ZONE.x * TILE_SIZE + PLAYER_RADIUS + 1;
+    player.y = LOBBY_SPAWN_ZONE.y * TILE_SIZE + PLAYER_RADIUS + 1;
+    await tick(2);
+    expect(player.ready).toBe(false);
+  });
+
+  it("seats lobby arrivals in the Tavern, clear of the ready flagstone", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    for (let i = 0; i < MIN_PLAYERS; i++) {
+      await seat(room, { at: undefined });
+    }
+
+    // `seat()` overrides the position, so re-read what onJoin actually chose
+    // by adding one more player and inspecting it before any override.
+    const client = await colyseus.connectTo(room, { name: "Fresh" });
+    const fresh = room.state.players.get(client.sessionId)!;
+
+    const minX = LOBBY_SPAWN_ZONE.x * TILE_SIZE;
+    const maxX = (LOBBY_SPAWN_ZONE.x + LOBBY_SPAWN_ZONE.w) * TILE_SIZE;
+    const minY = LOBBY_SPAWN_ZONE.y * TILE_SIZE;
+    const maxY = (LOBBY_SPAWN_ZONE.y + LOBBY_SPAWN_ZONE.h) * TILE_SIZE;
+
+    expect(fresh.x).toBeGreaterThanOrEqual(minX);
+    expect(fresh.x).toBeLessThanOrEqual(maxX);
+    expect(fresh.y).toBeGreaterThanOrEqual(minY);
+    expect(fresh.y).toBeLessThanOrEqual(maxY);
+    // Joining must never count as readying up.
+    expect(isOnReadyPad(fresh.x, fresh.y)).toBe(false);
+    expect(fresh.ready).toBe(false);
+  });
+
+  it("moves everyone out to the plaza and clears ready when the round starts", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndStart(room);
+
+    expect(room.state.phase).toBe(PHASE.ROLE_REVEAL);
+
+    const minX = SPAWN_ZONE.x * TILE_SIZE;
+    const maxX = (SPAWN_ZONE.x + SPAWN_ZONE.w) * TILE_SIZE;
+    const minY = SPAWN_ZONE.y * TILE_SIZE;
+    const maxY = (SPAWN_ZONE.y + SPAWN_ZONE.h) * TILE_SIZE;
+
+    for (const s of seats) {
+      // Nobody begins the round standing in the Tavern they waited in.
+      expect(s.player.x).toBeGreaterThanOrEqual(minX);
+      expect(s.player.x).toBeLessThanOrEqual(maxX);
+      expect(s.player.y).toBeGreaterThanOrEqual(minY);
+      expect(s.player.y).toBeLessThanOrEqual(maxY);
+      expect(s.player.ready).toBe(false);
+    }
   });
 
   it("does not re-deal roles for a game already in progress", async () => {
@@ -1268,6 +1432,19 @@ describe("GameRoom ghost visibility", () => {
 
     victim.player.x = killer.player.x;
     victim.player.y = killer.player.y;
+    // The survivor must actually be within fog range of the kill site, or
+    // this assertion is vacuous: with everyone at their (random) round-start
+    // spawn, `seenByLiving` below would either be undefined (never having
+    // seen the victim at all) or a stale copy from some unrelated earlier
+    // position, neither of which exercises "frozen at the death position."
+    survivor.player.x = killer.player.x;
+    survivor.player.y = killer.player.y;
+    // Give the "still alive, at the new position" state a tick to actually
+    // reach the survivor's client before death closes the filter — without
+    // this, the position write and the `alive` flip can land in the same
+    // patch, and the survivor's client never has a valid pre-death frame at
+    // the death coordinates to freeze on at all.
+    await tick(1);
 
     killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
     await tick(4);
@@ -2351,6 +2528,7 @@ describe("GameRoom return to lobby", () => {
       s.roleMessages.length = 0; // clear so the fresh deal is unambiguous
     }
 
+    readyUp(seats);
     host.client.send("start");
     await tick(4);
 
@@ -2548,6 +2726,7 @@ describe("GameRoom reconnection", () => {
     await dropConnection(absent);
     expect(room.state.players.has(absentId)).toBe(true);
 
+    readyUp(seats);
     seats[0]!.client.send("start");
     await tick(4);
 
@@ -2567,6 +2746,7 @@ describe("GameRoom reconnection", () => {
 
     await dropConnection(seats[MIN_PLAYERS - 1]!);
 
+    readyUp(seats);
     seats[0]!.client.send("start");
     await tick(4);
 
@@ -2792,7 +2972,13 @@ describe("GameRoom fog of war", () => {
     b.player.y = 832;
     c.player.x = 400;
     c.player.y = 832;
-    await tick(3);
+    // Extra settling margin: these positions must actually have propagated
+    // (and the far-apart pair correctly excluded) before B starts moving, or
+    // an in-flight patch straddling "just repositioned" and "already
+    // walking" can carry a stale intermediate value past the fog check —
+    // the same class of same-patch race documented on the ghost-visibility
+    // test above.
+    await tick(8);
 
     // B walks south; these fresh coordinates must never reach A.
     for (let seq = 1; seq <= 20; seq++) {
@@ -3037,8 +3223,13 @@ describe("GameRoom lobby role settings", () => {
     }
     seats[0]!.client.send("set_preset", { preset: PRESET.CHAOS });
     await tick(2);
+    readyUp(seats);
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
+    // This test starts the round by hand rather than through `seatAndPlay`,
+    // so it has to re-gather the players itself — the round-start respawn
+    // scatters them across the plaza, well out of kill range.
+    gatherAtCentre(seats);
 
     // Drive the round to a strangers-parity win: the one stranger kills
     // two of the three others.
@@ -3153,6 +3344,7 @@ describe("GameRoom balance settings", () => {
     }
     seats[0]!.client.send("set_setting", { id: "tasksPerPlayer", value: 0 });
     await tick(2);
+    readyUp(seats);
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
 
@@ -3171,6 +3363,7 @@ describe("GameRoom balance settings", () => {
     // The Classic threshold table deals 2 strangers at 8 players; force 3.
     seats[0]!.client.send("set_setting", { id: "strangerCount", value: 3 });
     await tick(2);
+    readyUp(seats);
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
 
@@ -3186,6 +3379,7 @@ describe("GameRoom balance settings", () => {
     }
     seats[0]!.client.send("set_setting", { id: "confirmEjects", value: false });
     await tick(2);
+    readyUp(seats);
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
 
@@ -3209,6 +3403,44 @@ describe("GameRoom balance settings", () => {
     expect(room.state.ejectedWasStranger).toBe(false);
   });
 
+  it("names every voter on the resolved tally once the host turns votesArePublic on", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = [];
+    for (let i = 0; i < 8; i++) {
+      seats.push(await seat(room));
+    }
+    seats[0]!.client.send("set_setting", { id: "votesArePublic", value: true });
+    await tick(2);
+    readyUp(seats);
+    seats[0]!.client.send("start");
+    await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
+
+    const caller = seats[0]!;
+    caller.player.x = TOWN_HALL.x;
+    caller.player.y = TOWN_HALL.y;
+    caller.client.send("call_meeting");
+    await tick(3);
+    openBallot(room);
+    await tick(2);
+
+    const target = seats[1]!;
+    for (const s of seats) {
+      s.client.send("vote", { targetId: target.client.sessionId });
+    }
+    await tick(4);
+
+    // The setting actually does something: with it on, the resolved tally
+    // names every one of the 8 voters. This is the positive-path sibling to
+    // "publishes counts but not individual ballots when votes are anonymous"
+    // below — that test pins the (unchanged) default; this one pins that the
+    // toggle genuinely flips the behavior rather than being decorative.
+    const tally = room.state.voteResults.get(target.client.sessionId)!;
+    expect(tally.count).toBe(seats.length);
+    for (const s of seats) {
+      expect(tally.voterNames).toContain(s.name);
+    }
+  });
+
   it("allows a second kill sooner when killCooldownMs is tuned down", async () => {
     const room = await colyseus.createRoom<GameState>("game");
     const seats = [];
@@ -3221,6 +3453,7 @@ describe("GameRoom balance settings", () => {
     // test-only duration. This test is about the cooldown lookup honoring the
     // setting, not about `set_setting`'s validation, which has its own tests.
     room.state.settings.set("killCooldownMs", "500");
+    readyUp(seats);
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
 
@@ -3256,6 +3489,7 @@ describe("GameRoom balance settings", () => {
     // wait, and `set_setting` would clamp up to it.
     room.state.settings.set("discussionMs", "500");
     room.state.settings.set("votingMs", "500");
+    readyUp(seats);
     seats[0]!.client.send("start");
     await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));
 

@@ -144,10 +144,21 @@
       "confirmEjectsLabel": "Atılan oyuncunun tarafını göster",
       "voteMuteEnabledLabel": "Oyla susturmaya izin ver",
       "autoLabel": "Otomatik",
-      "secondsValue": "{{value}}sn"
+      "secondsValue": "{{value}}sn",
+      "roleSelectionEnabledLabel": "Oyuncular rolünü kendi seçsin",
+      "roleSelectionUnavailable": "Daha fazla oyuncu ya da her iki tarafta daha fazla rol gerekiyor — roller rastgele dağıtılacak."
     },
     "copyInviteLinkButton": "Davet Bağlantısını Kopyala",
-    "inviteFriendsButton": "Arkadaşları Davet Et"
+    "inviteFriendsButton": "Arkadaşları Davet Et",
+    "settingsHeading": "Oyun Ayarları",
+    "closeSettingsButton": "Kapat",
+    "settingsReadOnly": "Bunları yalnızca oda sahibi değiştirebilir.",
+    "openSettingsButton": "Ayarlar",
+    "tablePrompt": "E'ye bas — oyun ayarları",
+    "readyCount": "{{count}} / {{min}} hazır",
+    "readyHint": "Hazır olmak için kapının yanındaki işaretli taşa çık.",
+    "youAreReady": "Hazırsın. İptal etmek için taştan in.",
+    "readyTag": "Hazır"
   },
   "friendsPanel": {
     "heading": "Arkadaşlar",
@@ -443,7 +454,9 @@
       "wasStranger": "Bir Yabancı'ymış.",
       "wasNotStranger": "Yabancı değilmiş.",
       "skipHint": "Geçmek için herhangi bir tuşa basın"
-    }
+    },
+    "cardSelfName": "{{name}} (sen)",
+    "voteCount": "{{count}} oy"
   },
   "gameOver": {
     "intro": "Oyun Bitti",
@@ -724,5 +737,18 @@
     "text": "Foghaven, sizi oturum açık tutmak, koptuğunuz bir oyuna yeniden bağlamak ve ses/grafik ayarlarınızı hatırlamak için tarayıcınızın yerel depolamasını kullanır. Takip çerezleri veya üçüncü taraf analitik araçları kullanmıyoruz.",
     "learnMore": "Daha fazla bilgi",
     "dismissButton": "Anladım"
+  },
+  "roleSelect": {
+    "heading": "Rolünü seç",
+    "intro": "Bu kartları yalnızca sen görüyorsun. Sana ne sunulduğunu ya da ne seçtiğini kimse öğrenmez.",
+    "timer": "{{seconds}}sn",
+    "randomName": "Rastgele",
+    "randomHint": "Bırak sis karar versin. Süre dolarsa otomatik olarak seçilir.",
+    "pending": "Bir kart seç.",
+    "locked": "Seçildi. Süre dolana kadar fikrini değiştirebilirsin.",
+    "decidedCount": "{{total}} oyuncudan {{count}} tanesi seçti",
+    "choosing": "Seçiyor…",
+    "done": "Hazır",
+    "you": "{{name}} (sen)"
   }
 }

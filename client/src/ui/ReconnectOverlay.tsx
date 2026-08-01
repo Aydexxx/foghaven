@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RECONNECT_GRACE_MS } from "@foghaven/shared";
 import { useCountdown } from "./useCountdown";
+import { Panel } from "./primitives";
 
 /**
  * Shown while a dropped connection is being chased. Deliberately an overlay
@@ -22,10 +23,10 @@ export function ReconnectOverlay() {
 
   return (
     <div className="reconnect-overlay" role="status" aria-live="polite">
-      <div className="reconnect-card">
+      <Panel className="reconnect-card">
         <p className="reconnect-title">{t("reconnect.title")}</p>
         <p className="hint">{t("reconnect.remaining", { seconds })}</p>
-      </div>
+      </Panel>
     </div>
   );
 }

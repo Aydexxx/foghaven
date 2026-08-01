@@ -1,5 +1,5 @@
 import { PLAYER_SPEED, PLAYER_RADIUS, MAP } from "../config/gameConfig";
-import { isWalkableRegion, isPointInLockedDoor } from "../map/townMap";
+import { isWalkableRegion, isPointInLockedDoor, isInsideLobby } from "../map/townMap";
 
 export interface Vec2 {
   x: number;
@@ -96,4 +96,34 @@ export function applyInputWithLocks(
     return pos;
   }
   return next;
+}
+
+/**
+ * `applyInput`, additionally confined to the Tavern — lobby movement only.
+ *
+ * The Tavern's doorways are ordinary walkable tiles in the collision grid
+ * (they have to be: the same room is a real room during a round), so without
+ * this a waiting player could simply walk out into the plaza — off the
+ * lobby's fixed camera, out of the room everyone else is standing in, and
+ * into a town that isn't running yet.
+ *
+ * Same shape and same reasoning as `applyInputWithLocks`: a thin wrapper
+ * rather than a flag inside `applyInput`, so the ordinary movement path that
+ * every existing test pins is untouched, and both client prediction and
+ * server simulation call this identical function while the phase is LOBBY —
+ * which is what keeps the wall in the same place on both sides.
+ *
+ * The rule is "you cannot LEAVE the Tavern", not "you must be in it": a
+ * player who is already outside moves normally. Production never produces
+ * that case (every lobby position comes from `lobbySpawn`, inside the room),
+ * so this costs nothing there — but making the confinement one-directional
+ * means the function can never strand a player in place, which a bare
+ * inside-only test would do to anyone who somehow started outside.
+ */
+export function applyLobbyInput(pos: Vec2, dir: Direction, dt: number): Vec2 {
+  const next = applyInput(pos, dir, dt);
+  if (!isInsideLobby(pos.x, pos.y, PLAYER_RADIUS)) {
+    return next;
+  }
+  return isInsideLobby(next.x, next.y, PLAYER_RADIUS) ? next : pos;
 }

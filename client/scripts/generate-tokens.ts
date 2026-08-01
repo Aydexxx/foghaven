@@ -20,6 +20,7 @@ import {
   spacing,
   radius,
   duration,
+  derived,
 } from "../src/theme/tokens.ts";
 
 const outPath = fileURLToPath(new URL("../src/theme/tokens.css", import.meta.url));
@@ -99,6 +100,11 @@ for (const [key, value] of Object.entries(radius)) {
 lines.push("  /* Duration scale */");
 for (const [key, value] of Object.entries(duration)) {
   lines.push(`  --duration-${kebab(key)}: ${value}ms;`);
+}
+
+lines.push("  /* Derived (see tokens.ts `derived` for why these are formulas, not colours) */");
+for (const [key, value] of Object.entries(derived)) {
+  lines.push(`  --${kebab(key)}: ${value};`);
 }
 
 lines.push("}");

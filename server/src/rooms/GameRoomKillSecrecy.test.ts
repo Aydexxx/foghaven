@@ -10,6 +10,7 @@ import {
   TASK_ROOM_ANCHOR,
   TICK_RATE,
   type RoleAssignment,
+  LOBBY_READY_PAD_POINT,
 } from "@foghaven/shared";
 import { GameRoom } from "./GameRoom";
 import type { GameState } from "./schema/GameState";
@@ -154,6 +155,12 @@ async function seatAndPlay(room: ServerRoom<GameState>, count: number): Promise<
   const seats: Seat[] = [];
   for (let i = 0; i < count; i++) {
     seats.push(await seat(room));
+  }
+  // Ready is physical: the start is refused unless MIN_PLAYERS are
+  // standing on the Tavern flagstone (see isOnReadyPad).
+  for (const s of seats) {
+    s.player.x = LOBBY_READY_PAD_POINT.x;
+    s.player.y = LOBBY_READY_PAD_POINT.y;
   }
   seats[0]!.client.send("start");
   await new Promise((resolve) => setTimeout(resolve, ROLE_REVEAL_MS + 200));

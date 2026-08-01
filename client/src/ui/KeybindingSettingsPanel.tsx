@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useInputSettings } from "../input/useInputSettings";
 import type { InputAction } from "../input/inputEngine";
+import { Button, Panel } from "./primitives";
 
 interface KeybindingSettingsPanelProps {
   onClose: () => void;
@@ -62,15 +63,16 @@ export function KeybindingSettingsPanel({ onClose }: KeybindingSettingsPanelProp
 
   return (
     <div className="audio-settings-overlay" role="dialog" aria-label={t("keybindingSettings.heading")}>
-      <div className="audio-settings-panel">
+      <Panel className="audio-settings-panel">
         <h2>{t("keybindingSettings.heading")}</h2>
 
         {ACTIONS.map((action) => (
           <div className="audio-settings-row" key={action}>
             <label className="audio-settings-label">{t(`keybindingSettings.actions.${action}`)}</label>
             <span />
-            <button
+            <Button
               type="button"
+              variant="default"
               className="secondary"
               onClick={() => {
                 setConflict(null);
@@ -78,20 +80,20 @@ export function KeybindingSettingsPanel({ onClose }: KeybindingSettingsPanelProp
               }}
             >
               {listeningFor === action ? t("keybindingSettings.pressAKey") : settings[action]}
-            </button>
+            </Button>
           </div>
         ))}
 
         {conflict && <p className="hint">{conflict}</p>}
         <p className="hint">{t("keybindingSettings.hint")}</p>
 
-        <button type="button" className="secondary" onClick={resetToDefaults}>
+        <Button type="button" variant="default" className="secondary" onClick={resetToDefaults}>
           {t("keybindingSettings.resetButton")}
-        </button>
-        <button type="button" className="secondary" onClick={onClose}>
+        </Button>
+        <Button type="button" variant="default" className="secondary" onClick={onClose}>
           {t("keybindingSettings.closeButton")}
-        </button>
-      </div>
+        </Button>
+      </Panel>
     </div>
   );
 }

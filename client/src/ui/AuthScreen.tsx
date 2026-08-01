@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { validateName } from "@foghaven/shared";
 import { AuthError, login, register, type AuthSession } from "../net/auth";
+import { Button, Panel } from "./primitives";
 
 interface AuthScreenProps {
   /** A real account signed in (login or register). */
@@ -103,14 +104,13 @@ export function AuthScreen({ onAuthenticated, onGuest, onOpenPrivacy, onOpenTerm
   };
 
   return (
-    <div className="panel auth-panel">
+    <Panel className="panel">
       <h1>{t("app.title")}</h1>
 
       <div className="auth-tabs" role="tablist">
         {(["login", "register", "guest"] as const).map((key) => (
-          <button
+          <Button
             key={key}
-            type="button"
             role="tab"
             aria-selected={tab === key}
             className={tab === key ? "auth-tab auth-tab-active" : "auth-tab"}
@@ -118,7 +118,7 @@ export function AuthScreen({ onAuthenticated, onGuest, onOpenPrivacy, onOpenTerm
             disabled={busy}
           >
             {t(`auth.${key}Tab`)}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -145,9 +145,9 @@ export function AuthScreen({ onAuthenticated, onGuest, onOpenPrivacy, onOpenTerm
               disabled={busy}
             />
           </label>
-          <button type="submit" disabled={busy || !identifier.trim() || !password}>
+          <Button type="submit" variant="primary" disabled={busy || !identifier.trim() || !password}>
             {busy ? t("auth.busy") : t("auth.loginButton")}
-          </button>
+          </Button>
         </form>
       )}
 
@@ -203,23 +203,24 @@ export function AuthScreen({ onAuthenticated, onGuest, onOpenPrivacy, onOpenTerm
             />
             <span>
               {t("auth.consentLabelPrefix")}{" "}
-              <button type="button" className="link-button" onClick={onOpenTerms}>
+              <Button type="button" variant="link" onClick={onOpenTerms}>
                 {t("legal.terms.title")}
-              </button>{" "}
+              </Button>{" "}
               {t("auth.consentLabelAnd")}{" "}
-              <button type="button" className="link-button" onClick={onOpenPrivacy}>
+              <Button type="button" variant="link" onClick={onOpenPrivacy}>
                 {t("legal.privacy.title")}
-              </button>
+              </Button>
             </span>
           </label>
-          <button
+          <Button
             type="submit"
+            variant="primary"
             disabled={
               busy || !email.trim() || !username.trim() || !password || !ageConfirmed || !consentAccepted
             }
           >
             {busy ? t("auth.busy") : t("auth.registerButton")}
-          </button>
+          </Button>
         </form>
       )}
 
@@ -236,13 +237,13 @@ export function AuthScreen({ onAuthenticated, onGuest, onOpenPrivacy, onOpenTerm
               disabled={busy}
             />
           </label>
-          <button type="submit" disabled={busy || !guestName.trim()}>
+          <Button type="submit" variant="primary" disabled={busy || !guestName.trim()}>
             {t("auth.guestButton")}
-          </button>
+          </Button>
         </form>
       )}
 
       {error && <p className="error">{error}</p>}
-    </div>
+    </Panel>
   );
 }

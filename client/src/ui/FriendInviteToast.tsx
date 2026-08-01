@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Button } from "./primitives";
 
 interface FriendInviteToastProps {
   fromUsername: string;
@@ -20,12 +21,12 @@ export function FriendInviteToast({ fromUsername, busy, onJoin, onDismiss }: Fri
     <div className="friend-invite-toast" role="alertdialog" aria-live="assertive">
       <p>{t("friendInvite.message", { name: fromUsername })}</p>
       <div className="friend-invite-toast-actions">
-        <button type="button" onClick={onJoin} disabled={busy}>
+        <Button type="button" variant="primary" onClick={onJoin} disabled={busy}>
           {busy ? t("friendInvite.joiningButton") : t("friendInvite.joinButton")}
-        </button>
-        <button type="button" className="secondary" onClick={onDismiss} disabled={busy}>
+        </Button>
+        <Button type="button" variant="default" className="secondary" onClick={onDismiss} disabled={busy}>
           {t("friendInvite.dismissButton")}
-        </button>
+        </Button>
       </div>
     </div>
   );

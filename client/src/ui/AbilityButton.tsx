@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AbilityTargetInfo } from "../game/GameScene";
+import { Button } from "./primitives";
 
 interface AbilityButtonProps {
   /** The ability's registry id — labels come from `abilities.<id>.*` i18n keys. */
@@ -66,26 +67,26 @@ export function AbilityButton({
     target?.kind === "room" ? t(`rooms.${target.room}`) : (target?.name ?? undefined);
 
   return (
-    <button
-      type="button"
-      className={`kill-button ${disabled ? "" : "kill-button-ready"}`}
+    <Button
+      variant="destructive"
+      className="ability-button"
       onClick={() => target && onUse(target)}
       disabled={disabled}
-      data-kill-ready={!disabled}
+      data-ability-ready={!disabled}
       title={targetLabel ? t(`abilities.${abilityId}.target`, { name: targetLabel }) : undefined}
     >
       <span
-        className="kill-button-cooldown"
+        className="ability-button-cooldown"
         style={{ transform: `scaleX(${progress})` }}
         aria-hidden="true"
       />
-      <span className="kill-button-label">
+      <span className="ability-button-label">
         {spent
           ? t("abilities.spent")
           : onCooldown
             ? t("abilities.cooldown", { seconds })
             : t(`abilities.${abilityId}.button`)}
       </span>
-    </button>
+    </Button>
   );
 }

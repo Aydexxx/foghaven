@@ -144,10 +144,21 @@
       "confirmEjectsLabel": "Reveal ejected player's faction",
       "voteMuteEnabledLabel": "Allow vote-to-mute",
       "autoLabel": "Auto",
-      "secondsValue": "{{value}}s"
+      "secondsValue": "{{value}}s",
+      "roleSelectionEnabledLabel": "Let players choose their role",
+      "roleSelectionUnavailable": "Needs more players, or more roles enabled on both sides — a random deal will be used."
     },
     "copyInviteLinkButton": "Copy Invite Link",
-    "inviteFriendsButton": "Invite Friends"
+    "inviteFriendsButton": "Invite Friends",
+    "settingsHeading": "Game Settings",
+    "closeSettingsButton": "Close",
+    "settingsReadOnly": "Only the host can change these.",
+    "openSettingsButton": "Settings",
+    "tablePrompt": "Press E — game settings",
+    "readyCount": "{{count}} / {{min}} ready",
+    "readyHint": "Stand on the marked stone by the door to ready up.",
+    "youAreReady": "You're ready. Step off the stone to cancel.",
+    "readyTag": "Ready"
   },
   "friendsPanel": {
     "heading": "Friends",
@@ -443,7 +454,9 @@
       "wasStranger": "They were a Stranger.",
       "wasNotStranger": "They were not a Stranger.",
       "skipHint": "Press any key to skip"
-    }
+    },
+    "cardSelfName": "{{name}} (you)",
+    "voteCount": "{{count}} votes"
   },
   "gameOver": {
     "intro": "Game Over",
@@ -726,5 +739,18 @@
     "text": "Foghaven uses your browser's local storage to keep you signed in, reconnect you to a dropped game, and remember your audio/graphics settings. We don't use tracking cookies or third-party analytics.",
     "learnMore": "Learn more",
     "dismissButton": "Got it"
+  },
+  "roleSelect": {
+    "heading": "Choose your role",
+    "intro": "Only you can see these cards. Nobody learns what you were offered, or what you take.",
+    "timer": "{{seconds}}s",
+    "randomName": "Random",
+    "randomHint": "Let the fog decide. Taken automatically if the time runs out.",
+    "pending": "Pick a card.",
+    "locked": "Locked in. You can still change your mind until the time is up.",
+    "decidedCount": "{{count}} of {{total}} decided",
+    "choosing": "Choosing…",
+    "done": "Ready",
+    "you": "{{name}} (you)"
   }
 }

@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Button } from "./primitives";
 
 interface CookieNoticeProps {
   onDismiss: () => void;
@@ -26,13 +27,13 @@ export function CookieNotice({ onDismiss, onOpenPrivacy }: CookieNoticeProps) {
     <div className="cookie-notice" role="status">
       <p>
         {t("cookieNotice.text")}{" "}
-        <button type="button" className="link-button" onClick={onOpenPrivacy}>
+        <Button type="button" variant="link" onClick={onOpenPrivacy}>
           {t("cookieNotice.learnMore")}
-        </button>
+        </Button>
       </p>
-      <button type="button" onClick={onDismiss}>
+      <Button type="button" variant="primary" onClick={onDismiss}>
         {t("cookieNotice.dismissButton")}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { colors } from "../../theme/tokens";
+import { hexNum } from "../../theme/phaserColor";
 import type { LanternState } from "@foghaven/shared";
 import { AtlasKey } from "../../assets/atlasManifest";
 import { CHARACTER_HEIGHT, anchorLocal, type AnchorName } from "./anchors";
@@ -91,9 +92,6 @@ const ANCHOR_LAYER: Record<AnchorName, LayerKey> = {
   hand: "heldItem",
 };
 
-function hexNum(hex: string): number {
-  return Phaser.Display.Color.HexStringToColor(hex).color;
-}
 const WHITE = Phaser.Display.Color.GetColor(255, 255, 255);
 
 export class Havener extends Phaser.GameObjects.Container {

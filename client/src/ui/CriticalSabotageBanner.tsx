@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useCountdown } from "./useCountdown";
+import { Panel } from "./primitives";
 
 interface CriticalSabotageBannerProps {
   /** The countdown's full duration, as told by the "criticalSabotageStarted" broadcast. */
@@ -28,7 +29,7 @@ export function CriticalSabotageBanner({
   const seconds = Math.ceil(remainingMs / 1000);
 
   return (
-    <div className="critical-sabotage-banner" role="alert">
+    <Panel className="critical-sabotage-banner" role="alert">
       <p className="critical-sabotage-heading">{t("sabotage.critical.heading")}</p>
       <p className="critical-sabotage-timer">{seconds}</p>
       <ul className="critical-sabotage-points">
@@ -41,6 +42,6 @@ export function CriticalSabotageBanner({
           </li>
         ))}
       </ul>
-    </div>
+    </Panel>
   );
 }

@@ -1,4 +1,5 @@
 @import "./theme/tokens.css";
+@import "./ui/primitives/primitives.css";
 
 :root {
   color-scheme: dark;
@@ -11,38 +12,6 @@
   --font-body: var(--font-family-ui);
   --font-mono: var(--font-family-numeric);
 
-  --ink: #ece1c8;
-  --ink-dim: #b3a487;
-  --ink-faint: #83745a;
-
-  --paper-void: #16120c;
-  --paper-base: #241d14;
-  --paper-raised: #2c2318;
-  --paper-sunken: #17120b;
-
-  --timber: #3c2c19;
-  --timber-light: #5c4527;
-  --timber-dark: #241a0f;
-
-  --brass: #c99a4c;
-  --brass-bright: #e6bc70;
-  --brass-dim: #8a6a3a;
-
-  --danger: #a8402c;
-  --danger-bright: #d65e42;
-  --danger-well: #2c1712;
-
-  --success: #6f8f42;
-  --success-bright: #8fb85c;
-
-  --shadow-deep: rgba(0, 0, 0, 0.55);
-  --shadow-soft: rgba(0, 0, 0, 0.3);
-  --highlight: rgba(255, 235, 200, 0.07);
-
-  /* A faint fractal-noise wash, tiled behind every parchment-like surface —
-     self-contained (no image asset), see the grouped selector below. */
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 0.94 0 0 0 0 0.8 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-
   font-family: var(--font-body);
   /* Nunito only ships weights 700/800 (see docs/ART_BIBLE.md §7) — there is
      no lighter "regular" body weight in this design. */
@@ -51,8 +20,8 @@
 
 body {
   margin: 0;
-  background: var(--paper-void);
-  color: var(--ink);
+  background: var(--color-ink);
+  color: var(--color-foam);
 }
 
 .app {
@@ -73,15 +42,15 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--space-lg);
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .loading-spinner {
-  width: 2.5rem;
-  height: 2.5rem;
+  width: var(--space-xxxl);
+  height: var(--space-xxxl);
   border-radius: 50%;
-  border: 3px solid var(--timber-light);
-  border-top-color: var(--brass);
+  border: 3px solid var(--color-ink);
+  border-top-color: var(--color-flame-glow);
   animation: loading-spin 0.9s linear infinite;
 }
 
@@ -97,21 +66,10 @@ body {
   }
 }
 
-/* Every parchment-like surface shares the same grain wash and timber frame. */
-.panel,
-.minigame-panel,
-.reveal,
-.meeting,
-.game-over,
-.chat-panel,
-.audio-settings-panel,
-.reconnect-card {
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
-  box-shadow:
-    0 1px 0 var(--highlight) inset,
-    0 10px 24px var(--shadow-deep);
-}
+/* Layout-only additions on top of the `<Panel>` component (client/src/ui/
+   primitives) — border/fill/radius/highlight all come from `.ph-panel`
+   itself; every screen that needs one of these renders `<Panel
+   className="...">`, so nothing here may re-declare that chrome. */
 
 /* Shared form/menu panel (name entry, main menu, lobby waiting room) */
 .panel {
@@ -120,27 +78,27 @@ body {
   gap: var(--space-lg);
   width: min(360px, 90vw);
   padding: var(--space-xxl);
-  border-radius: var(--radius-sm);
 }
 
 .panel h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.75rem;
-  color: var(--brass-bright);
+  font-size: var(--font-size-display-lg);
+  line-height: var(--line-height-display-lg);
+  color: var(--color-flame-glow);
   letter-spacing: 0.02em;
 }
 
 .hint {
   margin: 0;
-  font-size: 0.9rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-label);
+  color: var(--color-mist);
 }
 
 button.secondary {
-  background: var(--timber);
-  border-color: var(--timber-light);
-  color: var(--ink-dim);
+  background: var(--color-wood-mid);
+  border-color: var(--color-ink);
+  color: var(--color-mist);
 }
 
 /* Room code display */
@@ -150,9 +108,9 @@ button.secondary {
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-lg);
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
   box-shadow: 0 1px 0 var(--shadow-soft) inset;
 }
 
@@ -161,7 +119,7 @@ button.secondary {
   font-size: var(--font-size-display-lg);
   font-weight: 700;
   letter-spacing: 0.15em;
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 /* Player roster */
@@ -179,33 +137,25 @@ button.secondary {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-sm) var(--space-md);
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber);
-  border-radius: 4px;
-}
-
-.host-tag {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--brass-bright);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  background: var(--color-void);
+  border: 1px solid var(--color-wood-mid);
+  border-radius: var(--radius-sm);
 }
 
 /* Lobby role settings */
 .role-settings {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
-.role-settings h2 {
+.role-settings h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--brass);
+  color: var(--color-flame-glow);
 }
 
 .preset-row {
@@ -216,24 +166,24 @@ button.secondary {
 
 .preset-button {
   flex: 1;
-  padding: 0.4rem var(--space-sm);
-  font-size: 0.85rem;
-  background: var(--timber);
-  color: var(--ink-dim);
-  border: 1px solid var(--timber-light);
+  padding: var(--space-sm);
+  font-size: var(--font-size-caption);
+  background: var(--color-wood-mid);
+  color: var(--color-mist);
+  border: 1px solid var(--color-ink);
 }
 
 .preset-button-active {
-  background: linear-gradient(180deg, var(--brass-bright), var(--brass) 55%, var(--brass-dim));
-  color: #2a1c0a;
-  border-color: var(--timber-dark);
+  background: linear-gradient(180deg, var(--color-flame-glow), var(--color-flame-glow) 55%, var(--color-flame-deep));
+  color: var(--color-ink);
+  border-color: var(--color-ink);
 }
 
 .preset-custom-tag {
-  font-size: 0.7rem;
+  font-size: var(--font-size-caption);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .role-toggle-list {
@@ -242,7 +192,7 @@ button.secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-xs);
 }
 
 .role-toggle-row {
@@ -250,11 +200,11 @@ button.secondary {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: 0.4rem 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber);
-  border-radius: 4px;
-  font-size: 0.9rem;
+  padding: var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-wood-mid);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-label);
 }
 
 .role-toggle-row label {
@@ -265,39 +215,39 @@ button.secondary {
 }
 
 .role-toggle-row input:disabled + .role-toggle-name {
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .faction-tag {
-  font-size: 0.7rem;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.1rem 0.45rem;
+  padding: var(--space-xs) var(--space-sm);
   border-radius: 999px;
-  border: 1px solid var(--timber-light);
-  color: var(--ink-dim);
+  border: 1px solid var(--color-ink);
+  color: var(--color-mist);
 }
 
 .faction-tag-stranger {
-  color: var(--danger-bright);
-  border-color: var(--danger);
+  color: var(--color-stranger-red);
+  border-color: var(--color-stranger-red);
 }
 
 /* Balance tuning — mirrors .role-settings' layout, so both panels read as one family. */
 .balance-settings {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
-.balance-settings h2 {
+.balance-settings h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--brass);
+  color: var(--color-flame-glow);
 }
 
 .setting-list {
@@ -306,85 +256,84 @@ button.secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-xs);
 }
 
 .setting-row {
-  padding: 0.4rem 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber);
-  border-radius: 4px;
-  font-size: 0.9rem;
+  padding: var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-wood-mid);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-label);
 }
 
 .setting-row label {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-sm);
   cursor: pointer;
 }
 
-.setting-row input[type="range"] {
-  flex: 1;
-}
-
-.setting-label {
-  flex-shrink: 0;
-  color: var(--ink);
-}
-
 .faction-tag-townsfolk {
-  color: var(--success-bright);
-  border-color: var(--success);
+  color: var(--color-town-green);
+  border-color: var(--color-town-green);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-  color: var(--ink-dim);
+  gap: var(--space-xs);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
 }
 
 .field input {
-  padding: 0.6rem var(--space-md);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  background: var(--paper-sunken);
-  color: var(--ink);
-  font-size: 1rem;
+  min-height: var(--space-xxxl);
+  padding: 0 var(--space-md);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  background: var(--color-void);
+  color: var(--color-foam);
+  font-size: var(--font-size-label);
   font-family: var(--font-body);
   box-shadow: 0 1px 0 var(--shadow-soft) inset;
 }
 
 .field input:focus {
   outline: none;
-  border-color: var(--brass);
+  border-color: var(--color-flame-glow);
 }
 
+/* Every bare <button> gets the ART_BIBLE §8 Button treatment directly — the
+   same rules as `.ph-button.ph-button--primary` in
+   client/src/ui/primitives/primitives.css. As each screen switches to the
+   <Button> component this duplication shrinks; once nothing renders a plain
+   <button> anymore, delete this block (keeping only the primitive). */
 button {
-  padding: 0.7rem var(--space-lg);
-  border: 1px solid var(--timber-dark);
-  border-radius: 4px;
-  background: linear-gradient(180deg, var(--brass-bright), var(--brass) 55%, var(--brass-dim));
-  color: #2a1c0a;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  box-sizing: border-box;
+  min-height: var(--space-xxxl);
+  min-width: 96px;
+  padding: 0 var(--space-lg);
+  border: 4px solid var(--color-ink);
+  border-radius: var(--radius-lg);
+  background: var(--color-flame-glow);
+  color: var(--color-ink);
   font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 1rem;
+  font-weight: var(--font-weight-ui-bold);
+  font-size: var(--font-size-label);
   cursor: pointer;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.35) inset,
-    0 2px 0 rgba(0, 0, 0, 0.25),
-    0 3px 6px var(--shadow-soft);
-}
-
-button:hover:not(:disabled) {
-  filter: brightness(1.06);
+  box-shadow: 0 5px 0 0 var(--color-ink);
+  transition: transform var(--duration-fast) linear, box-shadow var(--duration-fast) linear;
 }
 
 button:active:not(:disabled) {
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25) inset;
-  transform: translateY(1px);
+  transform: translateY(5px);
+  box-shadow: 0 0 0 0 var(--color-ink);
 }
 
 button:disabled {
@@ -394,16 +343,14 @@ button:disabled {
 }
 
 button.secondary {
-  color: var(--ink);
-  box-shadow:
-    0 1px 0 var(--highlight) inset,
-    0 2px 4px var(--shadow-soft);
+  background: var(--color-wood-mid);
+  color: var(--color-foam);
 }
 
 .error {
   margin: 0;
-  color: var(--danger-bright);
-  font-size: 0.85rem;
+  color: var(--color-stranger-red);
+  font-size: var(--font-size-caption);
 }
 
 /* Auth screen */
@@ -415,41 +362,287 @@ button.secondary {
 
 .auth-tab {
   flex: 1;
-  padding: 0.4rem var(--space-sm);
-  font-size: 0.85rem;
+  min-height: var(--space-xxxl);
+  padding: 0 var(--space-sm);
+  font-size: var(--font-size-caption);
   background: transparent;
-  color: var(--ink-dim);
-  border: 1px solid var(--timber);
+  color: var(--color-mist);
+  border: 1px solid var(--color-ink);
   box-shadow: none;
 }
 
 .auth-tab-active {
-  color: var(--ink);
-  background: var(--paper-sunken);
-  border-color: var(--brass);
+  color: var(--color-foam);
+  background: var(--color-void);
+  border-color: var(--color-flame-glow);
 }
 
 .field-hint {
-  color: var(--ink-dim);
-  font-size: 0.75rem;
+  color: var(--color-mist);
+  font-size: var(--font-size-caption);
 }
 
 .guest-tag {
-  color: var(--brass);
+  color: var(--color-flame-glow);
   text-transform: uppercase;
-  font-size: 0.7rem;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.1em;
 }
 
-/* A quiet, link-styled button — sign in/out, not a primary action. */
-.link-button {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  color: var(--ink-dim);
-  font-size: 0.8rem;
-  text-decoration: underline;
-  padding: var(--space-xs);
+/* Available to assistive technology, invisible on screen. Not a display:none
+   — that would hide it from screen readers too, which is the opposite of the
+   point. Used where meaning lives in a canvas that AT cannot read. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * The lobby — a walkable Tavern (ART_BIBLE §5.2) with a small pinned HUD.
+ *
+ * The canvas is the screen; the HUD is an overlay on top of it, not a column
+ * beside it. Everything below is layout/position only — every border, fill,
+ * radius and press treatment comes from `<Panel>` / `<Button>`.
+ * ------------------------------------------------------------------------ */
+.lobby-room {
+  position: relative;
+  width: min(960px, 100%);
+  aspect-ratio: 3 / 2;
+  margin: 0 auto;
+}
+
+.lobby-canvas canvas {
+  /* Sizing is Phaser's Scale.FIT (see LobbyCanvas.tsx); these are cosmetic. */
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-ink);
+  box-shadow: 0 10px 24px var(--shadow-deep);
+  display: block;
+}
+
+/* Pinned to the canvas's top-right, deliberately narrow — the room is the
+   primary interface, this is the persistent chrome that can't live in it. */
+.lobby-hud {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: min(224px, 46%);
+  padding: var(--space-md);
+  backdrop-filter: blur(2px);
+}
+
+.lobby-hud-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.lobby-hud-invites {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.lobby-hud-ready {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+  color: var(--color-mist);
+}
+
+/* Standing on the flagstone turns the counter the same townGreen as the
+   check floating over your Havener — one colour for one state. */
+.lobby-hud-ready[data-ready="true"] {
+  color: var(--color-town-green);
+}
+
+.lobby-hud-hint {
+  margin: 0;
+  font-size: var(--font-size-caption);
+}
+
+.lobby-settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-ink) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.lobby-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: var(--space-xl) var(--space-xxl);
+  width: min(420px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.lobby-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.lobby-settings-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-title);
+  line-height: var(--line-height-title);
+  color: var(--color-flame-glow);
+}
+
+/* Phone-width: the HUD would eat most of a small canvas, so it drops below
+   the room instead of floating over it. */
+@media (max-width: 700px) {
+  .lobby-room {
+    aspect-ratio: auto;
+  }
+
+  .lobby-hud {
+    position: static;
+    width: auto;
+    margin-top: var(--space-sm);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Role selection (ROLE_SELECT phase). Your own hand of role cards, plus one
+ * bit per player about who has decided — nothing here can render anyone
+ * else's options, because the client is never sent them.
+ * ------------------------------------------------------------------------ */
+.role-select {
+  width: min(680px, 94vw);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.role-select-timer {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-display-lg);
+  line-height: var(--line-height-display-lg);
+  color: var(--color-flame-glow);
+  text-align: center;
+}
+
+.role-select-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-md);
+}
+
+/* The Card primitive supplies the 3px ink border, the 10px radius and the
+   voteGold selected treatment (ART_BIBLE §8) — only layout is set here. */
+.role-select-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 100%;
+  padding: var(--space-md);
+  background: var(--color-void);
+  text-align: center;
+  cursor: pointer;
+}
+
+.role-select-card:focus-visible {
+  outline: 3px solid var(--color-flame-glow);
+  outline-offset: 2px;
+}
+
+.role-select-card-name {
+  font-family: var(--font-display);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  color: var(--color-foam);
+}
+
+.role-select-card-hint {
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  color: var(--color-mist);
+}
+
+/* Placeholder emblem: the rope-bordered disc from ART_BIBLE §12.3's emblem
+   sheet, carrying a two-letter code until the real frames are sliced. The
+   real art replaces the CONTENT of this box, not its footprint. */
+.role-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-xxxl);
+  height: var(--space-xxxl);
+  border-radius: 50%;
+  border: 3px solid var(--color-rope-tan);
+  background: var(--color-ink);
+  color: var(--color-flame-glow);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-numeric);
+  letter-spacing: 0.05em;
+}
+
+.role-select-progress {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
+  text-align: center;
+}
+
+.role-select-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.role-select-roster li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--color-void);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
+}
+
+/* Decided is the same townGreen as the lobby's ready check — one colour for
+   "this player is done waiting on me". */
+.role-select-roster li[data-done="true"] .role-select-roster-state {
+  color: var(--color-town-green);
+}
+
+.setting-row-note {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-size-caption);
 }
 
 /* Role reveal */
@@ -461,25 +654,25 @@ button.secondary {
 
 .reveal-intro {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .reveal-role {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 2.5rem;
+  font-size: var(--font-size-display-xl);
   letter-spacing: 0.05em;
 }
 
 .reveal-townsfolk .reveal-role {
-  color: var(--success-bright);
+  color: var(--color-town-green);
 }
 
 .reveal-stranger .reveal-role {
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
 }
 
 .reveal-fellows {
@@ -506,7 +699,7 @@ button.secondary {
   align-items: center;
   gap: var(--space-xl);
   width: min(800px, 100%);
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .hud button {
@@ -520,7 +713,7 @@ button.secondary {
   max-width: 100%;
   height: auto;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--timber-light);
+  border: 1px solid var(--color-ink);
   box-shadow: 0 10px 24px var(--shadow-deep);
   display: block;
 }
@@ -534,16 +727,16 @@ button.secondary {
 }
 
 .task-bar-label {
-  font-size: 0.85rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
 }
 
 .task-bar-track {
   flex: 1;
-  height: 10px;
-  border-radius: 5px;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
+  height: var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
   overflow: hidden;
 }
 
@@ -552,7 +745,7 @@ button.secondary {
    without this the bar would snap on every task completion. */
 .task-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--success), var(--success-bright));
+  background: linear-gradient(90deg, var(--color-town-green), var(--color-town-green));
   transition: width var(--duration-task-progress) ease;
 }
 
@@ -567,8 +760,8 @@ button.secondary {
 
 .task-bar-count {
   font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   min-width: 4.5rem;
   text-align: right;
 }
@@ -586,28 +779,25 @@ button.secondary {
   margin: 0 auto;
 }
 
-/* Local player's own task list */
+/* Local player's own task list. Position/size only — border, fill, radius
+   and the inner top highlight all come from `<Panel>`. */
 .task-list {
   position: absolute;
   top: var(--space-sm);
   left: var(--space-sm);
   z-index: 1;
   width: min(200px, 42vw);
-  padding: var(--space-md) 0.85rem;
-  background: rgba(23, 18, 11, 0.82);
-  background-image: var(--grain), none;
-  border: 1px solid var(--timber-light);
-  border-radius: var(--radius-sm);
+  padding: var(--space-md);
   backdrop-filter: blur(2px);
 }
 
 .task-list h2 {
   margin: 0 0 var(--space-sm);
   font-family: var(--font-display);
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--brass);
+  color: var(--color-flame-glow);
 }
 
 .task-list ul {
@@ -616,18 +806,20 @@ button.secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-xs);
 }
 
 .task-list li {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: 0.85rem;
-  color: var(--ink);
+  font-size: var(--font-size-caption);
+  color: var(--color-foam);
 }
 
-/* Comms sabotage: replaces the task list while cut, same slot and sizing. */
+/* Comms sabotage: replaces the task list while cut, same slot and sizing.
+   Border/fill/radius come from `<Panel>`; the red border/text is the one
+   content-driven override, same idiom as Card's `selected`/`dead` states. */
 .task-list-offline {
   position: absolute;
   top: var(--space-sm);
@@ -635,40 +827,39 @@ button.secondary {
   z-index: 1;
   width: min(200px, 42vw);
   margin: 0;
-  padding: var(--space-md) 0.85rem;
-  background: rgba(23, 18, 11, 0.82);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius-sm);
-  color: var(--danger-bright);
-  font-size: 0.85rem;
+  padding: var(--space-md);
+  border-color: var(--color-stranger-red);
+  color: var(--color-stranger-red);
+  font-size: var(--font-size-caption);
   backdrop-filter: blur(2px);
 }
 
-/* Critical sabotage: the one screen-wide alarm banner. */
+/* Critical sabotage: the one screen-wide alarm banner. Border/fill/radius
+   come from `<Panel>`; the danger-red wash and border are the one
+   content-driven override, same idiom as Card's `selected`/`dead` states. */
 .critical-sabotage-banner {
   width: min(960px, 100%);
   margin: 0 auto var(--space-sm);
-  padding: 0.6rem var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
   background: var(--danger-well);
-  border: 2px solid var(--danger);
-  border-radius: var(--radius-sm);
+  border-color: var(--color-stranger-red);
   text-align: center;
 }
 
 .critical-sabotage-heading {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: var(--font-size-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
 }
 
 .critical-sabotage-timer {
-  margin: 0.2rem 0;
-  font-size: 1.8rem;
+  margin: var(--space-xs) 0;
+  font-size: var(--font-size-display-lg);
   font-weight: 700;
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
 }
 
 .critical-sabotage-points {
@@ -678,26 +869,26 @@ button.secondary {
   display: flex;
   justify-content: center;
   gap: var(--space-xl);
-  font-size: 0.85rem;
-  color: var(--ink);
+  font-size: var(--font-size-caption);
+  color: var(--color-foam);
 }
 
 .critical-sabotage-points li[data-fixed="true"] {
-  color: var(--brass);
+  color: var(--color-flame-glow);
 }
 
 .task-check {
-  color: var(--ink-dim);
+  color: var(--color-mist);
   width: 1em;
 }
 
 .task-done {
-  color: var(--ink-faint);
+  color: var(--color-fog-light);
   text-decoration: line-through;
 }
 
 .task-done .task-check {
-  color: var(--success-bright);
+  color: var(--color-town-green);
 }
 
 .task-room {
@@ -706,8 +897,8 @@ button.secondary {
 
 .task-progress {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
 }
 
 /* Mini-game modal chrome */
@@ -726,8 +917,7 @@ button.secondary {
   flex-direction: column;
   gap: var(--space-lg);
   width: min(380px, 92vw);
-  padding: 1.25rem;
-  border-radius: var(--radius-sm);
+  padding: var(--space-xl);
 }
 
 .minigame-panel-header {
@@ -735,14 +925,14 @@ button.secondary {
   align-items: center;
   justify-content: space-between;
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: var(--font-size-label);
   font-weight: 600;
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .minigame-panel-close {
-  padding: var(--space-xs) 0.55rem;
-  font-size: 0.85rem;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-caption);
 }
 
 .minigame {
@@ -754,8 +944,8 @@ button.secondary {
 
 .minigame-instructions {
   margin: 0;
-  font-size: 0.85rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   text-align: center;
 }
 
@@ -774,9 +964,11 @@ button.secondary {
 .wire-plug,
 .wire-socket {
   position: absolute;
-  /* 36px rather than a true 44px touch-target minimum — the board is only
-     300x200 (see WireConnectingGame.tsx's BOARD_WIDTH/HEIGHT), so going
-     further would start crowding the plug/socket columns together. */
+  /* 36px, short of the site-wide 48px interactive-target floor (§8) — the
+     board is only 300x200 (see WireConnectingGame.tsx's BOARD_WIDTH/
+     BOARD_HEIGHT), so hitting 48px here means growing the board itself, a
+     minigame-geometry call for a human, not a mechanical CSS bump. Tracked
+     as open debt — see docs/TOKEN_DEBT.md §3c. */
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -799,7 +991,7 @@ button.secondary {
 }
 
 .wire-socket {
-  background: var(--paper-sunken);
+  background: var(--color-void);
   border: 3px solid;
   /* Must stay hit-testable: drop detection reads elementFromPoint() at
      pointerup, which pointer-events: none would make skip straight past
@@ -826,10 +1018,10 @@ button.secondary {
   font-family: var(--font-mono);
   font-size: var(--font-size-title);
   font-weight: 700;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  color: var(--brass-bright);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  color: var(--color-flame-glow);
 }
 
 .code-entry {
@@ -846,17 +1038,17 @@ button.secondary {
   font-family: var(--font-mono);
   font-size: var(--font-size-title);
   font-weight: 700;
-  background: var(--paper-sunken);
-  border: 1px solid var(--brass-dim);
-  border-radius: 4px;
-  color: var(--ink);
+  background: var(--color-void);
+  border: 1px solid var(--color-flame-deep);
+  border-radius: var(--radius-sm);
+  color: var(--color-foam);
   transition:
     border-color 0.2s,
     background 0.2s;
 }
 
 .code-entry-error .code-entry-slot {
-  border-color: var(--danger-bright);
+  border-color: var(--color-stranger-red);
   background: var(--danger-well);
 }
 
@@ -870,10 +1062,10 @@ button.secondary {
   width: 3.2rem;
   height: 3.2rem;
   padding: 0;
-  font-size: 1.1rem;
-  background: linear-gradient(180deg, var(--timber-light), var(--timber));
-  color: var(--ink);
-  border-color: var(--timber-dark);
+  font-size: var(--font-size-body);
+  background: linear-gradient(180deg, var(--color-ink), var(--color-wood-mid));
+  color: var(--color-foam);
+  border-color: var(--color-ink);
 }
 
 /* Calibration bar */
@@ -881,14 +1073,14 @@ button.secondary {
   position: relative;
   width: 280px;
   height: 20px;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
   border-radius: var(--radius-md);
   transition: border-color 0.2s;
 }
 
 .calibration-track-miss {
-  border-color: var(--danger-bright);
+  border-color: var(--color-stranger-red);
 }
 
 .calibration-zone {
@@ -896,8 +1088,8 @@ button.secondary {
   top: 0;
   bottom: 0;
   background: rgba(143, 184, 92, 0.33);
-  border-left: 2px solid var(--success-bright);
-  border-right: 2px solid var(--success-bright);
+  border-left: 2px solid var(--color-town-green);
+  border-right: 2px solid var(--color-town-green);
 }
 
 .calibration-indicator {
@@ -905,13 +1097,13 @@ button.secondary {
   top: -4px;
   width: 6px;
   height: 28px;
-  background: var(--brass-bright);
-  border-radius: 3px;
+  background: var(--color-flame-glow);
+  border-radius: var(--radius-sm);
   transform: translateX(-50%);
 }
 
 .calibration-indicator-locked {
-  background: var(--success-bright);
+  background: var(--color-town-green);
 }
 
 .calibration-stop {
@@ -955,14 +1147,18 @@ button.secondary {
 }
 
 .ordering-item {
-  padding: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--space-xxxl);
+  padding: var(--space-sm);
   text-align: center;
-  font-size: 1.1rem;
+  font-size: var(--font-size-body);
   font-weight: 600;
-  background: linear-gradient(180deg, var(--timber-light), var(--timber));
-  border: 1px solid var(--timber-dark);
+  background: linear-gradient(180deg, var(--color-ink), var(--color-wood-mid));
+  border: 1px solid var(--color-ink);
   border-radius: var(--radius-sm);
-  color: var(--ink);
+  color: var(--color-foam);
   cursor: grab;
 }
 
@@ -973,7 +1169,7 @@ button.secondary {
 /* Rotation puzzle */
 .rotation-dials {
   display: flex;
-  gap: 1.25rem;
+  gap: var(--space-xl);
 }
 
 .rotation-dial {
@@ -981,13 +1177,13 @@ button.secondary {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: var(--paper-sunken);
-  border: 2px solid var(--timber-light);
+  background: var(--color-void);
+  border: 2px solid var(--color-ink);
   padding: 0;
 }
 
 .rotation-dial-aligned {
-  border-color: var(--success-bright);
+  border-color: var(--color-town-green);
 }
 
 .rotation-target,
@@ -1010,54 +1206,46 @@ button.secondary {
   width: 30px;
   height: var(--space-xs);
   margin-top: -2px;
-  background: var(--brass-bright);
-  border-radius: 2px;
+  background: var(--color-flame-glow);
+  border-radius: var(--radius-sm);
 }
 
 /* Ghost banner */
 .hud-ghost {
-  padding: 0.2rem 0.6rem;
+  padding: var(--space-xs) var(--space-sm);
   border-radius: 999px;
-  background: var(--timber);
-  border: 1px solid var(--timber-light);
-  color: var(--ink-dim);
-  font-size: 0.8rem;
+  background: var(--color-wood-mid);
+  border: 1px solid var(--color-ink);
+  color: var(--color-mist);
+  font-size: var(--font-size-caption);
 }
 
-/* Kill button — overlays the bottom-right of the canvas */
-.kill-button {
+/* Ability/kill button — overlays the bottom-right of the canvas. Border,
+   fill, the ink thickness bar and the press/disabled treatment all come
+   from `<Button variant="destructive">`; this only overrides shape
+   (circular) and position (absolute HUD overlay). */
+.ability-button {
   position: absolute;
   right: var(--space-lg);
   bottom: var(--space-lg);
   z-index: 2;
   width: 92px;
   height: 92px;
+  min-width: 0;
+  min-height: 0;
   padding: 0;
   border-radius: 50%;
   overflow: hidden;
-  background: var(--danger-well);
-  border: 2px solid var(--danger);
-  color: #e8b3a5;
-  font-family: var(--font-body);
-  font-size: 1rem;
-  font-weight: 700;
-  box-shadow: 0 4px 10px var(--shadow-deep);
 }
 
-.kill-button:disabled {
-  cursor: default;
-  opacity: 1; /* the cooldown sweep already reads as "not ready" */
-}
-
-.kill-button-ready {
-  background: var(--danger);
-  border-color: var(--danger-bright);
-  color: #fff3ee;
-  box-shadow: 0 0 16px rgba(168, 64, 44, 0.55);
+.ability-button:not(:disabled) {
+  box-shadow:
+    0 5px 0 0 var(--color-ink),
+    0 0 16px color-mix(in srgb, var(--color-stranger-red) 55%, transparent);
 }
 
 /* Sweeps left-to-right as the cooldown drains. */
-.kill-button-cooldown {
+.ability-button-cooldown {
   position: absolute;
   inset: 0;
   transform-origin: left center;
@@ -1065,13 +1253,13 @@ button.secondary {
   pointer-events: none;
 }
 
-.kill-button-label {
+.ability-button-label {
   position: relative;
 }
 
 /* Touch controls — virtual joystick + action buttons, mounted only on touch
    devices (see TouchControls.tsx / useIsTouchDevice). Both are `.game-stage`
-   overlays, same absolute-positioning idiom as `.kill-button`. The wrapper
+   overlays, same absolute-positioning idiom as `.ability-button`. The wrapper
    itself ignores pointer events so it never blocks taps on the canvas
    underneath it outside the joystick/buttons themselves. */
 .touch-controls {
@@ -1089,7 +1277,7 @@ button.secondary {
   height: 110px;
   border-radius: 50%;
   background: rgba(23, 18, 11, 0.55);
-  border: 2px solid var(--timber-light);
+  border: 2px solid var(--color-ink);
   touch-action: none;
   pointer-events: auto;
 }
@@ -1102,8 +1290,8 @@ button.secondary {
   height: var(--space-xxxl);
   margin: -24px 0 0 -24px;
   border-radius: 50%;
-  background: var(--brass-dim);
-  border: 2px solid var(--brass);
+  background: var(--color-flame-deep);
+  border: 2px solid var(--color-flame-glow);
   pointer-events: none;
 }
 
@@ -1111,56 +1299,37 @@ button.secondary {
   position: absolute;
   right: var(--space-lg);
   /* Stacked above the ability/kill button's 92px circle (right:16px;
-     bottom:16px — see .kill-button) so the two clusters never overlap,
+     bottom:16px — see .ability-button) so the two clusters never overlap,
      whether or not the local role has an ability. */
   bottom: 124px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-md);
   pointer-events: auto;
 }
 
+/* Pill shape and HUD sizing only — border/fill/press/disabled treatment all
+   come from `<Button variant="primary">`. */
 .touch-action-button {
   min-width: 64px;
-  min-height: 44px;
-  padding: 0.4rem 0.9rem;
   border-radius: 999px;
-  background: var(--paper-raised);
-  border: 2px solid var(--brass-dim);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  font-weight: 700;
-  box-shadow: 0 4px 10px var(--shadow-deep);
-}
-
-.touch-action-button:disabled {
-  opacity: 0.4;
-}
-
-.touch-action-button:not(:disabled) {
-  background: var(--brass-dim);
-  border-color: var(--brass-bright);
-  color: var(--paper-void);
+  font-size: var(--font-size-caption);
 }
 
 /* Ability hint toast — the detective's trace, the medium's commune, the
-   doctor's shield confirmation. Transient: GameView clears it after a delay. */
+   doctor's shield confirmation. Transient: GameView clears it after a delay.
+   Position/size only — border, fill, radius and the inner top highlight all
+   come from `<Panel>`. */
 .ability-hint-toast {
   position: absolute;
   left: 50%;
   bottom: var(--space-lg);
   transform: translateX(-50%);
   max-width: 90%;
-  padding: 0.6rem var(--space-lg);
-  background: var(--paper-base);
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--brass-dim);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: 0.85rem;
+  padding: var(--space-sm) var(--space-lg);
+  color: var(--color-foam);
+  font-size: var(--font-size-caption);
   text-align: center;
-  box-shadow: 0 6px 16px var(--shadow-deep);
   z-index: 3;
 }
 
@@ -1174,15 +1343,10 @@ button.secondary {
   top: var(--space-lg);
   transform: translateX(-50%);
   max-width: 90%;
-  padding: 0.6rem var(--space-lg);
-  background: var(--paper-base);
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--brass-dim);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: 0.85rem;
+  padding: var(--space-sm) var(--space-lg);
+  color: var(--color-foam);
+  font-size: var(--font-size-caption);
   text-align: center;
-  box-shadow: 0 6px 16px var(--shadow-deep);
   z-index: 3;
 }
 
@@ -1199,8 +1363,8 @@ button.secondary {
   /* Warm, enclosed, interrogation-room feel: a single lamp over the table,
      the rest of the room lost to shadow. */
   background:
-    radial-gradient(ellipse 60% 55% at 50% 38%, rgba(120, 82, 34, 0.35), transparent 70%),
-    radial-gradient(ellipse 120% 90% at 50% 50%, #241a0f 0%, #0e0a06 78%, #060402 100%);
+    radial-gradient(ellipse 60% 55% at 50% 38%, color-mix(in srgb, var(--color-flame-deep) 35%, transparent), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, var(--color-void) 0%, var(--color-ink) 78%, var(--color-ink) 100%);
 }
 
 /* A slow, faint flicker on the hanging lamp — purely cosmetic, so it backs
@@ -1246,6 +1410,10 @@ button.secondary {
   text-align: center;
   border-radius: var(--radius-sm);
   position: relative;
+  /* Wide enough for the player-Card grid to actually read as a grid — the
+     default `.panel` width (360px) fits barely two cards per row, which
+     defeats "readable at a glance" before the first render. */
+  width: min(640px, 94vw);
 }
 
 .meeting .roster {
@@ -1258,26 +1426,26 @@ button.secondary {
 
 .meeting-stage-label {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .meeting-timer {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 2.5rem;
+  font-size: var(--font-size-display-xl);
   font-weight: 700;
   line-height: 1;
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .ejection-line {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--font-size-body);
   font-weight: 600;
-  color: var(--ink);
+  color: var(--color-foam);
 }
 
 /* §10.2 ejection cutscene. Full-bleed within the meeting panel, 16:9-ish —
@@ -1319,7 +1487,7 @@ button.secondary {
   width: 22px;
   height: 40px;
   border-radius: 999px;
-  background: var(--ink);
+  background: var(--color-foam);
   transform: scale(1);
   transition: transform linear;
   transition-duration: 1600ms; /* EJECTION_BEATS.walkMs — see ejectionTimeline.ts */
@@ -1395,8 +1563,9 @@ button.secondary {
 .ejection-reveal-text p {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.4rem;
-  color: var(--ink);
+  font-size: var(--font-size-title);
+  line-height: var(--line-height-title);
+  color: var(--color-foam);
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
@@ -1405,8 +1574,8 @@ button.secondary {
   right: var(--space-md);
   bottom: var(--space-sm);
   margin: 0;
-  font-size: 0.75rem;
-  color: var(--ink-faint);
+  font-size: var(--font-size-caption);
+  color: var(--color-fog-light);
   opacity: 0.8;
 }
 
@@ -1419,7 +1588,7 @@ button.secondary {
   position: absolute;
   inset: 0;
   z-index: 50;
-  background: #000;
+  background: var(--color-ink);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1481,9 +1650,10 @@ button.secondary {
   max-width: 80%;
   padding: 0 var(--space-lg);
   font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-size: var(--font-size-title);
+  line-height: var(--line-height-title);
   text-align: center;
-  color: var(--ink);
+  color: var(--color-foam);
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
   /* §9's button-press curve reused here for the "slams in" feel — a punch
      the title settles out of, not eases into. */
@@ -1509,14 +1679,14 @@ button.secondary {
 .camera-reveal {
   width: 100%;
   padding: var(--space-md);
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber);
+  background: var(--color-void);
+  border: 1px solid var(--color-wood-mid);
   border-radius: var(--radius-sm);
   text-align: left;
 }
 
 .camera-reveal .roster {
-  margin-top: 0.35rem;
+  margin-top: var(--space-xs);
 }
 
 /* Alderman's double vote */
@@ -1529,7 +1699,7 @@ button.secondary {
   width: 100%;
   padding: var(--space-md);
   background: var(--danger-well);
-  border: 1px solid var(--danger);
+  border: 1px solid var(--color-stranger-red);
   border-radius: var(--radius-sm);
 }
 
@@ -1539,7 +1709,7 @@ button.secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: var(--space-sm);
 }
 
 .constable-target-list li {
@@ -1552,14 +1722,14 @@ button.secondary {
 
 .constable-target {
   background: var(--danger-well);
-  border-color: var(--danger);
-  color: #e8b3a5;
+  border-color: var(--color-stranger-red);
+  color: var(--color-foam);
 }
 
 .constable-confirm {
-  background: var(--danger);
-  border-color: var(--danger-bright);
-  color: #fff3ee;
+  background: var(--color-stranger-red);
+  border-color: var(--color-stranger-red);
+  color: var(--color-foam);
 }
 
 /* Assassin's role guess — same danger styling as the Constable's shot. */
@@ -1567,7 +1737,7 @@ button.secondary {
   width: 100%;
   padding: var(--space-md);
   background: var(--danger-well);
-  border: 1px solid var(--danger);
+  border: 1px solid var(--color-stranger-red);
   border-radius: var(--radius-sm);
 }
 
@@ -1577,7 +1747,7 @@ button.secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: var(--space-sm);
 }
 
 .assassin-target-list li {
@@ -1590,112 +1760,210 @@ button.secondary {
 
 .assassin-target {
   background: var(--danger-well);
-  border-color: var(--danger);
-  color: #e8b3a5;
+  border-color: var(--color-stranger-red);
+  color: var(--color-foam);
 }
 
 .assassin-role-select {
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber);
-  border-radius: 4px;
-  color: var(--ink);
-  padding: var(--space-xs) 0.4rem;
+  min-height: var(--space-xxxl);
+  background: var(--color-void);
+  border: 1px solid var(--color-wood-mid);
+  border-radius: var(--radius-sm);
+  color: var(--color-foam);
+  padding: var(--space-xs) var(--space-sm);
 }
 
 .assassin-confirm {
-  background: var(--danger);
-  border-color: var(--danger-bright);
-  color: #fff3ee;
+  background: var(--color-stranger-red);
+  border-color: var(--color-stranger-red);
+  color: var(--color-foam);
 }
 
 .silenced-notice {
-  color: var(--danger-bright, #c0392b);
+  color: var(--color-stranger-red);
   font-weight: 600;
 }
 
-/* Ballot */
-.vote-panel {
-  width: 100%;
+/* ---------------------------------------------------------------------------
+ * The meeting's player-Card grid (ART_BIBLE §8) — one persistent roster
+ * across discussion, voting and results, replacing what were three separate
+ * text lists. "Readable at a glance" is the design brief, so this stays a
+ * fixed, alphabetically-sorted grid rather than anything that reflows by
+ * vote count or speaking state — a card's POSITION is what makes it findable
+ * in under two seconds, and a layout that moves cards around defeats that.
+ * ------------------------------------------------------------------------ */
+
+.meeting-context {
+  margin-top: 0;
 }
 
-.vote-list {
+/* The voteGold countdown bar across the top of the meeting panel. A plain
+   div rather than <progress> — no native styling story gets this look
+   without fighting the browser, and this bar carries no information a
+   screen reader needs beyond what `.meeting-timer`'s seconds text already
+   says out loud. */
+.meeting-timer-bar {
+  height: var(--space-xs);
+  margin: calc(-1 * var(--space-xxl)) calc(-1 * var(--space-xxl)) var(--space-lg);
+  /* Matches the Panel primitive's own radius (ART_BIBLE §8), rounding only
+     the top: this bar sits flush against the panel's top edge, so its
+     corners have to follow the panel's, not `.meeting`'s own un-migrated
+     `--radius-sm` override. */
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--color-void);
+  overflow: hidden;
+}
+
+.meeting-timer-bar-fill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: var(--color-flame-glow);
+  /* Countdown, not a jump-cut — matches §9's "never jumps" spirit for any
+     bar that represents time actually passing. */
+  transition: transform 1s linear;
+}
+
+.player-vote-grid {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: var(--space-sm);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* The Card primitive (3px ink border, 10px radius, voteGold selected state,
+   the dead desaturate+X) supplies every border/fill/selection rule here —
+   only layout, and the two content-driven overrides below, are one-off. */
+.player-vote-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  background: var(--color-void);
+  text-align: center;
+  position: relative;
 }
 
-.vote-option {
-  width: 100%;
+.player-vote-card-clickable {
+  cursor: pointer;
+}
+
+.player-vote-card-clickable:focus-visible {
+  outline: 3px solid var(--color-flame-glow);
+  outline-offset: 2px;
+}
+
+.player-vote-card-portrait {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  padding: 0.6rem var(--space-md);
-  background: var(--paper-raised);
-  border: 1px solid var(--timber-light);
-  color: var(--ink);
-  font-size: 0.95rem;
+  justify-content: center;
 }
 
-.vote-option:disabled {
-  opacity: 0.7;
+.havener-preview-canvas {
+  display: block;
 }
 
-.vote-option-chosen {
-  border-color: var(--brass);
-  background: var(--timber);
+/* Speaking ring — the one thing on this grid driven by the proximity voice
+   system rather than meeting/vote state. A ring around the portrait rather
+   than the whole card, so it never gets confused for the voteGold selected
+   border. */
+.player-vote-card-speaking .player-vote-card-portrait {
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--color-town-green);
 }
 
-.vote-skip {
-  background: var(--paper-sunken);
+.player-vote-card-name {
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  color: var(--color-foam);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
-.vote-marker {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--success-bright);
-}
-
-/* Vote tallies on the results screen */
-.tally-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  width: 100%;
-}
-
-.tally-list li {
+.player-vote-card-status {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  padding: 0.4rem var(--space-md);
-  background: var(--paper-sunken);
-  border-radius: 4px;
-  font-size: 0.9rem;
-  color: var(--ink);
+  gap: var(--space-xs);
+  min-height: 12px;
 }
 
-.tally-name {
-  flex: 1;
-  text-align: left;
+.player-vote-card-away {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-mist);
 }
 
-.tally-count {
+.player-vote-card-voted {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-town-green);
+}
+
+.player-vote-card-pips {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 10px;
+  flex-wrap: wrap;
+}
+
+/* §9 "Vote cast": a voteGold pip drops in with a bounce — the same
+   `back.out` curve (as its CSS `cubic-bezier` equivalent — see
+   `JuiceDirector.BACK_OUT_EASING`) every other bounce in this file uses. */
+.player-vote-card-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-vote-gold);
+  animation: vote-pip-drop var(--duration-slow) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes vote-pip-drop {
+  from {
+    transform: translateY(-10px) scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+:root[data-reduced-motion="on"] .player-vote-card-pip {
+  animation: none;
+}
+
+.player-vote-card-pip-zero {
   font-family: var(--font-mono);
-  font-weight: 700;
-  color: var(--brass-bright);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
 }
 
-.tally-voters {
-  font-size: 0.75rem;
-  color: var(--ink-dim);
+.player-vote-card-voters {
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
+}
+
+.player-vote-card-moderation {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+/* First-class, per the design brief — the same size and weight as the
+   ability buttons below it, not a small link in a list. */
+.vote-skip-button {
+  width: 100%;
 }
 
 /* Chat */
@@ -1711,15 +1979,15 @@ button.secondary {
 .chat-panel h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--brass);
+  color: var(--color-flame-glow);
 }
 
 .chat-panel-dead {
-  border-color: var(--timber-light);
-  background-image: var(--grain), linear-gradient(160deg, #1c1710, var(--paper-void));
+  border-color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-ink) 88%, transparent);
 }
 
 .chat-log {
@@ -1727,26 +1995,26 @@ button.secondary {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-xs);
   padding-right: var(--space-xs);
 }
 
 .chat-line {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--font-size-caption);
   text-align: left;
   overflow-wrap: anywhere;
-  color: var(--ink);
+  color: var(--color-foam);
 }
 
 .chat-sender {
   font-weight: 600;
-  margin-right: 0.4rem;
-  color: var(--brass-bright);
+  margin-right: var(--space-sm);
+  color: var(--color-flame-glow);
 }
 
 .chat-sender-dead {
-  color: var(--ink-dim);
+  color: var(--color-mist);
   font-style: italic;
 }
 
@@ -1758,23 +2026,24 @@ button.secondary {
 .chat-composer input {
   flex: 1;
   min-width: 0;
-  padding: var(--space-sm) 0.6rem;
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  background: var(--paper-sunken);
-  color: var(--ink);
+  min-height: var(--space-xxxl);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  background: var(--color-void);
+  color: var(--color-foam);
   font-family: var(--font-body);
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
 }
 
 .chat-composer input:focus {
   outline: none;
-  border-color: var(--brass);
+  border-color: var(--color-flame-glow);
 }
 
 .chat-composer button {
-  padding: var(--space-sm) 0.8rem;
-  font-size: 0.85rem;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-caption);
 }
 
 /* Game over / results screen — reuses .reveal-intro, .reveal-role, .roster */
@@ -1785,11 +2054,11 @@ button.secondary {
 }
 
 .game-over-townsfolk .reveal-role {
-  color: var(--success-bright);
+  color: var(--color-town-green);
 }
 
 .game-over-stranger .reveal-role {
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
 }
 
 .game-over-roster li {
@@ -1797,15 +2066,15 @@ button.secondary {
 }
 
 .role-tag {
-  font-size: 0.75rem;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--success-bright);
+  color: var(--color-town-green);
 }
 
 .role-tag-stranger {
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
 }
 
 /*
@@ -1827,77 +2096,49 @@ button.secondary {
   padding: var(--space-xl) var(--space-xxl);
   border-radius: var(--radius-sm);
   text-align: center;
-  color: var(--ink);
+  color: var(--color-foam);
 }
 
 .reconnect-title {
-  margin: 0 0 0.4rem;
+  margin: 0 0 var(--space-sm);
   font-weight: 600;
 }
 
 /* A player holding their seat while they find their way back. */
-.roster-away {
-  opacity: 0.55;
-}
-
-.away-tag {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--ink-dim);
-  text-transform: uppercase;
-}
-
 /*
  * Audio and graphics settings: small always-reachable toggles (opposite
  * bottom corners, above everything but the reconnect overlay) and the
  * panels they open.
  */
-.audio-settings-toggle {
+/* Circular HUD toggles — shape/position only, chrome comes from `<Button>`. */
+.audio-settings-toggle,
+.graphics-settings-toggle,
+.keybinding-settings-toggle {
   position: fixed;
+  z-index: 90;
+  width: var(--space-xxxl);
+  height: var(--space-xxxl);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 999px;
+  font-size: var(--font-size-body);
+  line-height: 1;
+}
+
+.audio-settings-toggle {
   right: var(--space-lg);
   bottom: var(--space-lg);
-  z-index: 90;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--timber-light);
-  background: var(--paper-base);
-  color: var(--ink);
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
 }
 
 .graphics-settings-toggle {
-  position: fixed;
   left: var(--space-lg);
   bottom: var(--space-lg);
-  z-index: 90;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--timber-light);
-  background: var(--paper-base);
-  color: var(--ink);
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
 }
 
 .keybinding-settings-toggle {
-  position: fixed;
   left: var(--space-lg);
   top: var(--space-lg);
-  z-index: 90;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--timber-light);
-  background: var(--paper-base);
-  color: var(--ink);
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
 }
 
 .language-switcher {
@@ -1906,13 +2147,14 @@ button.secondary {
   left: 50%;
   transform: translateX(-50%);
   z-index: 90;
-  padding: 0.4rem 0.6rem;
+  min-height: var(--space-xxxl);
+  padding: var(--space-sm);
   border-radius: 999px;
-  border: 1px solid var(--timber-light);
-  background: var(--paper-base);
-  color: var(--ink);
+  border: 1px solid var(--color-ink);
+  background: var(--color-void);
+  color: var(--color-foam);
   font-family: var(--font-body);
-  font-size: 0.85rem;
+  font-size: var(--font-size-caption);
   cursor: pointer;
 }
 
@@ -1930,8 +2172,8 @@ button.secondary {
 .audio-settings-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: var(--space-xl) 1.75rem;
+  gap: var(--space-lg);
+  padding: var(--space-xl) var(--space-xxl);
   border-radius: var(--radius-sm);
   min-width: 20rem;
 }
@@ -1939,7 +2181,7 @@ button.secondary {
 .audio-settings-panel h2 {
   margin: 0 0 var(--space-xs);
   font-family: var(--font-display);
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .audio-settings-row {
@@ -1950,51 +2192,43 @@ button.secondary {
 }
 
 .audio-settings-label {
-  font-size: 0.9rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-label);
+  color: var(--color-mist);
 }
 
 /* The tri-state reduced-motion picker. Sized to sit in the same right-hand
    column as the on/off buttons in the rows above it. */
 .audio-settings-select {
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  color: var(--ink-dim);
-  font-size: 0.8rem;
+  min-height: var(--space-xxxl);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  color: var(--color-mist);
+  font-size: var(--font-size-caption);
   padding: 0.3rem 0.5rem;
   cursor: pointer;
 }
 
 .audio-mute-button {
-  padding: 0.3rem 0.6rem;
-  border-radius: 4px;
-  border: 1px solid var(--timber-light);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-ink);
   background: transparent;
-  color: var(--ink-dim);
-  font-size: 0.8rem;
+  color: var(--color-mist);
+  font-size: var(--font-size-caption);
   cursor: pointer;
 }
 
 .audio-mute-active {
   background: var(--danger-well);
-  border-color: var(--danger);
-  color: #e8b3a5;
+  border-color: var(--color-stranger-red);
+  color: var(--color-foam);
 }
 
 /*
  * Friend system: the "Copy Invite Link" / "Invite Friends" row under the
  * lobby's room code, the friends panel itself, and the invite toast.
  */
-.invite-row {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.invite-row button {
-  flex: 1;
-}
-
 .friends-overlay {
   position: fixed;
   inset: 0;
@@ -2009,17 +2243,12 @@ button.secondary {
 .friends-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: var(--space-xl) 1.75rem;
+  gap: var(--space-lg);
+  padding: var(--space-xl) var(--space-xxl);
   border-radius: var(--radius-sm);
   width: min(420px, 90vw);
   max-height: 80vh;
   overflow-y: auto;
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
-  box-shadow:
-    0 1px 0 var(--highlight) inset,
-    0 10px 24px var(--shadow-deep);
 }
 
 .friends-panel-header {
@@ -2031,30 +2260,30 @@ button.secondary {
 .friends-panel-header h2 {
   margin: 0;
   font-family: var(--font-display);
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .friends-tabs {
   display: flex;
-  gap: 0.4rem;
-  border-bottom: 1px solid var(--timber-light);
-  padding-bottom: 0.6rem;
+  gap: var(--space-sm);
+  border-bottom: 1px solid var(--color-ink);
+  padding-bottom: var(--space-sm);
 }
 
 .friends-tab {
-  padding: 0.4rem 0.7rem;
-  border-radius: 4px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--ink-dim);
-  font-size: 0.85rem;
-  cursor: pointer;
+  color: var(--color-mist);
+  font-size: var(--font-size-caption);
+  box-shadow: none;
 }
 
 .friends-tab-active {
-  border-color: var(--brass-dim);
-  color: var(--brass-bright);
-  background: var(--paper-sunken);
+  border-color: var(--color-flame-deep);
+  color: var(--color-flame-glow);
+  background: var(--color-void);
 }
 
 .friends-add-form {
@@ -2072,18 +2301,18 @@ button.secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: var(--space-sm);
 }
 
 .friends-list li {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-sm) 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  font-size: 0.9rem;
+  padding: var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-label);
 }
 
 .friends-list-pending li {
@@ -2092,20 +2321,20 @@ button.secondary {
 
 .friend-name {
   flex: 1;
-  color: var(--ink);
+  color: var(--color-foam);
 }
 
 .friend-status {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: var(--space-sm);
+  height: var(--space-sm);
   border-radius: 999px;
-  background: var(--ink-faint);
+  background: var(--color-fog-light);
   flex-shrink: 0;
 }
 
 .friend-status-online {
-  background: var(--success-bright);
-  box-shadow: 0 0 4px var(--success-bright);
+  background: var(--color-town-green);
+  box-shadow: 0 0 4px var(--color-town-green);
 }
 
 /* A friend's invite, delivered live — see `HubRoom` and `App.tsx`. */
@@ -2116,13 +2345,13 @@ button.secondary {
   transform: translateX(-50%);
   z-index: 97;
   max-width: min(360px, 90vw);
-  padding: var(--space-lg) 1.25rem;
+  padding: var(--space-lg) var(--space-xl);
   border-radius: var(--radius-sm);
   text-align: center;
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--brass-dim);
+  background: color-mix(in srgb, var(--color-void) 94%, transparent);
+  border: 1px solid var(--color-flame-deep);
   box-shadow: 0 10px 24px var(--shadow-deep);
-  color: var(--ink);
+  color: var(--color-foam);
 }
 
 .friend-invite-toast p {
@@ -2140,24 +2369,24 @@ button.secondary {
  * dialog and the admin panel.
  */
 .moderation-button {
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--ink-faint);
-  font-size: 0.85rem;
+  color: var(--color-fog-light);
+  font-size: var(--font-size-caption);
   line-height: 1;
   cursor: pointer;
 }
 
 .moderation-button:hover {
-  border-color: var(--timber-light);
-  color: var(--ink);
+  border-color: var(--color-ink);
+  color: var(--color-foam);
 }
 
 .roster-moderation {
   display: inline-flex;
-  gap: 0.15rem;
+  gap: var(--space-xs);
   margin-left: auto;
 }
 
@@ -2170,14 +2399,14 @@ button.secondary {
   transform: translateX(-50%);
   z-index: 94;
   max-width: min(420px, 90vw);
-  padding: 0.6rem var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
   border-radius: var(--radius-sm);
   text-align: center;
-  font-size: 0.85rem;
-  background: var(--paper-base);
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--brass-dim);
-  color: var(--ink);
+  font-size: var(--font-size-caption);
+  background: var(--color-void);
+  background: color-mix(in srgb, var(--color-void) 94%, transparent);
+  border: 1px solid var(--color-flame-deep);
+  color: var(--color-foam);
   box-shadow: 0 6px 16px var(--shadow-deep);
 }
 
@@ -2197,16 +2426,11 @@ button.secondary {
 .admin-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: var(--space-xl) 1.75rem;
+  gap: var(--space-lg);
+  padding: var(--space-xl) var(--space-xxl);
   border-radius: var(--radius-sm);
   max-height: 85vh;
   overflow-y: auto;
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
-  box-shadow:
-    0 1px 0 var(--highlight) inset,
-    0 10px 24px var(--shadow-deep);
 }
 
 .report-panel {
@@ -2217,7 +2441,7 @@ button.secondary {
 .admin-panel h2 {
   margin: 0;
   font-family: var(--font-display);
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .report-reasons {
@@ -2226,32 +2450,32 @@ button.secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-xs);
 }
 
 .report-reasons label {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: 0.4rem var(--space-sm);
-  border-radius: 4px;
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .report-reasons label:hover {
-  background: var(--paper-sunken);
+  background: var(--color-void);
 }
 
 .report-panel textarea {
   width: 100%;
   resize: vertical;
   padding: var(--space-sm);
-  border-radius: 4px;
-  border: 1px solid var(--timber);
-  background: var(--paper-sunken);
-  color: var(--ink);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-wood-mid);
+  background: var(--color-void);
+  color: var(--color-foam);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: var(--font-size-label);
 }
 
 .report-actions {
@@ -2277,52 +2501,52 @@ button.secondary {
 
 .admin-role-tag {
   font-family: var(--font-body);
-  font-size: 0.7rem;
+  font-size: var(--font-size-caption);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  border: 1px solid var(--brass-dim);
-  color: var(--brass);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-flame-deep);
+  color: var(--color-flame-glow);
 }
 
 .admin-observability {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-sm);
   flex-wrap: wrap;
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
 }
 
 .admin-tabs {
   display: flex;
-  gap: 0.4rem;
-  border-bottom: 1px solid var(--timber-light);
-  padding-bottom: 0.6rem;
+  gap: var(--space-sm);
+  border-bottom: 1px solid var(--color-ink);
+  padding-bottom: var(--space-sm);
 }
 
 .admin-tab {
-  padding: 0.4rem 0.7rem;
-  border-radius: 4px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--ink-dim);
-  font-size: 0.85rem;
-  cursor: pointer;
+  color: var(--color-mist);
+  font-size: var(--font-size-caption);
+  box-shadow: none;
 }
 
 .admin-tab-active {
-  border-color: var(--brass-dim);
-  color: var(--brass-bright);
-  background: var(--paper-sunken);
+  border-color: var(--color-flame-deep);
+  color: var(--color-flame-glow);
+  background: var(--color-void);
 }
 
 .admin-filter {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  color: var(--ink-dim);
+  gap: var(--space-sm);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
 }
 
 .admin-list {
@@ -2336,11 +2560,11 @@ button.secondary {
 
 .admin-report,
 .admin-user-row {
-  padding: 0.6rem 0.7rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  font-size: 0.9rem;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-label);
 }
 
 .admin-user-row {
@@ -2363,39 +2587,39 @@ button.secondary {
 .admin-report-target {
   flex: 1;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--color-foam);
 }
 
 .admin-reason,
 .admin-status,
 .admin-banned-tag {
-  font-size: 0.7rem;
+  font-size: var(--font-size-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  border: 1px solid var(--timber-light);
-  color: var(--ink-dim);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-ink);
+  color: var(--color-mist);
 }
 
 /* The two reasons that mean someone is being hurt read hotter than the rest. */
 .admin-reason-hate_speech,
 .admin-reason-harassment,
 .admin-banned-tag {
-  border-color: var(--danger);
+  border-color: var(--color-stranger-red);
   background: var(--danger-well);
-  color: #e8b3a5;
+  color: var(--color-foam);
 }
 
 .admin-status-open {
-  border-color: var(--brass-dim);
-  color: var(--brass);
+  border-color: var(--color-flame-deep);
+  color: var(--color-flame-glow);
 }
 
 .admin-report-note {
-  margin: 0.3rem 0;
+  margin: var(--space-xs) 0;
   font-style: italic;
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .admin-report-actions,
@@ -2415,23 +2639,23 @@ button.secondary {
 
 .admin-evidence {
   margin-top: var(--space-sm);
-  padding: var(--space-sm) 0.6rem;
-  background: var(--paper-void);
-  border: 1px solid var(--timber);
-  border-radius: 4px;
+  padding: var(--space-sm);
+  background: var(--color-ink);
+  border: 1px solid var(--color-wood-mid);
+  border-radius: var(--radius-sm);
   max-height: 16rem;
   overflow-y: auto;
 }
 
 .admin-chat-line {
   margin: 0 0 var(--space-xs);
-  font-size: 0.85rem;
+  font-size: var(--font-size-caption);
   display: flex;
   gap: var(--space-sm);
 }
 
 .admin-chat-sender {
-  color: var(--brass);
+  color: var(--color-flame-glow);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -2439,20 +2663,20 @@ button.secondary {
 /* A line the filter already acted on, so a moderator can tell at a glance
    that it was masked or refused rather than delivered as written. */
 .admin-chat-filtered {
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
 }
 
 .admin-user-detail {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
 .admin-user-detail h3,
 .admin-user-detail h4 {
   margin: 0;
   font-family: var(--font-display);
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .admin-ban-form,
@@ -2460,27 +2684,27 @@ button.secondary {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: 0.7rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
+  padding: var(--space-md);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
 }
 
 .admin-ban-button {
-  background: var(--danger);
-  border-color: var(--danger-bright);
-  color: #fff3ee;
+  background: var(--color-stranger-red);
+  border-color: var(--color-stranger-red);
+  color: var(--color-foam);
 }
 
 .admin-ban-history li {
   display: flex;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: 0.4rem 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber);
-  border-radius: 4px;
-  font-size: 0.85rem;
+  padding: var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-wood-mid);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-caption);
 }
 
 .admin-toggle {
@@ -2488,15 +2712,14 @@ button.secondary {
   left: 4.5rem;
   bottom: var(--space-lg);
   z-index: 90;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: var(--space-xxxl);
+  height: var(--space-xxxl);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
   border-radius: 999px;
-  border: 1px solid var(--brass-dim);
-  background: var(--paper-base);
-  color: var(--ink);
-  font-size: 1.1rem;
+  font-size: var(--font-size-body);
   line-height: 1;
-  cursor: pointer;
 }
 
 /*
@@ -2522,17 +2745,12 @@ button.secondary {
 .inventory-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: var(--space-xl) 1.75rem;
+  gap: var(--space-lg);
+  padding: var(--space-xl) var(--space-xxl);
   border-radius: var(--radius-sm);
   width: min(560px, 92vw);
   max-height: 85vh;
   overflow-y: auto;
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
-  box-shadow:
-    0 1px 0 var(--highlight) inset,
-    0 10px 24px var(--shadow-deep);
 }
 
 .inventory-header {
@@ -2545,48 +2763,48 @@ button.secondary {
   margin: 0;
   flex: 1;
   font-family: var(--font-display);
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .inventory-coins {
   font-family: var(--font-mono);
   font-weight: 700;
-  color: var(--brass);
+  color: var(--color-flame-glow);
 }
 
 .inventory-preview {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-xs);
   padding: var(--space-md);
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
 }
 
 .inventory-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  border-bottom: 1px solid var(--timber-light);
-  padding-bottom: 0.6rem;
+  gap: var(--space-sm);
+  border-bottom: 1px solid var(--color-ink);
+  padding-bottom: var(--space-sm);
 }
 
 .inventory-tab {
-  padding: 0.4rem 0.7rem;
-  border-radius: 4px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--ink-dim);
-  font-size: 0.85rem;
-  cursor: pointer;
+  color: var(--color-mist);
+  font-size: var(--font-size-caption);
+  box-shadow: none;
 }
 
 .inventory-tab-active {
-  border-color: var(--brass-dim);
-  color: var(--brass-bright);
-  background: var(--paper-sunken);
+  border-color: var(--color-flame-deep);
+  color: var(--color-flame-glow);
+  background: var(--color-void);
 }
 
 .inventory-grid {
@@ -2595,42 +2813,35 @@ button.secondary {
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
 .inventory-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  background: var(--color-void);
   text-align: center;
 }
 
-.inventory-item-equipped {
-  border-color: var(--brass);
-  box-shadow: 0 0 0 1px var(--brass-dim) inset;
-}
-
 .inventory-item-name {
-  font-size: 0.78rem;
-  color: var(--ink);
+  font-size: var(--font-size-caption);
+  color: var(--color-foam);
 }
 
 .inventory-equipped-tag {
-  font-size: 0.65rem;
+  font-size: var(--font-size-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--brass);
+  color: var(--color-flame-glow);
 }
 
 .inventory-item button {
   width: 100%;
-  padding: 0.4rem var(--space-sm);
-  font-size: 0.8rem;
+  padding: var(--space-sm);
+  font-size: var(--font-size-caption);
 }
 
 /* The victory-pose mini portrait on the results roster. */
@@ -2642,8 +2853,8 @@ button.secondary {
    button, but built from the danger palette instead of brass so it never
    reads as "just another button" in a list of them. */
 button.danger {
-  background: linear-gradient(180deg, var(--danger-bright), var(--danger) 55%, var(--danger-well));
-  color: var(--ink);
+  background: linear-gradient(180deg, var(--color-stranger-red), var(--color-stranger-red) 55%, var(--danger-well));
+  color: var(--color-foam);
   border-color: var(--danger-well);
 }
 
@@ -2652,13 +2863,13 @@ button.danger {
   display: flex;
   align-items: flex-start;
   gap: var(--space-sm);
-  font-size: 0.8rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   line-height: 1.4;
 }
 
 .checkbox-field input {
-  margin-top: 0.2rem;
+  margin-top: var(--space-xs);
   flex-shrink: 0;
 }
 
@@ -2678,16 +2889,11 @@ button.danger {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  padding: var(--space-xl) 1.75rem;
+  padding: var(--space-xl) var(--space-xxl);
   border-radius: var(--radius-sm);
   width: min(520px, 92vw);
   max-height: 85vh;
   overflow-y: auto;
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
-  box-shadow:
-    0 1px 0 var(--highlight) inset,
-    0 10px 24px var(--shadow-deep);
 }
 
 .profile-header {
@@ -2700,54 +2906,54 @@ button.danger {
   margin: 0;
   flex: 1;
   font-family: var(--font-display);
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .profile-preview {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-xs);
   padding: var(--space-md);
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
 }
 
 .profile-username {
   margin: 0;
-  color: var(--brass);
+  color: var(--color-flame-glow);
   font-weight: 600;
 }
 
 .profile-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
 .profile-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
   text-align: center;
 }
 
 .profile-stat-value {
   font-family: var(--font-mono);
-  font-size: 1.3rem;
+  font-size: var(--font-size-body);
   font-weight: 700;
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .profile-stat-label {
-  font-size: 0.7rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -2755,8 +2961,8 @@ button.danger {
 .profile-section h3 {
   margin: 0 0 var(--space-sm);
   font-family: var(--font-display);
-  font-size: 1rem;
-  color: var(--brass);
+  font-size: var(--font-size-label);
+  color: var(--color-flame-glow);
 }
 
 .profile-role-list {
@@ -2765,22 +2971,22 @@ button.danger {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-xs);
 }
 
 .profile-role-row {
   display: flex;
   justify-content: space-between;
-  padding: 0.4rem 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  font-size: 0.85rem;
+  padding: var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-caption);
 }
 
 .profile-role-record {
   font-family: var(--font-mono);
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .profile-badge-grid {
@@ -2794,21 +3000,21 @@ button.danger {
 
 .profile-badge {
   padding: var(--space-sm);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   text-align: center;
-  font-size: 0.75rem;
-  border: 1px solid var(--timber-light);
+  font-size: var(--font-size-caption);
+  border: 1px solid var(--color-ink);
 }
 
 .profile-badge-earned {
-  background: var(--paper-sunken);
-  border-color: var(--brass-dim);
-  color: var(--brass-bright);
+  background: var(--color-void);
+  border-color: var(--color-flame-deep);
+  color: var(--color-flame-glow);
 }
 
 .profile-badge-locked {
   background: transparent;
-  color: var(--ink-faint);
+  color: var(--color-fog-light);
   opacity: 0.6;
 }
 
@@ -2816,13 +3022,13 @@ button.danger {
   display: flex;
   gap: var(--space-lg);
   padding-top: var(--space-sm);
-  border-top: 1px solid var(--timber-light);
+  border-top: 1px solid var(--color-ink);
 }
 
 .profile-danger-zone {
   padding: var(--space-md);
-  border: 1px solid var(--danger);
-  border-radius: 4px;
+  border: 1px solid var(--color-stranger-red);
+  border-radius: var(--radius-sm);
   background: var(--danger-well);
   display: flex;
   flex-direction: column;
@@ -2831,15 +3037,15 @@ button.danger {
 
 .profile-danger-zone h3 {
   margin: 0;
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: var(--font-size-label);
 }
 
 .profile-delete-form {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
 .profile-delete-actions {
@@ -2863,13 +3069,13 @@ button.danger {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  padding: var(--space-xl) 1.75rem;
+  padding: var(--space-xl) var(--space-xxl);
   border-radius: var(--radius-sm);
   width: min(640px, 92vw);
   max-height: 85vh;
   overflow-y: auto;
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
+  background: color-mix(in srgb, var(--color-void) 94%, transparent);
+  border: 1px solid var(--color-ink);
   box-shadow:
     0 1px 0 var(--highlight) inset,
     0 10px 24px var(--shadow-deep);
@@ -2885,20 +3091,20 @@ button.danger {
   margin: 0;
   flex: 1;
   font-family: var(--font-display);
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .legal-updated {
   margin: 0;
-  font-size: 0.75rem;
-  color: var(--ink-faint);
+  font-size: var(--font-size-caption);
+  color: var(--color-fog-light);
 }
 
 .legal-body {
   white-space: pre-wrap;
-  font-size: 0.85rem;
+  font-size: var(--font-size-caption);
   line-height: 1.6;
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 /* Cookie/localStorage disclosure banner */
@@ -2912,12 +3118,12 @@ button.danger {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-md);
-  padding: 0.9rem 1.1rem;
+  padding: var(--space-lg);
   border-radius: var(--radius-sm);
   max-width: 640px;
   margin: 0 auto;
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
+  background: color-mix(in srgb, var(--color-void) 94%, transparent);
+  border: 1px solid var(--color-ink);
   box-shadow:
     0 1px 0 var(--highlight) inset,
     0 10px 24px var(--shadow-deep);
@@ -2927,8 +3133,8 @@ button.danger {
   margin: 0;
   flex: 1;
   min-width: 220px;
-  font-size: 0.8rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
 }
 
 /* End-of-game summary (GameOverScreen) */
@@ -2937,14 +3143,14 @@ button.danger {
   flex-direction: column;
   gap: var(--space-md);
   padding-top: var(--space-md);
-  border-top: 1px solid var(--timber-light);
+  border-top: 1px solid var(--color-ink);
 }
 
 .game-summary-heading {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1rem;
-  color: var(--brass);
+  font-size: var(--font-size-label);
+  color: var(--color-flame-glow);
 }
 
 .game-summary-players {
@@ -2953,50 +3159,50 @@ button.danger {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-xs);
 }
 
 .game-summary-player-row {
   display: flex;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: 0.35rem 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
-  font-size: 0.8rem;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-caption);
 }
 
 .game-summary-survived {
-  color: var(--success-bright);
+  color: var(--color-town-green);
 }
 
 .game-summary-eliminated {
-  color: var(--danger-bright);
+  color: var(--color-stranger-red);
 }
 
 .game-summary-tasks {
   font-family: var(--font-mono);
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .game-summary-votes {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-sm);
 }
 
 .game-summary-vote-round {
-  padding: var(--space-sm) 0.6rem;
-  background: var(--paper-sunken);
-  border: 1px solid var(--timber-light);
-  border-radius: 4px;
+  padding: var(--space-sm);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
 }
 
 .game-summary-vote-round-label {
-  margin: 0 0 0.3rem;
-  font-size: 0.75rem;
-  color: var(--brass);
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-size-caption);
+  color: var(--color-flame-glow);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -3006,40 +3212,36 @@ button.danger {
   list-style: none;
   margin: 0;
   padding: 0;
-  font-size: 0.78rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-xs);
 }
 
 .game-summary-vote-ballots {
-  margin-top: 0.3rem;
-  padding-top: 0.3rem;
-  border-top: 1px dashed var(--timber-light);
-  color: var(--ink-faint);
+  margin-top: var(--space-xs);
+  padding-top: var(--space-xs);
+  border-top: 1px dashed var(--color-ink);
+  color: var(--color-fog-light);
 }
 
 /* --- Proximity voice HUD --------------------------------------------------
    Pinned above the audio-settings toggle in the bottom-right corner; a compact
    panel while voice is live, a single button before the player opts in. */
+/* Layout/position only — border, fill, radius and the inner top highlight
+   all come from `<Panel>`. */
 .voice-hud {
   position: fixed;
   right: var(--space-lg);
-  bottom: 4rem;
+  bottom: var(--space-xxxl);
   z-index: 91;
   width: min(240px, 80vw);
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: 0.6rem 0.7rem;
-  border-radius: 8px;
-  background: var(--paper-base);
-  background-image: var(--grain), linear-gradient(160deg, var(--paper-raised), var(--paper-base));
-  border: 1px solid var(--timber-light);
-  box-shadow: 0 6px 16px var(--shadow-deep);
-  color: var(--ink);
-  font-size: 0.82rem;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-caption);
 }
 
 .voice-hud-collapsed {
@@ -3047,25 +3249,10 @@ button.danger {
   align-items: stretch;
 }
 
-.voice-join {
-  cursor: pointer;
-  padding: var(--space-sm) 0.8rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--brass-dim);
-  background: linear-gradient(180deg, var(--brass-bright), var(--brass) 55%, var(--brass-dim));
-  color: var(--ink-well, #201810);
-  font-weight: 600;
-}
-
-.voice-join:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .voice-error {
-  margin: 0.4rem 0 0;
-  color: var(--danger-bright);
-  font-size: 0.78rem;
+  margin: var(--space-sm) 0 0;
+  color: var(--color-stranger-red);
+  font-size: var(--font-size-caption);
 }
 
 .voice-hud-header {
@@ -3076,23 +3263,23 @@ button.danger {
 
 .voice-channel {
   font-weight: 600;
-  color: var(--brass-bright);
+  color: var(--color-flame-glow);
 }
 
 .voice-mode {
-  font-size: 0.72rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .voice-silenced {
   margin: 0;
-  padding: 0.35rem var(--space-sm);
-  border-radius: 5px;
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
   background: var(--danger-well);
-  color: var(--danger-bright);
-  font-size: 0.76rem;
+  color: var(--color-stranger-red);
+  font-size: var(--font-size-caption);
 }
 
 .voice-self {
@@ -3103,10 +3290,10 @@ button.danger {
 
 .voice-meter {
   flex: 1;
-  height: 0.6rem;
+  height: var(--space-sm);
   border-radius: 999px;
-  background: var(--paper-raised);
-  border: 1px solid var(--timber-light);
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
   overflow: hidden;
 }
 
@@ -3114,58 +3301,54 @@ button.danger {
   display: block;
   height: 100%;
   width: 0;
-  background: var(--ink-dim);
+  background: var(--color-mist);
   transition: width 90ms linear;
 }
 
 .voice-meter.is-live .voice-meter-fill {
-  background: linear-gradient(90deg, var(--success), var(--success-bright));
+  background: linear-gradient(90deg, var(--color-town-green), var(--color-town-green));
 }
 
+/* Border/fill/radius/press all come from `<Button>` — only the caption-size
+   type override is one-off here. */
 .voice-mic-toggle,
 .voice-peer-mute,
 .voice-leave {
-  cursor: pointer;
-  padding: 0.3rem 0.55rem;
-  border-radius: 5px;
-  border: 1px solid var(--timber-light);
-  background: var(--paper-raised);
-  color: var(--ink);
-  font-size: 0.76rem;
+  font-size: var(--font-size-caption);
 }
 
 .voice-mic-toggle.is-muted,
 .voice-peer-mute.is-muted {
-  border-color: var(--danger);
-  color: var(--danger-bright);
+  border-color: var(--color-stranger-red);
+  color: var(--color-stranger-red);
 }
 
 .voice-ptt {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.78rem;
-  color: var(--ink-dim);
+  gap: var(--space-sm);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   cursor: pointer;
 }
 
 .voice-peers {
-  border-top: 1px solid var(--timber-light);
-  padding-top: 0.4rem;
+  border-top: 1px solid var(--color-ink);
+  padding-top: var(--space-sm);
 }
 
 .voice-peers-heading {
-  margin: 0 0 0.3rem;
-  font-size: 0.72rem;
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-size-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ink-dim);
+  color: var(--color-mist);
 }
 
 .voice-peers-empty {
   margin: 0;
-  font-size: 0.76rem;
-  color: var(--ink-dim);
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
   font-style: italic;
 }
 
@@ -3188,7 +3371,7 @@ button.danger {
 }
 
 .voice-peers li.is-connecting .voice-peer-name {
-  color: var(--ink-dim);
+  color: var(--color-mist);
   font-style: italic;
 }
 
@@ -3237,9 +3420,9 @@ button.danger {
     justify-content: center;
     text-align: center;
     padding: var(--space-xxl);
-    background: var(--paper-void);
-    color: var(--ink);
-    font-size: 1.1rem;
+    background: var(--color-ink);
+    color: var(--color-foam);
+    font-size: var(--font-size-body);
   }
 }
 
@@ -3251,13 +3434,12 @@ button.danger {
   top: var(--space-lg);
   right: var(--space-lg);
   z-index: 90;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: var(--space-xxxl);
+  height: var(--space-xxxl);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
   border-radius: 999px;
-  border: 1px solid var(--timber-light);
-  background: var(--paper-base);
-  color: var(--ink);
-  font-size: 1.1rem;
+  font-size: var(--font-size-body);
   line-height: 1;
-  cursor: pointer;
 }

@@ -1,3 +1,5 @@
+import { Panel } from "./primitives";
+
 interface OnboardingHintToastProps {
   text: string | null;
 }
@@ -13,8 +15,8 @@ export function OnboardingHintToast({ text }: OnboardingHintToastProps) {
     return null;
   }
   return (
-    <div className="onboarding-hint-toast" role="status">
+    <Panel className="onboarding-hint-toast" role="status">
       {text}
-    </div>
+    </Panel>
   );
 }

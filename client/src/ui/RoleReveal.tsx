@@ -5,6 +5,7 @@ import {
   strangerFactionCount,
   type RoleAssignment,
 } from "@foghaven/shared";
+import { Panel } from "./primitives";
 
 interface RoleRevealProps {
   assignment: RoleAssignment | null;
@@ -34,9 +35,9 @@ export function RoleReveal({
 
   if (!assignment) {
     return (
-      <div className="panel">
+      <Panel className="panel">
         <p className="hint">{t("roleReveal.waiting")}</p>
-      </div>
+      </Panel>
     );
   }
 
@@ -45,7 +46,7 @@ export function RoleReveal({
   const fellows = assignment.fellows;
 
   return (
-    <div
+    <Panel
       className={`panel reveal ${isStrangerFaction ? "reveal-stranger" : "reveal-townsfolk"}`}
     >
       <p className="reveal-intro">{t("roleReveal.intro")}</p>
@@ -77,6 +78,6 @@ export function RoleReveal({
           total: playerCount,
         })}
       </p>
-    </div>
+    </Panel>
   );
 }

@@ -15,6 +15,7 @@ import {
   TICK_RATE,
   TOWN_HALL,
   type ChatMessage,
+  LOBBY_READY_PAD_POINT,
 } from "@foghaven/shared";
 import { GameRoom } from "./GameRoom";
 import type { GameState } from "./schema/GameState";
@@ -145,6 +146,12 @@ async function meetingRoom(room: ServerRoom<GameState>, count = MIN_PLAYERS) {
   const seats = [];
   for (let i = 0; i < count; i += 1) {
     seats.push(await seat(room, { intent: i === 0 ? "create" : "join" }));
+  }
+  // Ready is physical: the start is refused unless MIN_PLAYERS are
+  // standing on the Tavern flagstone (see isOnReadyPad).
+  for (const s of seats) {
+    s.player.x = LOBBY_READY_PAD_POINT.x;
+    s.player.y = LOBBY_READY_PAD_POINT.y;
   }
   seats[0]!.client.send("start");
   await tick(4);

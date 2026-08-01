@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Button } from "./primitives";
 
 interface LegalPageProps {
   doc: "privacy" | "terms";
@@ -29,9 +30,9 @@ export function LegalPage({ doc, onClose }: LegalPageProps) {
       <div className="legal-panel">
         <div className="legal-header">
           <h2>{t(`legal.${doc}.title`)}</h2>
-          <button type="button" className="link-button" onClick={onClose}>
+          <Button type="button" variant="link" onClick={onClose}>
             {t("legal.closeButton")}
-          </button>
+          </Button>
         </div>
         <p className="legal-updated">{t("legal.lastUpdated", { date: t(`legal.${doc}.updated`) })}</p>
         <div className="legal-body">{t(`legal.${doc}.body`)}</div>

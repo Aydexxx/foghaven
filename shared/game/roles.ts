@@ -5,6 +5,7 @@ import {
   roleById,
   type Faction,
 } from "../config/roles";
+import { MAX_ROLE_OPTIONS, MIN_ROLE_OPTIONS } from "../config/gameConfig";
 import type { Vec2 } from "./movement";
 
 /**
@@ -121,6 +122,77 @@ export function strangerFactionCount(
 }
 
 /**
+ * The distinct role ids a faction's deal actually contains, in registry
+ * order — the pool a player of that faction can be offered a choice from.
+ * Derived from `resolveRoleCounts`, so it counts only roles that genuinely
+ * have a seat in THIS deal (a role enabled but clamped to zero seats is not
+ * offerable, because nobody could receive it).
+ */
+export function factionRolePool(
+  faction: Faction,
+  playerCount: number,
+  enabledRoleIds: readonly string[],
+  overrides: Readonly<Record<string, number>> = {},
+): string[] {
+  const counts = resolveRoleCounts(playerCount, enabledRoleIds, overrides);
+  return ROLE_DEFINITIONS.filter(
+    (role) => role.faction === faction && (counts[role.id] ?? 0) > 0,
+  ).map((role) => role.id);
+}
+
+/**
+ * How many real role cards every player is offered this game (the Random
+ * card is always additional). Returns 0 when selection should be skipped
+ * entirely and roles dealt at random, as they were before selection existed.
+ *
+ * ## Why this is one number for the whole room
+ *
+ * This is the load-bearing security property of role selection, so it is
+ * worth being explicit about.
+ *
+ * The set of roles a player is offered is drawn from their own faction's
+ * pool. If the count of that offer varied by faction — say strangers can
+ * only ever be shown 2 cards because their pool is small, while townsfolk
+ * see 3 — then the card count IS the player's faction, handed to their own
+ * client. Worse, a smaller pool is quicker to choose from, so "who finished
+ * first" becomes a statistical faction tell to the entire room, which no
+ * amount of care about *what* the server sends could undo.
+ *
+ * So the count is the minimum across every faction's pool, capped at
+ * `MAX_ROLE_OPTIONS` — one number, applied to everyone. Crucially it is a
+ * pure function of *public* inputs only (roster size, the public
+ * `enabledRoleIds`, and the public balance overrides), exactly like
+ * `strangerFactionCount` above: every client can compute it independently,
+ * so knowing it conveys nothing that was not already on the wire.
+ *
+ * Below `MIN_ROLE_OPTIONS` real cards there is no meaningful choice left, so
+ * the phase is skipped rather than degenerating into "take this one role or
+ * press Random" — which, being one card, would also be the thinnest possible
+ * pool and the fastest possible pick.
+ */
+export function roleSelectOptionCount(
+  playerCount: number,
+  enabledRoleIds: readonly string[],
+  overrides: Readonly<Record<string, number>> = {},
+): number {
+  let smallest = Number.POSITIVE_INFINITY;
+  for (const faction of Object.values(FACTION)) {
+    const pool = factionRolePool(faction, playerCount, enabledRoleIds, overrides);
+    // A faction with no seats at all this game (no players will hold it) puts
+    // no constraint on the offer size — there is nobody to offer.
+    if (pool.length === 0) {
+      continue;
+    }
+    smallest = Math.min(smallest, pool.length);
+  }
+  if (!Number.isFinite(smallest)) {
+    return 0;
+  }
+  const count = Math.min(MAX_ROLE_OPTIONS, smallest);
+  return count >= MIN_ROLE_OPTIONS ? count : 0;
+}
+
+/**
  * The payload the server sends privately to a single client. `fellows` is
  * populated only for roles whose definition has `revealsFellows` (strangers
  * know each other); everyone else always receives an empty list, so their
@@ -129,6 +201,43 @@ export function strangerFactionCount(
 export interface RoleAssignment {
   role: string;
   fellows: string[];
+}
+
+/**
+ * The wire value for the Random card. Not a role id — deliberately outside
+ * the registry's namespace so it can never collide with one, the same
+ * reasoning `SKIP_VOTE` follows for the ballot.
+ */
+export const RANDOM_ROLE_PICK = "__random__";
+
+/**
+ * One player's own role options, sent **privately to that one client** and
+ * to nobody else — see `GameRoom.beginRoleSelect`.
+ *
+ * This message is the entire attack surface of role selection. Everything a
+ * modified client could learn about anyone else's faction lives or dies on
+ * this being per-socket: `options` is drawn from the recipient's own faction
+ * pool, so a single leaked payload is a full faction reveal for that player.
+ * It is therefore deliberately NOT part of `GameState` — nothing here may
+ * ever be moved into schema, however convenient, because schema is broadcast
+ * (filters gate *changes*, they are not a secrecy primitive; see the note on
+ * `GameState.players`).
+ *
+ * `options.length` is the same for every player in the room by construction
+ * (`roleSelectOptionCount`) and is computable from public state, so the size
+ * of this list is not itself a signal.
+ *
+ * `deadlineMs` is a duration from receipt, not a timestamp — same reason as
+ * `AbilityStateMessage.cooldownMs`: client and server clocks aren't in sync.
+ */
+export interface RoleOptionsMessage {
+  options: string[];
+  deadlineMs: number;
+}
+
+/** A player's choice: one of their own offered role ids, or `RANDOM_ROLE_PICK`. */
+export interface PickRoleMessage {
+  roleId: string;
 }
 
 /**

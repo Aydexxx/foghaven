@@ -54,8 +54,9 @@ import * as juiceEvents from "../juice/juiceEvents";
 import { inputEngine } from "../input/inputEngine";
 import { graphicsEngine } from "../graphics/graphicsEngine";
 import { displayColorFor, playerColorIndex } from "../graphics/colorBlindPalette";
-import { fonts, fontStacks } from "../theme/tokens";
+import { colors, fonts, fontStacks } from "../theme/tokens";
 import { phaserTextStyle } from "../theme/phaserText";
+import { hexNum } from "../theme/phaserColor";
 
 /** How far below the character's name sits above their head — clears even the alderman's top hat. */
 const LABEL_OFFSET_Y = 54;
@@ -74,7 +75,7 @@ const MOVEMENT_EPSILON = 0.05;
 /** World units of walking between spatial footstep triggers — a plausible stride at `PLAYER_SPEED`. */
 const FOOTSTEP_STEP_DISTANCE = 75;
 
-const FALLBACK_COLOR = 0xffffff;
+const FALLBACK_COLOR = hexNum(colors.foam);
 
 /** Milliseconds of movement represented by one input command. */
 const SIM_DT_MS = SIM_DT * 1000;
@@ -94,7 +95,7 @@ const MAX_STEPS_PER_FRAME = 5;
 const MAX_PENDING = 120;
 
 const TASK_MARKER_SIZE = 18;
-const TASK_MARKER_COLOR = 0xffd166;
+const TASK_MARKER_COLOR = hexNum(colors.flameGlow);
 const TASK_LABEL_OFFSET_Y = TASK_MARKER_SIZE;
 
 /** How see-through a ghost looks to other ghosts. */
@@ -129,21 +130,34 @@ const COSMETIC_CATALOG: Record<CosmeticSlot, Readonly<Record<string, { fill: num
 const COSMETIC_PLACEHOLDER_FALLBACK = Phaser.Display.Color.GetColor(150, 150, 160);
 
 const TOWN_HALL_MARKER_SIZE = 28;
-const TOWN_HALL_MARKER_COLOR = 0x8899ff;
+const TOWN_HALL_MARKER_COLOR = hexNum(colors.voteGold);
 
 /** A critical repair point's marker: red while broken, green once fixed. */
 const REPAIR_MARKER_SIZE = 24;
-const REPAIR_MARKER_BROKEN_COLOR = 0xdb4b3c;
-const REPAIR_MARKER_FIXED_COLOR = 0x4bb35c;
+const REPAIR_MARKER_BROKEN_COLOR = hexNum(colors.strangerRed);
+const REPAIR_MARKER_FIXED_COLOR = hexNum(colors.townGreen);
 
 /** Tile colours for the procedurally generated tileset — see `createTilemap`. */
-const TILE_COLOR_WALL = 0x14141c;
-const TILE_COLOR_STREET = 0x4a4a5c;
-const TILE_COLOR_ROOM = 0x5c4a38;
+const TILE_COLOR_WALL = hexNum(colors.ink);
+const TILE_COLOR_STREET = hexNum(colors.stoneMid);
+const TILE_COLOR_ROOM = hexNum(colors.woodMid);
 const TILESET_KEY = "town-tiles";
 
 /** How the room signage reads compared to a task's location label. */
-const ROOM_LABEL_COLOR = "#8f8fae";
+const ROOM_LABEL_COLOR = colors.mist;
+
+/**
+ * The report/bell/repair/interact "press E"-style prompts share one look —
+ * previously copy-pasted four times (see docs/TOKEN_DEBT.md). `ink` at ~67%
+ * alpha (the CSS 8-digit hex suffix) reads as a solid backdrop without a
+ * separate alpha token.
+ */
+const PROMPT_TEXT_STYLE = {
+  ...phaserTextStyle("ui", "caption"),
+  color: colors.foam,
+  backgroundColor: `${colors.ink}aa`,
+  padding: { x: 6, y: 3 },
+};
 const ROOM_LABEL_STYLE = phaserTextStyle("ui", "caption");
 
 /** How smoothly the camera chases the local player — 1 would be instant. */
@@ -162,7 +176,7 @@ const CAMERA_LERP = 0.15;
 const VISIBILITY_TIMEOUT_MS = 350;
 
 /** The fog overlay: colour, how dark it gets, and how softly it moves. */
-const FOG_COLOR = 0x05070d;
+const FOG_COLOR = hexNum(colors.ink);
 const FOG_MAX_ALPHA = 0.94;
 /** Size of the pre-rendered radial-gradient brush texture, in pixels. */
 const FOG_BRUSH_SIZE = 512;
@@ -997,7 +1011,7 @@ export class GameScene extends Phaser.Scene {
       BADGE_RADIUS,
       this.parseColor(displayColorFor(player.color, graphicsEngine.getSettings().colorBlindMode)),
     );
-    badge.setStrokeStyle(1.5, 0x000000, 0.5);
+    badge.setStrokeStyle(1.5, hexNum(colors.ink), 0.5);
 
     // Always shown, regardless of color-blind mode: the same number always
     // pairs with the same color for a given player (their stable index into
@@ -1015,14 +1029,14 @@ export class GameScene extends Phaser.Scene {
         fontFamily: fontStacks.numeric,
         fontSize: "9px",
         fontStyle: String(fonts.numeric.weight),
-        color: "#000000",
+        color: colors.ink,
       })
       .setOrigin(0.5, 0.5);
 
     const label = this.add
       .text(player.x, player.y - LABEL_OFFSET_Y, player.name, {
         ...phaserTextStyle("ui", "label"),
-        color: "#ffffff",
+        color: colors.foam,
       })
       .setOrigin(0.5, 1);
 
@@ -1264,12 +1278,12 @@ export class GameScene extends Phaser.Scene {
       PLAYER_RADIUS,
       this.parseColor(displayColorFor(body.color, graphicsEngine.getSettings().colorBlindMode)),
     );
-    circle.setStrokeStyle(3, 0x000000, 0.6);
+    circle.setStrokeStyle(3, hexNum(colors.ink), 0.6);
     circle.setAlpha(0.75);
     const cross = this.add
       .text(body.x, body.y, "✕", {
         ...phaserTextStyle("ui", "label"),
-        color: "#000000",
+        color: colors.ink,
       })
       .setOrigin(0.5, 0.5);
 
@@ -1546,7 +1560,7 @@ export class GameScene extends Phaser.Scene {
   private createTownHallMarker(): void {
     this.townHallRect = this.add
       .rectangle(TOWN_HALL.x, TOWN_HALL.y, TOWN_HALL_MARKER_SIZE, TOWN_HALL_MARKER_SIZE, TOWN_HALL_MARKER_COLOR)
-      .setStrokeStyle(2, 0x000000, 0.5);
+      .setStrokeStyle(2, hexNum(colors.ink), 0.5);
   }
 
   /**
@@ -1561,7 +1575,7 @@ export class GameScene extends Phaser.Scene {
     >) {
       const marker = this.add
         .rectangle(point.x, point.y, REPAIR_MARKER_SIZE, REPAIR_MARKER_SIZE, REPAIR_MARKER_BROKEN_COLOR)
-        .setStrokeStyle(2, 0x000000, 0.6)
+        .setStrokeStyle(2, hexNum(colors.ink), 0.6)
         .setVisible(false);
       this.repairMarkers.set(id, marker);
     }
@@ -1682,12 +1696,7 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.reportPrompt) {
       this.reportPrompt = this.add
-        .text(0, 0, i18n.t("game.reportPrompt"), {
-          ...phaserTextStyle("ui", "caption"),
-          color: "#ffffff",
-          backgroundColor: "#000000aa",
-          padding: { x: 6, y: 3 },
-        })
+        .text(0, 0, i18n.t("game.reportPrompt"), PROMPT_TEXT_STYLE)
         .setOrigin(0.5, 1);
     }
 
@@ -1750,12 +1759,7 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.bellPrompt) {
       this.bellPrompt = this.add
-        .text(0, 0, i18n.t("game.bellPrompt"), {
-          ...phaserTextStyle("ui", "caption"),
-          color: "#ffffff",
-          backgroundColor: "#000000aa",
-          padding: { x: 6, y: 3 },
-        })
+        .text(0, 0, i18n.t("game.bellPrompt"), PROMPT_TEXT_STYLE)
         .setOrigin(0.5, 1);
     }
 
@@ -1833,12 +1837,7 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.repairPrompt) {
       this.repairPrompt = this.add
-        .text(0, 0, i18n.t("game.repairPrompt"), {
-          ...phaserTextStyle("ui", "caption"),
-          color: "#ffffff",
-          backgroundColor: "#000000aa",
-          padding: { x: 6, y: 3 },
-        })
+        .text(0, 0, i18n.t("game.repairPrompt"), PROMPT_TEXT_STYLE)
         .setOrigin(0.5, 1);
     }
 
@@ -1892,11 +1891,11 @@ export class GameScene extends Phaser.Scene {
   private addTaskMarker(task: ClientTask): void {
     const rect = this.add
       .rectangle(task.x, task.y, TASK_MARKER_SIZE, TASK_MARKER_SIZE, TASK_MARKER_COLOR)
-      .setStrokeStyle(2, 0x000000, 0.4);
+      .setStrokeStyle(2, hexNum(colors.ink), 0.4);
     const label = this.add
       .text(task.x, task.y - TASK_LABEL_OFFSET_Y, task.room, {
         ...phaserTextStyle("ui", "caption"),
-        color: "#ffd166",
+        color: colors.flameGlow,
       })
       .setOrigin(0.5, 1);
 
@@ -1941,12 +1940,7 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.interactPrompt) {
       this.interactPrompt = this.add
-        .text(0, 0, i18n.t("game.interactPrompt"), {
-          ...phaserTextStyle("ui", "caption"),
-          color: "#ffffff",
-          backgroundColor: "#000000aa",
-          padding: { x: 6, y: 3 },
-        })
+        .text(0, 0, i18n.t("game.interactPrompt"), PROMPT_TEXT_STYLE)
         .setOrigin(0.5, 1);
     }
 

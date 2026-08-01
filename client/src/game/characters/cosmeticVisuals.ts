@@ -1,5 +1,7 @@
 import { PALETTE } from "./palette";
 import type { FramePose, Shape } from "./rig";
+import { colors } from "../../theme/tokens";
+import { hexNum } from "../../theme/phaserColor";
 
 /**
  * How every cosmetic actually looks — the client-only counterpart to
@@ -40,9 +42,9 @@ import type { FramePose, Shape } from "./rig";
 
 /** Accent tones cosmetics may use that the base costume palette deliberately excludes — see `palette.ts`. */
 export const COSMETIC_ACCENTS = {
-  gold: 0xd4af37,
-  silver: 0xc4c4cc,
-  scarlet: 0xa8402c,
+  gold: hexNum(colors.voteGold),
+  silver: hexNum(colors.foam),
+  scarlet: hexNum(colors.strangerRed),
 } as const;
 
 // --- Hats: sit above the head (top of the head circle is ~y=-42.5). -------

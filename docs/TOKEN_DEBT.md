@@ -2,235 +2,102 @@
 
 Worklist for the visual repaint in Phase 7.13. Generated while building the
 design-token system (`client/src/theme/tokens.ts` / `tokens.css`, docs/ART_BIBLE.md
-§3 and §7).
+§3 and §7). **Status: the colour repaint (§1) and typography sweep (§2) are
+done — see §6.** §3–§5 (spacing/radius/duration near-misses) were already
+triaged as needing a human design decision rather than a mechanical snap, and
+remain open; their line numbers predate the §1/§2 work in this pass and will
+have drifted.
 
 ## Why this file exists
 
-The app's current UI palette (`client/src/index.css`'s root custom properties —
-`--ink`, `--paper-void`, `--brass`, `--danger`, etc.) is a warm brass/parchment
-theme. It does not correspond to any colour in the art bible's §3 palette (a cold
-fog/lantern theme). Neither does `colorBlindPalette.ts` (Okabe-Ito set),
-`characters/palette.ts` (its own slate/parchment set), or any hardcoded colour in
-`GameScene.ts`, the minigames, or the atmosphere code.
+The app's UI palette (`client/src/index.css`'s root custom properties — `--ink`,
+`--paper-void`, `--brass`, `--danger`, etc.) was a warm brass/parchment theme
+that didn't correspond to any colour in the art bible's §3 palette (a cold
+fog/lantern theme). Neither did `colorBlindPalette.ts` (Okabe-Ito set),
+`characters/palette.ts` (its own slate/parchment set), or any hardcoded colour
+in `GameScene.ts`, the minigames, or the atmosphere code.
 
-Per instruction, this pass did **not** invent a mapping between the two palettes
-and did **not** wrap the existing hex values in a parallel token set — that would
-just be debt for 7.13 to unpick. Colours are untouched; every hex literal below is
-exactly where it always was.
-
-Spacing, radius, duration, and typography *were* tokenized in this pass, but only
-where a literal's value exactly matched a scale step (delta = 0 — a pure textual
-substitution with no visual change). Everything that didn't land exactly on a step
-is listed below as debt, same as the colours.
-
-An ESLint rule (`no-restricted-syntax`, `client/eslint.config.js`) now flags every
-hex literal in `client/src/**` outside `theme/` as a **warning**. It's `warn`
-rather than `error` because the colours aren't swept yet — flip it to `error` as
-the last step of 7.13, once this list is empty.
+This pass made the actual mapping decisions (documented per-file below) and
+retired every hex literal outside `theme/`. An ESLint rule
+(`no-restricted-syntax`, `client/eslint.config.js`) enforces this as an
+**error** — see §6.
 
 ---
 
-## 1. Colours (untouched — full repaint scope)
+## 1. Colours — done
 
-### 1a. `client/src/index.css` — root palette (context, not an action item)
+Every UI-chrome/world colour listed in the original version of this section
+was mapped onto an ART_BIBLE §3 token and moved into `client/src/theme/tokens.ts`
+/ `tokens.css`. `client/src/index.css` no longer references any of the old
+`--ink`/`--paper-*`/`--timber`/`--brass`/`--danger`/`--success` names — those
+were transitional aliases onto §3 tokens, and once nothing referenced them the
+whole alias block was deleted; every selector in the file now names a
+`--color-*` token directly.
 
-The existing de facto token block. Not art-bible values; kept as-is.
+**Palettes that answer a different question than "what does the world look
+like"** were deliberately *not* remapped onto §3 — doing so would have thrown
+away real information (colour-blind-safe distinguishability, maximally
+distinct minigame tile IDs). Instead they became their own dedicated token
+files under `theme/`, exempt from the hex-literal rule the same way `tokens.ts`
+is:
 
-| Line | Var | Hex |
+- `client/src/theme/colorBlindPalette.ts` — the Okabe-Ito set, moved verbatim out of `graphics/colorBlindPalette.ts` (which still owns `playerColorIndex`/`displayColorFor`, the actual application logic).
+- `client/src/theme/minigameTileColors.ts` — the four-tile identification palette shared by `PatternMemoryGame.tsx` and `WireConnectingGame.tsx`, previously declared twice as identical literal arrays; now one export, imported by both (fixes the dedup note from the original version of this file too).
+- `client/src/game/characters/palette.ts` — kept as its own module (not moved into `theme/`, since it's Phaser-domain costume-art colour, not a UI token) but its seven swatches now read from `theme/tokens.ts` via a shared `hexNum()` helper (`theme/phaserColor.ts`) instead of hardcoded hex. Mapping: `slateDark→fogDark`, `slateMid→fogMid`, `slateLight→mist`, `lantern→flameGlow`, `parchment→ropeTan`, `skin→woodLight`, `ink→ink`.
+
+**World/game-canvas colours**, mapped onto §3 by nearest perceptual match plus
+semantic fit (`GameScene.ts`, `PhaseAtmosphere.ts`, `lightSources.ts`,
+`cosmeticVisuals.ts`, `rigPreview.ts`, `preview.ts`, `GameCanvas.tsx`):
+
+| Constant | Was | Now |
 |---|---|---|
-| 12 | `--ink` | `#ece1c8` |
-| 13 | `--ink-dim` | `#b3a487` |
-| 14 | `--ink-faint` | `#83745a` |
-| 16 | `--paper-void` | `#16120c` |
-| 17 | `--paper-base` | `#241d14` |
-| 18 | `--paper-raised` | `#2c2318` |
-| 19 | `--paper-sunken` | `#17120b` |
-| 21 | `--timber` | `#3c2c19` |
-| 22 | `--timber-light` | `#5c4527` |
-| 23 | `--timber-dark` | `#241a0f` |
-| 25 | `--brass` | `#c99a4c` |
-| 26 | `--brass-bright` | `#e6bc70` |
-| 27 | `--brass-dim` | `#8a6a3a` |
-| 29 | `--danger` | `#a8402c` |
-| 30 | `--danger-bright` | `#d65e42` |
-| 31 | `--danger-well` | `#2c1712` |
-| 33 | `--success` | `#6f8f42` |
-| 34 | `--success-bright` | `#8fb85c` |
-
-### 1b. `client/src/index.css` — hex bypassing `var()`
-
-| Line | Selector / property | Hex |
-|---|---|---|
-| 223 | `.preset-button-active` — `color` | `#2a1c0a` |
-| 365 | `button` — `color` (dup of 223) | `#2a1c0a` |
-| 1023 | `.kill-button` — `color` | `#e8b3a5` |
-| 1038 | `.kill-button-ready` — `color` | `#fff3ee` |
-| 1186 | `.meeting-layout` — `background` radial-gradient stops | `#241a0f`, `#0e0a06`, `#060402` |
-| 1314 | `.constable-target` — `color` (dup of 1023) | `#e8b3a5` |
-| 1320 | `.constable-confirm` — `color` (dup of 1038) | `#fff3ee` |
-| 1352 | `.assassin-target` — `color` (dup of 1023) | `#e8b3a5` |
-| 1366 | `.assassin-confirm` — `color` (dup of 1038) | `#fff3ee` |
-| 1370 | `.silenced-notice` — fallback inside `var(--danger-bright, #c0392b)` | `#c0392b` |
-| 1480 | `.chat-panel-dead` — `background-image` gradient stop | `#1c1710` |
-| 1728 | `.audio-mute-active` — `color` (dup of 1023) | `#e8b3a5` |
-| 2133 | `.admin-reason-hate_speech`, `.admin-reason-harassment`, `.admin-banned-tag` — `color` (dup of 1023) | `#e8b3a5` |
-| 2218 | `.admin-ban-button` — `color` (dup of 1038) | `#fff3ee` |
-| 2802 | `.voice-join` — fallback inside `var(--ink-well, #201810)` | `#201810` |
-
-**Bugs found in passing, unrelated to tokens:** line 2802's `--ink-well` custom
-property is never defined anywhere in `:root` or `tokens.css` — the fallback
-`#201810` is silently always what renders. Worth its own fix regardless of 7.13.
-
-**Dedup opportunity independent of the repaint:** `#e8b3a5` (5×) and `#fff3ee`
-(4×) are already acting as an unnamed "text-on-danger-fill" / "text-on-fill"
-pair; `#2a1c0a` (2×) likewise. Naming these as local custom properties (not
-art-bible tokens, just internal dedup) would be safe to do before 7.13 if wanted.
-
-### 1c. `client/src/game/GameScene.ts`
-
-| Line | Literal | Context |
-|---|---|---|
-| 79 | `0xffffff` | `FALLBACK_COLOR` |
-| 99 | `0xffd166` | `TASK_MARKER_COLOR` |
-| 106 | `0x8899ff` | `TOWN_HALL_MARKER_COLOR` |
-| 110 | `0xdb4b3c` | `REPAIR_MARKER_BROKEN_COLOR` |
-| 111 | `0x4bb35c` | `REPAIR_MARKER_FIXED_COLOR` |
-| 114 | `0x14141c` | `TILE_COLOR_WALL` |
-| 115 | `0x4a4a5c` | `TILE_COLOR_STREET` |
-| 116 | `0x5c4a38` | `TILE_COLOR_ROOM` |
-| 120 | `"#8f8fae"` | `ROOM_LABEL_COLOR` |
-| 139 | `0x05070d` | `FOG_COLOR` |
-| 929 | `0x000000` | badge outline `setStrokeStyle` |
-| 942 | `"#000000"` | badge-number glyph text colour |
-| 950 | `"#ffffff"` | player name label text colour |
-| 1179 | `0x000000` | corpse-circle outline `setStrokeStyle` |
-| 1185 | `"#000000"` | corpse "✕" glyph text colour |
-| 1435 | `0x000000` | Town Hall marker outline |
-| 1450 | `0x000000` | repair marker outline |
-| 1555 | `"#ffffff"` | report-prompt text colour |
-| 1556 | `"#000000aa"` | report-prompt background |
-| 1623 | `"#ffffff"` | bell-prompt text colour |
-| 1624 | `"#000000aa"` | bell-prompt background |
-| 1707 | `"#ffffff"` | repair-prompt text colour |
-| 1708 | `"#000000aa"` | repair-prompt background |
-| 1764 | `0x000000` | task marker outline |
-| 1769 | `"#ffd166"` | task marker label text colour (dup of `TASK_MARKER_COLOR`, redeclared as a string) |
-| 1817 | `"#ffffff"` | task-interact-prompt text colour |
-| 1818 | `"#000000aa"` | task-interact-prompt background |
-
-**Dedup opportunity:** the `"#ffffff"` / `"#000000aa"` pair at 1555–1556,
-1623–1624, 1707–1708, 1817–1818 is the same style object copy-pasted four times
-for the report/bell/repair/interact prompts — one shared `PROMPT_TEXT_STYLE`
-constant would fix this independent of the colour repaint (the font-size and
-`padding: { x: 6, y: 3 }` on the same four blocks already got deduplicated onto
-`typeScale.caption` in this pass, but the object itself is still copy-pasted).
-
-### 1d. `client/src/game/atmosphere/PhaseAtmosphere.ts`
-
-| Line | Literal | Context |
-|---|---|---|
-| 27 | `0x1c3a5c` | `TASK_GRADE_COLOR` — cold-blue screen grade while playing |
-| 29 | `0x6e0f14` | `SABOTAGE_GRADE_COLOR` — pulsing red alarm grade |
-| 267 | `0x9db4c9` | fog-wisp particle tint |
-
-Also non-hex canvas-gradient colour strings (not hex, but same category, worth
-sweeping alongside): lines 90–92, 108–110, 131–133, 142–143 —
-`rgba(255,255,255,…)`, `rgba(220,230,240,…)`, `rgba(10,14,20,…)`,
-`rgba(210,220,235,…)` for the glow/rain/puddle procedural textures. These are
-generated at runtime, so tokenizing them means parameterizing the
-gradient-builder functions, not a find/replace.
-
-### 1e. `client/src/game/atmosphere/lightSources.ts`
-
-| Line | Literal | Context |
-|---|---|---|
-| 28 | `0xffb15c` | `WARM_LAMP` — street lamp glow tint |
-| 29 | `0xffc98a` | `WARM_WINDOW` — tavern window glow tint |
-| 30 | `0xfff3d6` | `BEAM_WHITE` — lighthouse beam tint |
-
-### 1f. `client/src/game/characters/palette.ts`
-
-The character-art palette (Phaser numeric hex). Distinct in purpose from the
-colour-blind badge palette below — this one colours costume art.
-
-| Line | Literal | Context |
-|---|---|---|
-| 12 | `0x2c3440` | `PALETTE.slateDark` |
-| 14 | `0x4a5568` | `PALETTE.slateMid` |
-| 16 | `0x8a97a8` | `PALETTE.slateLight` |
-| 18 | `0xe8b64c` | `PALETTE.lantern` |
-| 20 | `0xdcd0b4` | `PALETTE.parchment` |
-| 22 | `0xc9a882` | `PALETTE.skin` |
-| 24 | `0x14181f` | `PALETTE.ink` |
-
-### 1g. `client/src/game/characters/cosmeticVisuals.ts`
-
-| Line | Literal | Context |
-|---|---|---|
-| 43 | `0xd4af37` | `COSMETIC_ACCENTS.gold` |
-| 44 | `0xc4c4cc` | `COSMETIC_ACCENTS.silver` |
-| 45 | `0xa8402c` | `COSMETIC_ACCENTS.scarlet` — exactly matches `index.css`'s `--danger` |
-
-### 1h. `client/src/game/characters/rigPreview.ts`
-
-| Line | Literal | Context |
-|---|---|---|
-| 74 | `0x14181f` | fallback outline colour when `shape.stroke` is unset (dup of `PALETTE.ink`) |
-
-### 1i. `client/src/game/characters/preview.ts` (dev-only art-review harness)
-
-| Line | Literal | Context |
-|---|---|---|
-| 46 | `"#fff"` | archetype-id label text colour |
-| 52 | `"#aaa"` | animation-name label text colour |
-| 70 | `"#1d1d26"` | Phaser `backgroundColor` |
-
-### 1j. `client/src/game/GameCanvas.tsx`
-
-| Line | Literal | Context |
-|---|---|---|
-| 93 | `"#16120c"` | Phaser `backgroundColor` — exactly matches `index.css`'s `--paper-void` |
-
-### 1k. `client/src/game/minigames/PatternMemoryGame.tsx`
-
-| Line | Literal | Context |
-|---|---|---|
-| 5 | `"#e6194b"`, `"#3cb44b"`, `"#4363d8"`, `"#f58231"` | `TILE_COLORS` — the four tile colours |
-
-### 1l. `client/src/game/minigames/WireConnectingGame.tsx`
-
-| Line | Literal | Context |
-|---|---|---|
-| 5 | `"#e6194b"`, `"#3cb44b"`, `"#4363d8"`, `"#f58231"` | `PALETTE` — identical 4-colour set to `PatternMemoryGame.tsx`, declared separately |
-
-### 1m. `client/src/graphics/colorBlindPalette.ts`
-
-The Okabe-Ito colour-blind-safe palette for player badges. Indexed positionally
-against `PLAYER_COLORS` from `@foghaven/shared` — order-stable, must not be
-resorted. Likely should become its own dedicated token set rather than merging
-into the art-bible UI palette, since it answers a different question
-(distinguishability under colour-vision deficiency) than "what does the world
-look like."
-
-| Line | Literal |
-|---|---|
-| 24 | `#E69F00` |
-| 25 | `#56B4E9` |
-| 26 | `#009E73` |
-| 27 | `#F0E442` |
-| 28 | `#0072B2` |
-| 29 | `#D55E00` |
-| 30 | `#CC79A7` |
-| 31 | `#DDDDDD` |
-| 32 | `#999999` |
-| 33 | `#8B4513` |
+| `FALLBACK_COLOR` | `0xffffff` | `colors.foam` |
+| `TASK_MARKER_COLOR` | `0xffd166` | `colors.flameGlow` |
+| `TOWN_HALL_MARKER_COLOR` | `0x8899ff` | `colors.voteGold` (matches the room's own §5.2 palette assignment) |
+| `REPAIR_MARKER_BROKEN_COLOR` | `0xdb4b3c` | `colors.strangerRed` |
+| `REPAIR_MARKER_FIXED_COLOR` | `0x4bb35c` | `colors.townGreen` |
+| `TILE_COLOR_WALL` | `0x14141c` | `colors.ink` |
+| `TILE_COLOR_STREET` | `0x4a4a5c` | `colors.stoneMid` |
+| `TILE_COLOR_ROOM` | `0x5c4a38` | `colors.woodMid` |
+| `ROOM_LABEL_COLOR` | `"#8f8fae"` | `colors.mist` |
+| `FOG_COLOR` | `0x05070d` | `colors.ink` (was near-pure-black, which §2 rule 2 forbids even for a wash) |
+| badge/corpse/marker outline strokes | `0x000000` (×6) | `colors.ink` |
+| badge-number glyph, corpse "✕" | `"#000000"` | `colors.ink` |
+| player name label | `"#ffffff"` | `colors.foam` |
+| report/bell/repair/interact prompt text+bg | `"#ffffff"` / `"#000000aa"` (×4, copy-pasted) | one shared `PROMPT_TEXT_STYLE` constant — `colors.foam` on `` `${colors.ink}aa` `` — fixing the dedup note from the original version of this file |
+| `TASK_GRADE_COLOR` (`PhaseAtmosphere.ts`) | `0x1c3a5c` | `colors.fogDark` |
+| `SABOTAGE_GRADE_COLOR` | `0x6e0f14` | `colors.bloodDeep` |
+| fog-wisp particle tint | `0x9db4c9` | `colors.mist` |
+| `WARM_LAMP` / `WARM_WINDOW` / `BEAM_WHITE` (`lightSources.ts`) | `0xffb15c` / `0xffc98a` / `0xfff3d6` | `flameDeep` / `flameGlow` / `flameCore`, assigned by relative brightness (beam brightest, lamp dimmest) |
+| puddle/rain gradient stops (`PhaseAtmosphere.ts`) | `rgba(10,14,20,…)` / `rgba(220,230,240,…)` / `rgba(210,220,235,…)` | `hexToRgbTriplet(colors.ink)` / `hexToRgbTriplet(colors.foam)` (×2) — the gradient-builder functions now take a token-derived triplet, per the original note that this needed parameterizing, not a find/replace |
+| glow-texture gradient stops | `rgba(255,255,255,…)` | **unchanged, intentionally** — this texture is multiplicatively tinted per-instance by the light-source colour above, so only a pure-white base reproduces the tint correctly; see the comment at its call site |
+| `COSMETIC_ACCENTS.gold` / `.silver` / `.scarlet` | `0xd4af37` / `0xc4c4cc` / `0xa8402c` | `voteGold` / `foam` / `strangerRed` (scarlet was already an exact match for the old `--danger`) |
+| `rigPreview.ts` stroke fallback | `0x14181f` | `PALETTE.ink` (was already a duplicate of it) |
+| `preview.ts` (dev-only) labels + bg | `"#fff"` / `"#aaa"` / `"#1d1d26"` | `colors.foam` / `colors.mist` / `colors.ink` |
+| `GameCanvas.tsx` Phaser `backgroundColor` | `"#16120c"` | `colors.ink` |
 
 ---
 
-## 2. Typography debt
+## 2. Typography debt — done
 
 Scale: `display-xl`=44 · `display-lg`=32 · `title`=24 · `body`=18 · `label`=15 ·
-`caption`=13 (px).
+`caption`=13 (px). Every `font-size` declaration in `client/src/index.css` now
+reads a `var(--font-size-*)` token (previously 91 of 94 sat 0.2–2px off the
+nearest step, listed line-by-line below in an earlier version of this file —
+each was snapped to its nearest step, since none of the deltas were large
+enough to represent a deliberate distinct size). Same for `GameScene.ts` and
+`characters/preview.ts`'s Phaser text — all route through `phaserTextStyle()`
+now.
+
+**One deliberate, documented exception below the 13px floor:** the player
+badge's number glyph (`GameScene.ts`, `fontSize: "9px"`) — a reinforcing
+identity cue packed inside an 8px-radius badge, not text a player reads for
+information (the badge's colour and the nameplate above it carry the actual
+information); bumping it to 13px would blow out the badge geometry. See the
+comment at that call site.
+
+<details>
+<summary>Original per-line breakdown (historical — kept for the record, not an action item)</summary>
 
 ### 2a. `client/src/index.css` — `font-size` (91 of 94 declarations; 3 exact
 matches were tokenized: `.room-code-value` L156, `.code-digit` L810,
@@ -368,6 +235,8 @@ not "typography" at all, and maybe shouldn't be forced into the scale even in
 | 46 | `"16px"` | archetype-id label | label(15), Δ1 |
 | 52 | `"12px"` | animation-name label | caption(13), Δ1 |
 
+</details>
+
 ---
 
 ## 3. Spacing debt (`gap`, `padding*`, `margin*`, `top/right/bottom/left`,
@@ -376,7 +245,20 @@ not "typography" at all, and maybe shouldn't be forced into the scale even in
 Scale: xs=4 · sm=8 · md=12 · lg=16 · xl=24 · xxl=32 · xxxl=48 (px). 187 exact
 matches were tokenized across `index.css` in this pass (see `git log` on that
 file for the mechanical commit). Everything below did **not** match exactly and
-was left as a literal.
+was left as a literal — this section (near-miss *values*) is still open; the
+near-misses genuinely need a human remap-vs-new-step decision, not a
+mechanical snap, per the note on each one below.
+
+**Separately, the 48px minimum interactive-height requirement (ART_BIBLE §8's
+Button spec, applied site-wide) is done** — independent of whether a given
+element's padding/gap happens to land on the spacing scale. Every `<button>`,
+`<select>`, and draggable list item now clears 48px, via `<Button>`'s own
+`min-height` or an explicit one added where a bespoke element needed it (e.g.
+`.ordering-item` in the ordering minigame). One exception remains, tracked
+rather than silently ignored: `.wire-plug`/`.wire-socket` in the wire-connecting
+minigame are 36px, because the puzzle board is only 300×200 — reaching 48px
+means growing the board itself, a minigame-geometry call for a human (see the
+comment at that rule and §3c below).
 
 ### 3a. `client/src/index.css`
 
@@ -644,6 +526,18 @@ tokenized in this pass: `index.css` `.task-bar-fill` transition (300ms →
 
 - `client/src/theme/tokens.ts` — source of truth for all of §3/§7 plus spacing/radius/duration.
 - `client/src/theme/tokens.css` — generated from `tokens.ts` via `npm run tokens:build -w client` (also runs automatically before `npm run build`). Never hand-edit; regenerate.
-- `client/src/index.css` now `@import`s `tokens.css`.
-- 187 exact-match spacing/radius/duration/typography literals in `index.css`, and 8 in `GameScene.ts`/`PhaseAtmosphere.ts`/`RotationGame.tsx`/`CalibrationGame.tsx`, replaced with `var(--token)` / `tokens.ts` references — zero visual change, confirmed by pixel-exact substitution and a clean `npm run build`.
-- ESLint rule banning hex literals in `client/src/**` outside `theme/**`, currently `warn` (66 current hits, all listed above) — flip to `error` once this file is empty.
+- `client/src/theme/phaserColor.ts` — `hexNum()`/`hexToRgbTriplet()`, the shared hex-string→Phaser-number / →rgb-triplet helpers every game-layer file now uses instead of a hand-rolled local copy (there were two before this pass, in `Havener.ts` and `havenerPlayground.ts`). Deliberately has **no** `import Phaser` — see the file's own doc comment: Phaser's module touches `window` as an OS-detection side effect, which broke `assign.test.ts` the first time this was tried with `Phaser.Display.Color`. Parsing hex by hand avoids the whole class of problem.
+- `client/src/theme/colorBlindPalette.ts` and `client/src/theme/minigameTileColors.ts` — the two non-ART_BIBLE palettes, moved out of application code and (for the minigame one) deduplicated. See §1.
+- `client/src/index.css` now `@import`s `tokens.css` and `ui/primitives/primitives.css`, and contains **zero** hex literals — every colour is a `var(--color-*)` token, and the transitional `--ink`/`--paper-*`/`--timber`/`--brass`/`--danger`/`--success` alias block (kept mid-pass so the file could be swept selector-by-selector) has been fully swept and deleted.
+- §1 (colours) and §2 (typography) are done in full — see those sections.
+- `client/src/ui/primitives/` (`Panel`, `Button`, `Card`, `Slider`) are the only styled primitives in the client, per ART_BIBLE §8. Every screen and HUD component — including the in-canvas overlays (`AbilityButton`'s kill button, `TouchControls`, `VoiceHud`, the ability/onboarding toasts, the task list, the critical-sabotage banner, `App.tsx`'s corner toggles) — renders through them now; one-off chrome (border/fill/radius/press-mechanics) was deleted from `index.css` wherever a component already supplies it, leaving only true layout/position/shape overrides (see the comments left at each such rule for why). Minigame-internal interaction pieces (keypad keys, pattern tiles, wire plugs, rotation dials, ordering-list items) are deliberately **not** forced onto `<Button>` — they're gameplay puzzle geometry with their own bespoke shapes, not menu/HUD chrome, matching how §3b/§3c below already treat minigame dimensions as their own category.
+- 48px minimum interactive height and the 13px text floor are enforced site-wide, with two documented, deliberate exceptions: the 9px badge-number glyph (§2) and the 36px wire-plug/socket (§3, minigame board geometry). Both existed before this pass and are unchanged; both now say why in a comment rather than being silent debt.
+- ESLint rule banning hex literals in `client/src/**` outside `theme/**` is now `"error"` (`client/eslint.config.js`) — confirmed zero violations via `npx eslint "src/**/*.{ts,tsx}"`.
+- `npx tsc --noEmit`, `npx vitest run` (61 tests), and `npm run build` all pass clean after this pass.
+
+**Still open — needs a human design decision, not a mechanical fix:** §3
+(spacing near-misses, and the "is 4px missing from the radius scale" question
+in §4), §4 (radius), §5 (duration near-misses and the dedup opportunities it
+lists). None of these were touched in this pass; their per-line references
+predate the §1/§2 rewrite above and should be re-derived (line numbers have
+shifted) before anyone acts on them.

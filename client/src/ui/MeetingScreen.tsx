@@ -11,16 +11,20 @@ import {
   type AbilityStateMessage,
   type CameraRevealMessage,
   type ChatMessage,
+  type LanternState,
 } from "@foghaven/shared";
 import type { GameState } from "../net/types";
 import { privateStateFor } from "../net/client";
 import { ChatPanel } from "./ChatPanel";
-import { VotePanel, type Candidate } from "./VotePanel";
+import { PlayerVoteCard } from "./PlayerVoteCard";
 import { useCountdown } from "./useCountdown";
 import { EjectionCutscene } from "./ejection/EjectionCutscene";
 import { MeetingCallCutscene } from "./meetingCall/MeetingCallCutscene";
 import { OnboardingHintToast } from "./OnboardingHintToast";
 import { useOnboardingHint } from "../onboarding/useOnboardingHint";
+import { Button, Panel } from "./primitives";
+import type { UseVoice } from "../voice/useVoice";
+import * as juiceEvents from "../juice/juiceEvents";
 
 interface MeetingScreenProps {
   room: Room<GameState>;
@@ -32,10 +36,29 @@ interface MeetingScreenProps {
   cameraReveal: CameraRevealMessage | null;
   /** Whether the Silencer gagged the local player for this meeting — captured in App. */
   silenced: boolean;
+  /** Drives each card's speaking ring — the same controller `VoiceHud` renders. */
+  voice: UseVoice;
   /** Open the report dialog for a player. Absent for guests, who cannot report. */
   onReport?: (playerId: string, playerName: string) => void;
   /** Cast a vote to mute someone. Absent when the host has turned vote-mute off. */
   onVoteMute?: (playerId: string) => void;
+}
+
+/** One card's worth of roster data. */
+interface RosterCard {
+  id: string;
+  name: string;
+  lanternColor: string;
+  lanternState: LanternState;
+  dead: boolean;
+  hasVoted: boolean;
+  connected: boolean;
+}
+
+/** Only present once the ballot has resolved — see `PlayerVoteCard`'s own doc on why this must never be populated earlier. */
+interface ResolvedTally {
+  count: number;
+  voterNames: string;
 }
 
 interface MeetingSnapshot {
@@ -45,46 +68,62 @@ interface MeetingSnapshot {
   bodyName: string;
   /** The room a reported body was found in — empty for an emergency. See the server schema's own doc. */
   bodyRoom: string;
-  candidates: Candidate[];
+  /**
+   * Every player this client currently has cached, living or dead — a card
+   * grid is meant to be a room, and a room includes who's already gone. A
+   * dead entry only appears here if this client saw them at some point
+   * before they died (Colyseus filters gate future changes, not existing
+   * data — a client that never had them cached still won't); that is a
+   * quiet, acceptable degradation, not a bug: a card for someone this
+   * client never actually observed would be inventing information, not
+   * displaying it.
+   */
+  roster: RosterCard[];
   /**
    * Every currently-living player's lantern hex, in roster order — the §10.3
-   * meeting-call cutscene's ring. Kept separate from `candidates` (which is
-   * specifically the voting roster's shape) rather than added onto
-   * `Candidate`, so a concern specific to one cutscene doesn't leak a field
-   * onto a type `VotePanel` also depends on.
+   * meeting-call cutscene's ring. Kept separate from `roster` (which now
+   * includes the dead) since the cutscene specifically wants only the living.
    */
   livingLanternColors: string[];
   isGhost: boolean;
   ejectedName: string;
   ejectedWasStranger: boolean;
   ejectionConfirmed: boolean;
-  tallies: Array<{ targetId: string; targetName: string; count: number; voterNames: string }>;
+  /** Keyed by player id, present only once resolved — see `ResolvedTally`. */
+  tallies: Map<string, ResolvedTally>;
 }
 
 function readSnapshot(room: Room<GameState>): MeetingSnapshot {
   const dead = new Set<string>(room.state.deadPlayerIds);
 
-  const candidates: Candidate[] = [];
+  const roster: RosterCard[] = [];
   const livingLanternColors: string[] = [];
   room.state.players.forEach((player, id) => {
-    // The graveyard is the reliable liveness signal here — a living client's
-    // copy of a dead player is a frozen snapshot that still says alive.
+    roster.push({
+      id,
+      name: player.name,
+      lanternColor: player.lanternColor,
+      lanternState: player.lanternState,
+      dead: dead.has(id),
+      hasVoted: player.hasVoted,
+      connected: player.connected,
+    });
+    // The graveyard is the reliable liveness signal, not this row's own
+    // (possibly stale) `alive` field — see the doc on `roster` above.
     if (!dead.has(id)) {
-      candidates.push({ id, name: player.name, hasVoted: player.hasVoted });
       livingLanternColors.push(player.lanternColor);
     }
   });
+  // Alphabetical, not roster/insertion order: the whole point of a grid over
+  // a list is scanning it in under two seconds, and an order that holds
+  // still from one render to the next is what makes "where's Alex" a
+  // position you memorise rather than a search you redo every glance.
+  roster.sort((a, b) => a.name.localeCompare(b.name));
 
-  const tallies: MeetingSnapshot["tallies"] = [];
+  const tallies = new Map<string, ResolvedTally>();
   room.state.voteResults.forEach((tally) => {
-    tallies.push({
-      targetId: tally.targetId,
-      targetName: tally.targetName,
-      count: tally.count,
-      voterNames: tally.voterNames,
-    });
+    tallies.set(tally.targetId, { count: tally.count, voterNames: tally.voterNames });
   });
-  tallies.sort((a, b) => b.count - a.count);
 
   return {
     stage: room.state.meetingStage,
@@ -94,7 +133,7 @@ function readSnapshot(room: Room<GameState>): MeetingSnapshot {
     // by now and so is filtered out of a living client's `players` map.
     bodyName: room.state.meetingBodyName,
     bodyRoom: room.state.meetingBodyRoom,
-    candidates,
+    roster,
     livingLanternColors,
     isGhost: dead.has(room.sessionId),
     ejectedName: room.state.ejectedPlayerName,
@@ -105,14 +144,18 @@ function readSnapshot(room: Room<GameState>): MeetingSnapshot {
 }
 
 /**
- * The whole meeting: discussion, ballot, then results. This replaces the game
- * view entirely (see `App`'s `SCREEN_FOR_PHASE`), which is what makes the
- * movement lock free — there is no Phaser input loop running underneath.
+ * The whole meeting: discussion, ballot, then results — one persistent grid
+ * of player Cards (ART_BIBLE §8) throughout, rather than three different
+ * lists. What each card offers changes with the stage (moderation controls
+ * in discussion, a click-to-vote target in voting, the resolved tally once
+ * results are in); the roster and the card identity stay exactly the same,
+ * which is what makes "where is so-and-so" answerable at a glance the whole
+ * way through the meeting instead of resetting every time the stage changes.
  *
- * Every transition between stages is the server's call; this only renders
- * whichever stage it is told about. The two meeting-only abilities
- * (Alderman, Constable) render here rather than in `GameView` because their
- * `usablePhase` is `"meeting"` — see the shared role registry.
+ * This replaces the game view entirely (see `App`'s `SCREEN_FOR_PHASE`),
+ * which is what makes the movement lock free — there is no Phaser input loop
+ * running underneath. Every transition between stages is the server's call;
+ * this only renders whichever stage it is told about.
  */
 export function MeetingScreen({
   room,
@@ -121,6 +164,7 @@ export function MeetingScreen({
   role,
   cameraReveal,
   silenced,
+  voice,
   onReport,
   onVoteMute,
 }: MeetingScreenProps) {
@@ -182,6 +226,7 @@ export function MeetingScreen({
         : 0;
   const remainingMs = useCountdown(stageDurationMs, stageStartedAt);
   const seconds = Math.ceil(remainingMs / 1000);
+  const timerFraction = stageDurationMs > 0 ? Math.max(0, Math.min(1, remainingMs / stageDurationMs)) : 0;
 
   // First-time-only, per browser — see onboarding/seenHints.ts. Every mount
   // of this component IS a meeting, so `active` is unconditionally true; the
@@ -247,6 +292,12 @@ export function MeetingScreen({
   // Every role id in the registry, for the Assassin's guess dropdown — the
   // fill role (Villager) is a legitimate guess like any other.
   const guessableRoles = useMemo(() => ROLE_DEFINITIONS.map((definition) => definition.id), []);
+  // Only living, non-ghost candidates get the ability panels' target lists
+  // below the grid.
+  const abilityTargets = useMemo(
+    () => snapshot.roster.filter((entry) => !entry.dead && entry.id !== room.sessionId),
+    [snapshot.roster, room.sessionId],
+  );
 
   // Resolved here (not inside the cutscene) because `rooms.*` is a plain
   // lookup table independent of which meeting-call variant is playing —
@@ -254,6 +305,21 @@ export function MeetingScreen({
   // a room slug becomes a display string. Empty for an emergency, same as
   // the underlying `bodyRoom` field.
   const bodyRoomName = snapshot.bodyRoom ? t(`rooms.${snapshot.bodyRoom}`) : "";
+
+  const votingOpen = snapshot.stage === MEETING_STAGE.VOTING;
+  const votingLocked = myVote !== null;
+  const showResults = snapshot.stage === MEETING_STAGE.RESULTS;
+
+  const speakingPeers = useMemo(() => {
+    const ids = new Set<string>();
+    voice.state?.peers.forEach((peer) => {
+      if (peer.speaking) {
+        ids.add(peer.id);
+      }
+    });
+    return ids;
+  }, [voice.state]);
+  const localSpeaking = voice.state?.transmitting ?? false;
 
   return (
     <div className="meeting-layout">
@@ -266,9 +332,15 @@ export function MeetingScreen({
           livingLanternColors={snapshot.livingLanternColors}
         />
       )}
-      <div className="panel meeting">
+      <Panel className="panel meeting">
+        {stageDurationMs > 0 && (
+          <div className="meeting-timer-bar" data-countdown-bar={snapshot.stage}>
+            <div className="meeting-timer-bar-fill" style={{ transform: `scaleX(${timerFraction})` }} />
+          </div>
+        )}
+
         <h1>{t("meeting.heading")}</h1>
-        <p className="hint">{contextLine}</p>
+        <p className="hint meeting-context">{contextLine}</p>
         {silenced && !snapshot.isGhost && (
           <p className="hint silenced-notice">{t("abilities.silence.notifyTarget")}</p>
         )}
@@ -293,66 +365,104 @@ export function MeetingScreen({
           </div>
         )}
 
-        {snapshot.stage === MEETING_STAGE.DISCUSSION && (
-          <>
-            <p className="meeting-stage-label">{t("meeting.discussion")}</p>
-            <p className="meeting-timer" data-countdown="discussion">
-              {seconds}
-            </p>
-            {/* The discussion roster doubles as the moderation surface: this is
-                when someone is actually being abusive, and the moment they will
-                bother to do something about it. Never offered against oneself. */}
-            <ul className="roster">
-              {snapshot.candidates.map((candidate) => (
-                <li key={candidate.id}>
-                  <span>{candidate.name}</span>
-                  {candidate.id !== room.sessionId && (
-                    <span className="roster-moderation">
-                      {onVoteMute && (
-                        <button
-                          type="button"
-                          className="moderation-button"
-                          title={t("moderation.voteMuteTitle")}
-                          aria-label={t("moderation.voteMuteLabel", { name: candidate.name })}
-                          onClick={() => onVoteMute(candidate.id)}
-                        >
-                          🔇
-                        </button>
-                      )}
-                      {onReport && (
-                        <button
-                          type="button"
-                          className="moderation-button"
-                          title={t("moderation.reportTitle")}
-                          aria-label={t("moderation.reportLabel", { name: candidate.name })}
-                          onClick={() => onReport(candidate.id, candidate.name)}
-                        >
-                          ⚑
-                        </button>
-                      )}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </>
+        <p className="meeting-stage-label">
+          {snapshot.stage === MEETING_STAGE.DISCUSSION
+            ? t("meeting.discussion")
+            : snapshot.stage === MEETING_STAGE.VOTING
+              ? t("meeting.voting")
+              : t("meeting.results")}
+        </p>
+        {stageDurationMs > 0 && (
+          <p className="meeting-timer" data-countdown={snapshot.stage}>
+            {seconds}
+          </p>
         )}
 
-        {snapshot.stage === MEETING_STAGE.VOTING && (
+        {showResults && !snapshot.ejectedName && (
+          <p className="ejection-line" data-ejection>
+            {t("meeting.nobodyEjected")}
+          </p>
+        )}
+        {showResults && snapshot.ejectedName && (
+          // Keyed on `stageStartedAt` so a second ejection later in the same
+          // match — or even a different meeting reusing the same player name
+          // — remounts fresh rather than reusing a finished-and-settled
+          // instance from a previous meeting.
+          <EjectionCutscene
+            key={stageStartedAt}
+            name={snapshot.ejectedName}
+            ejectionConfirmed={snapshot.ejectionConfirmed}
+            ejectedWasStranger={snapshot.ejectedWasStranger}
+          />
+        )}
+
+        <ul className="player-vote-grid">
+          {snapshot.roster.map((entry) => {
+            const isSelf = entry.id === room.sessionId;
+            const tally = snapshot.tallies.get(entry.id);
+            return (
+              <li key={entry.id}>
+                <PlayerVoteCard
+                  name={entry.name}
+                  lanternColor={entry.lanternColor}
+                  lanternState={entry.lanternState}
+                  dead={entry.dead}
+                  hasVoted={entry.hasVoted}
+                  connected={entry.connected}
+                  speaking={isSelf ? localSpeaking : speakingPeers.has(entry.id)}
+                  isSelf={isSelf}
+                  selectedByMe={myVote === entry.id}
+                  voteCount={showResults ? (tally?.count ?? 0) : undefined}
+                  voterNames={showResults ? tally?.voterNames : undefined}
+                  onSelect={
+                    votingOpen && !snapshot.isGhost && !votingLocked && !entry.dead
+                      ? () => handleVote(entry.id)
+                      : undefined
+                  }
+                  onMute={
+                    snapshot.stage === MEETING_STAGE.DISCUSSION && onVoteMute && !isSelf && !entry.dead
+                      ? () => onVoteMute(entry.id)
+                      : undefined
+                  }
+                  onReport={
+                    snapshot.stage === MEETING_STAGE.DISCUSSION && onReport && !isSelf && !entry.dead
+                      ? () => onReport(entry.id, entry.name)
+                      : undefined
+                  }
+                />
+              </li>
+            );
+          })}
+        </ul>
+
+        {votingOpen && (
           <>
-            <p className="meeting-stage-label">{t("meeting.voting")}</p>
-            <p className="meeting-timer" data-countdown="voting">
-              {seconds}
-            </p>
-            <VotePanel
-              candidates={snapshot.candidates}
-              myVote={myVote}
-              canVote={!snapshot.isGhost}
-              onVote={handleVote}
-            />
+            {/* First-class per the design brief: same size and weight as any
+                other primary screen action, not a link buried in the list.
+                `data-no-juice` + the explicit `voteCast` call give it the
+                same §9 "vote cast" punch a card gets on selection, in place
+                of the milder generic button-press punch every other Button
+                already receives for free — see `useButtonJuice`'s own doc. */}
+            <Button
+              variant="default"
+              className="vote-skip-button"
+              onClick={(event) => {
+                juiceEvents.voteCast(event.currentTarget);
+                handleVote(SKIP_VOTE);
+              }}
+              disabled={snapshot.isGhost || votingLocked}
+              data-vote-target={SKIP_VOTE}
+              data-no-juice
+            >
+              {myVote === SKIP_VOTE ? t("vote.locked") : t("vote.skip")}
+            </Button>
+            {snapshot.isGhost && <p className="hint">{t("vote.ghostCannotVote")}</p>}
+            {!snapshot.isGhost && votingLocked && <p className="hint">{t("vote.locked")}</p>}
+
             {showAlderman && (
-              <button
+              <Button
                 type="button"
+                variant="default"
                 className="secondary alderman-double-vote"
                 onClick={handleDoubleVote}
                 disabled={abilitySpent}
@@ -360,7 +470,7 @@ export function MeetingScreen({
                 {abilitySpent
                   ? t("abilities.double_vote.armed")
                   : t("abilities.double_vote.button")}
-              </button>
+              </Button>
             )}
           </>
         )}
@@ -369,40 +479,41 @@ export function MeetingScreen({
           <div className="constable-panel">
             <p className="meeting-stage-label">{t("abilities.execute_shot.heading")}</p>
             <ul className="constable-target-list">
-              {snapshot.candidates
-                .filter((candidate) => candidate.id !== room.sessionId)
-                .map((candidate) => (
-                  <li key={candidate.id}>
-                    {armedShotTargetId === candidate.id ? (
-                      <>
-                        <span>{t("abilities.execute_shot.confirmPrompt", { name: candidate.name })}</span>
-                        <button
-                          type="button"
-                          className="constable-confirm"
-                          onClick={() => handleConfirmShot(candidate.id)}
-                        >
-                          {t("abilities.execute_shot.confirmButton")}
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => setArmedShotTargetId(null)}
-                        >
-                          {t("abilities.execute_shot.cancelButton")}
-                        </button>
-                      </>
-                    ) : (
-                      <button
+              {abilityTargets.map((candidate) => (
+                <li key={candidate.id}>
+                  {armedShotTargetId === candidate.id ? (
+                    <>
+                      <span>{t("abilities.execute_shot.confirmPrompt", { name: candidate.name })}</span>
+                      <Button
                         type="button"
-                        className="constable-target"
-                        onClick={() => setArmedShotTargetId(candidate.id)}
-                        disabled={abilitySpent}
+                        variant="destructive"
+                        className="constable-confirm"
+                        onClick={() => handleConfirmShot(candidate.id)}
                       >
-                        {t("abilities.execute_shot.button", { name: candidate.name })}
-                      </button>
-                    )}
-                  </li>
-                ))}
+                        {t("abilities.execute_shot.confirmButton")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="secondary"
+                        onClick={() => setArmedShotTargetId(null)}
+                      >
+                        {t("abilities.execute_shot.cancelButton")}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="constable-target"
+                      onClick={() => setArmedShotTargetId(candidate.id)}
+                      disabled={abilitySpent}
+                    >
+                      {t("abilities.execute_shot.button", { name: candidate.name })}
+                    </Button>
+                  )}
+                </li>
+              ))}
             </ul>
           </div>
         )}
@@ -411,95 +522,63 @@ export function MeetingScreen({
           <div className="assassin-panel">
             <p className="meeting-stage-label">{t("abilities.assassinate.heading")}</p>
             <ul className="assassin-target-list">
-              {snapshot.candidates
-                .filter((candidate) => candidate.id !== room.sessionId)
-                .map((candidate) => (
-                  <li key={candidate.id}>
-                    {armedShotTargetId === candidate.id ? (
-                      <>
-                        <select
-                          className="assassin-role-select"
-                          value={armedRoleGuess}
-                          onChange={(event) => setArmedRoleGuess(event.target.value)}
-                        >
-                          <option value="">{t("abilities.assassinate.pickRole")}</option>
-                          {guessableRoles.map((roleId) => (
-                            <option key={roleId} value={roleId}>
-                              {t(`roleInfo.${roleId}.name`)}
-                            </option>
-                          ))}
-                        </select>
-                        <span>
-                          {t("abilities.assassinate.confirmPrompt", { name: candidate.name })}
-                        </span>
-                        <button
-                          type="button"
-                          className="assassin-confirm"
-                          disabled={!armedRoleGuess}
-                          onClick={() => handleConfirmAccusation(candidate.id, armedRoleGuess)}
-                        >
-                          {t("abilities.assassinate.confirmButton")}
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => {
-                            setArmedShotTargetId(null);
-                            setArmedRoleGuess("");
-                          }}
-                        >
-                          {t("abilities.assassinate.cancelButton")}
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="assassin-target"
-                        onClick={() => setArmedShotTargetId(candidate.id)}
-                        disabled={abilitySpent}
+              {abilityTargets.map((candidate) => (
+                <li key={candidate.id}>
+                  {armedShotTargetId === candidate.id ? (
+                    <>
+                      <select
+                        className="assassin-role-select"
+                        value={armedRoleGuess}
+                        onChange={(event) => setArmedRoleGuess(event.target.value)}
                       >
-                        {t("abilities.assassinate.button", { name: candidate.name })}
-                      </button>
-                    )}
-                  </li>
-                ))}
-            </ul>
-          </div>
-        )}
-
-        {snapshot.stage === MEETING_STAGE.RESULTS && (
-          <>
-            <p className="meeting-stage-label">{t("meeting.results")}</p>
-            {snapshot.ejectedName ? (
-              // Keyed on `stageStartedAt` so a second ejection later in the
-              // same match — or even a different meeting reusing the same
-              // player name — remounts fresh rather than reusing a
-              // finished-and-settled instance from a previous meeting.
-              <EjectionCutscene
-                key={stageStartedAt}
-                name={snapshot.ejectedName}
-                ejectionConfirmed={snapshot.ejectionConfirmed}
-                ejectedWasStranger={snapshot.ejectedWasStranger}
-              />
-            ) : (
-              <p className="ejection-line" data-ejection>
-                {t("meeting.nobodyEjected")}
-              </p>
-            )}
-            <ul className="tally-list">
-              {snapshot.tallies.map((tally) => (
-                <li key={tally.targetId}>
-                  <span className="tally-name">
-                    {tally.targetId === SKIP_VOTE ? t("vote.skip") : tally.targetName}
-                  </span>
-                  <span className="tally-count">{tally.count}</span>
-                  {tally.voterNames && <span className="tally-voters">{tally.voterNames}</span>}
+                        <option value="">{t("abilities.assassinate.pickRole")}</option>
+                        {guessableRoles.map((roleId) => (
+                          <option key={roleId} value={roleId}>
+                            {t(`roleInfo.${roleId}.name`)}
+                          </option>
+                        ))}
+                      </select>
+                      <span>
+                        {t("abilities.assassinate.confirmPrompt", { name: candidate.name })}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        className="assassin-confirm"
+                        disabled={!armedRoleGuess}
+                        onClick={() => handleConfirmAccusation(candidate.id, armedRoleGuess)}
+                      >
+                        {t("abilities.assassinate.confirmButton")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="secondary"
+                        onClick={() => {
+                          setArmedShotTargetId(null);
+                          setArmedRoleGuess("");
+                        }}
+                      >
+                        {t("abilities.assassinate.cancelButton")}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="assassin-target"
+                      onClick={() => setArmedShotTargetId(candidate.id)}
+                      disabled={abilitySpent}
+                    >
+                      {t("abilities.assassinate.button", { name: candidate.name })}
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
-      </div>
+      </Panel>
 
       <ChatPanel
         messages={messages}

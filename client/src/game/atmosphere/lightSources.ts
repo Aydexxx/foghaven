@@ -1,4 +1,6 @@
 import { TILE_SIZE, type Vec2 } from "@foghaven/shared";
+import { colors } from "../../theme/tokens";
+import { hexNum } from "../../theme/phaserColor";
 
 /**
  * Fixed, decorative light sources dotted around the town — the lighthouse
@@ -25,9 +27,11 @@ function tile(col: number, row: number): Vec2 {
   return { x: col * TILE_SIZE, y: row * TILE_SIZE };
 }
 
-const WARM_LAMP = 0xffb15c;
-const WARM_WINDOW = 0xffc98a;
-const BEAM_WHITE = 0xfff3d6;
+// ART_BIBLE §3.3 has exactly three warm tones for three light kinds — assigned
+// by relative brightness: the beam is the brightest, the lamp the dimmest.
+const WARM_LAMP = hexNum(colors.flameDeep);
+const WARM_WINDOW = hexNum(colors.flameGlow);
+const BEAM_WHITE = hexNum(colors.flameCore);
 
 /** The lighthouse's own lamp, near the top of its tower — see `LIGHTHOUSE_OUTER` in townMap.ts (cols 12-18, rows 2-9). */
 export const LIGHTHOUSE_BEAM: LightSource = {

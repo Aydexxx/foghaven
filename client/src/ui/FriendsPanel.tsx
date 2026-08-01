@@ -23,6 +23,7 @@ import {
   type FriendOnlineMessage,
   type InviteResultMessage,
 } from "../net/hub";
+import { Button, Panel } from "./primitives";
 
 interface FriendsPanelProps {
   token: string;
@@ -178,36 +179,33 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
 
   return (
     <div className="friends-overlay" role="dialog" aria-label={t("friendsPanel.heading")}>
-      <div className="friends-panel">
+      <Panel className="friends-panel">
         <div className="friends-panel-header">
           <h2>{t("friendsPanel.heading")}</h2>
-          <button type="button" className="link-button" onClick={onClose}>
+          <Button type="button" variant="link" onClick={onClose}>
             {t("friendsPanel.closeButton")}
-          </button>
+          </Button>
         </div>
 
         <div className="friends-tabs">
-          <button
-            type="button"
+          <Button
             className={tab === "friends" ? "friends-tab friends-tab-active" : "friends-tab"}
             onClick={() => setTab("friends")}
           >
             {t("friendsPanel.tabs.friends", { count: friends.length })}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             className={tab === "requests" ? "friends-tab friends-tab-active" : "friends-tab"}
             onClick={() => setTab("requests")}
           >
             {t("friendsPanel.tabs.requests", { count: incoming.length })}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             className={tab === "blocked" ? "friends-tab friends-tab-active" : "friends-tab"}
             onClick={() => setTab("blocked")}
           >
             {t("friendsPanel.tabs.blocked")}
-          </button>
+          </Button>
         </div>
 
         {tab === "friends" && (
@@ -220,9 +218,9 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                 onChange={(e) => setAddUsername(e.target.value)}
                 disabled={busy}
               />
-              <button type="submit" disabled={busy || !addUsername.trim()}>
+              <Button type="submit" variant="primary" disabled={busy || !addUsername.trim()}>
                 {t("friendsPanel.addButton")}
-              </button>
+              </Button>
             </form>
 
             {outgoing.length > 0 && (
@@ -246,13 +244,19 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                   />
                   <span className="friend-name">{friend.username}</span>
                   {activeRoomCode && friend.online && (
-                    <button type="button" className="secondary" disabled={busy} onClick={() => handleInvite(friend)}>
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => handleInvite(friend)}
+                    >
                       {justInvited.has(friend.id) ? t("friendsPanel.invitedButton") : t("friendsPanel.inviteButton")}
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <Button
                     type="button"
-                    className="link-button"
+                    variant="destructive"
                     disabled={busy}
                     onClick={() => withBusy(async () => {
                       await removeFriend(token, friend.id);
@@ -260,10 +264,10 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                     })}
                   >
                     {t("friendsPanel.removeButton")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="link-button"
+                    variant="destructive"
                     disabled={busy}
                     onClick={() => withBusy(async () => {
                       await blockUser(token, friend.username);
@@ -271,7 +275,7 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                     })}
                   >
                     {t("friendsPanel.blockButton")}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -284,8 +288,9 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
             {incoming.map((req) => (
               <li key={req.id}>
                 <span className="friend-name">{req.requester.username}</span>
-                <button
+                <Button
                   type="button"
+                  variant="primary"
                   disabled={busy}
                   onClick={() => withBusy(async () => {
                     await acceptFriendRequest(token, req.id);
@@ -293,10 +298,10 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                   })}
                 >
                   {t("friendsPanel.acceptButton")}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="link-button"
+                  variant="link"
                   disabled={busy}
                   onClick={() => withBusy(async () => {
                     await declineFriendRequest(token, req.id);
@@ -304,7 +309,7 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                   })}
                 >
                   {t("friendsPanel.declineButton")}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -320,18 +325,18 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                 onChange={(e) => setBlockUsername(e.target.value)}
                 disabled={busy}
               />
-              <button type="submit" disabled={busy || !blockUsername.trim()}>
+              <Button type="submit" variant="destructive" disabled={busy || !blockUsername.trim()}>
                 {t("friendsPanel.blockButton")}
-              </button>
+              </Button>
             </form>
             <ul className="friends-list">
               {blocked.length === 0 && <li className="hint">{t("friendsPanel.noBlocked")}</li>}
               {blocked.map((user) => (
                 <li key={user.id}>
                   <span className="friend-name">{user.username}</span>
-                  <button
+                  <Button
                     type="button"
-                    className="link-button"
+                    variant="link"
                     disabled={busy}
                     onClick={() => withBusy(async () => {
                       await unblockUser(token, user.id);
@@ -339,7 +344,7 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
                     })}
                   >
                     {t("friendsPanel.unblockButton")}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -347,7 +352,7 @@ export function FriendsPanel({ token, hub, activeRoomCode, onClose }: FriendsPan
         )}
 
         {error && <p className="error">{t(error)}</p>}
-      </div>
+      </Panel>
     </div>
   );
 }

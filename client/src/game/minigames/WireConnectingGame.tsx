@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MinigameProps } from "./types";
-
-const PALETTE = ["#e6194b", "#3cb44b", "#4363d8", "#f58231"];
+import { MINIGAME_TILE_COLORS as PALETTE } from "../../theme/minigameTileColors";
 const BOARD_WIDTH = 300;
 const BOARD_HEIGHT = 200;
 const PLUG_X = 30;

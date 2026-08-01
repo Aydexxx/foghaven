@@ -6,6 +6,7 @@ import type { GameState } from "../net/types";
 import { archetypeForColor } from "../game/characters/assign";
 import { VICTORY_POSE_VISUALS } from "../game/characters/cosmeticVisuals";
 import { RigPreview } from "./RigPreview";
+import { Button, Card, Panel } from "./primitives";
 
 interface GameOverScreenProps {
   room: Room<GameState>;
@@ -97,7 +98,7 @@ export function GameOverScreen({ room, summary, onReport }: GameOverScreenProps)
   const reasonKey = REASON_KEY[room.state.winReason] ?? "gameOver.reasonTasks";
 
   return (
-    <div
+    <Panel
       className={`panel game-over ${townsfolkWon ? "game-over-townsfolk" : "game-over-stranger"}`}
     >
       <p className="reveal-intro">{t("gameOver.intro")}</p>
@@ -119,30 +120,33 @@ export function GameOverScreen({ room, summary, onReport }: GameOverScreenProps)
           return (
             <li key={entry.id}>
               {isWinner && (
-                <RigPreview
-                  archetypeId={archetypeForColor(entry.color).id}
-                  hat={entry.hatId || undefined}
-                  accessory={entry.accessoryId || undefined}
-                  outfit={entry.outfitId || undefined}
-                  pet={entry.petId || undefined}
-                  pose={entry.victoryPoseId ? VICTORY_POSE_VISUALS[entry.victoryPoseId] : undefined}
-                  size={40}
-                />
+                <Card>
+                  <RigPreview
+                    archetypeId={archetypeForColor(entry.color).id}
+                    hat={entry.hatId || undefined}
+                    accessory={entry.accessoryId || undefined}
+                    outfit={entry.outfitId || undefined}
+                    pet={entry.petId || undefined}
+                    pose={entry.victoryPoseId ? VICTORY_POSE_VISUALS[entry.victoryPoseId] : undefined}
+                    size={40}
+                  />
+                </Card>
               )}
               <span>{entry.name}</span>
               <span className={hostileFaction ? "role-tag role-tag-stranger" : "role-tag"}>
                 {t(`roleInfo.${entry.role}.name`)}
               </span>
               {onReport && entry.id !== room.sessionId && (
-                <button
+                <Button
                   type="button"
+                  variant="default"
                   className="moderation-button"
                   title={t("moderation.reportTitle")}
                   aria-label={t("moderation.reportLabel", { name: entry.name })}
                   onClick={() => onReport(entry.id, entry.name)}
                 >
                   ⚑
-                </button>
+                </Button>
               )}
             </li>
           );
@@ -206,12 +210,12 @@ export function GameOverScreen({ room, summary, onReport }: GameOverScreenProps)
       )}
 
       {isHost ? (
-        <button type="button" onClick={() => room.send("return_to_lobby")}>
+        <Button type="button" variant="primary" onClick={() => room.send("return_to_lobby")}>
           {t("gameOver.backToLobby")}
-        </button>
+        </Button>
       ) : (
         <p className="hint">{t("gameOver.waitingForHost")}</p>
       )}
-    </div>
+    </Panel>
   );
 }

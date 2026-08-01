@@ -25,6 +25,19 @@ export interface PlayerState extends Schema {
   /** False while this player is inside their reconnection grace period. */
   connected: boolean;
   hasVoted: boolean;
+  /**
+   * Whether this player is standing on the lobby's ready flagstone. Derived
+   * server-side from position every tick — there is no message that sets it.
+   * See the server `Player` schema's own doc.
+   */
+  ready: boolean;
+  /**
+   * Whether this player has locked in a role during ROLE_SELECT. The ONLY
+   * public fact about role selection — what anyone was offered, how many
+   * cards they saw, and what they took never leave the server except on that
+   * one player's own socket. See the server `Player` schema's own doc.
+   */
+  hasPickedRole: boolean;
   lastSeq: number;
   /** The six cosmetic slots — a catalog id or empty string. See the server `Player` schema's own doc. */
   hatId: string;

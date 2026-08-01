@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useGraphicsSettings } from "../graphics/useGraphicsSettings";
 import type { MotionPreference } from "../graphics/graphicsEngine";
+import { Button, Panel } from "./primitives";
 
 interface GraphicsSettingsPanelProps {
   onClose: () => void;
@@ -20,7 +21,7 @@ export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
 
   return (
     <div className="audio-settings-overlay" role="dialog" aria-label={t("graphicsSettings.heading")}>
-      <div className="audio-settings-panel">
+      <Panel className="audio-settings-panel">
         <h2>{t("graphicsSettings.heading")}</h2>
 
         <div className="audio-settings-row">
@@ -28,15 +29,16 @@ export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
             {t("graphicsSettings.effects")}
           </label>
           <span />
-          <button
+          <Button
             type="button"
+            variant="default"
             id="graphics-effects-toggle"
             className={settings.effectsEnabled ? "audio-mute-button" : "audio-mute-button audio-mute-active"}
             onClick={() => setEffectsEnabled(!settings.effectsEnabled)}
             aria-pressed={!settings.effectsEnabled}
           >
             {settings.effectsEnabled ? t("graphicsSettings.on") : t("graphicsSettings.off")}
-          </button>
+          </Button>
         </div>
         <p className="hint">{t("graphicsSettings.hint")}</p>
 
@@ -45,15 +47,16 @@ export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
             {t("graphicsSettings.colorBlindMode")}
           </label>
           <span />
-          <button
+          <Button
             type="button"
+            variant="default"
             id="graphics-colorblind-toggle"
             className={settings.colorBlindMode ? "audio-mute-button audio-mute-active" : "audio-mute-button"}
             onClick={() => setColorBlindMode(!settings.colorBlindMode)}
             aria-pressed={settings.colorBlindMode}
           >
             {settings.colorBlindMode ? t("graphicsSettings.on") : t("graphicsSettings.off")}
-          </button>
+          </Button>
         </div>
         <p className="hint">{t("graphicsSettings.colorBlindHint")}</p>
 
@@ -81,10 +84,10 @@ export function GraphicsSettingsPanel({ onClose }: GraphicsSettingsPanelProps) {
         </div>
         <p className="hint">{t("graphicsSettings.reducedMotionHint")}</p>
 
-        <button type="button" className="secondary" onClick={onClose}>
+        <Button type="button" variant="default" className="secondary" onClick={onClose}>
           {t("graphicsSettings.closeButton")}
-        </button>
-      </div>
+        </Button>
+      </Panel>
     </div>
   );
 }

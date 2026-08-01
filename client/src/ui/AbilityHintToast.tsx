@@ -1,3 +1,5 @@
+import { Panel } from "./primitives";
+
 interface AbilityHintToastProps {
   text: string | null;
 }
@@ -14,8 +16,8 @@ export function AbilityHintToast({ text }: AbilityHintToastProps) {
     return null;
   }
   return (
-    <div className="ability-hint-toast" role="status">
+    <Panel className="ability-hint-toast" role="status">
       {text}
-    </div>
+    </Panel>
   );
 }

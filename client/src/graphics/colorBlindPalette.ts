@@ -1,4 +1,5 @@
 import { PLAYER_COLORS } from "@foghaven/shared";
+import { COLOR_BLIND_PALETTE } from "../theme/colorBlindPalette";
 
 /**
  * A color-blind-safe restyling of `PLAYER_COLORS`, same length and order —
@@ -6,32 +7,15 @@ import { PLAYER_COLORS } from "@foghaven/shared";
  * which `PLAYER_COLORS` index (and therefore which character archetype —
  * see `characters/assign.ts`, which hashes the server's original color, not
  * this one) they were dealt. Purely a client-side rendering concern; the
- * server's `PLAYER_COLORS` stays canonical for game logic.
- *
- * Based on the Okabe–Ito palette (the standard reference for a categorical
- * palette distinguishable across protanopia/deuteranopia/tritanopia),
- * extended with two further tones since Okabe–Ito has 8 and Foghaven needs
- * 10; its black is swapped for a light grey since a near-black badge would
- * vanish against this game's own near-black theme and its own stroke
- * outline (see `GameScene.ts`'s badge rendering).
+ * server's `PLAYER_COLORS` stays canonical for game logic. The actual
+ * palette lives in `theme/colorBlindPalette.ts` — see its doc for why it's
+ * a fixed scientific reference rather than an ART_BIBLE §3 remap.
  *
  * This is only half of the actual fix — see `GameScene.ts`'s badge number
  * glyph, which is unconditional and doesn't depend on this palette (or this
  * setting) at all, since even a well-chosen palette alone can't disambiguate
  * two players who hash onto the same character archetype shape.
  */
-const COLOR_BLIND_PALETTE: readonly string[] = [
-  "#E69F00", // orange
-  "#56B4E9", // sky blue
-  "#009E73", // bluish green
-  "#F0E442", // yellow
-  "#0072B2", // blue
-  "#D55E00", // vermillion
-  "#CC79A7", // reddish purple
-  "#DDDDDD", // light grey (replaces Okabe-Ito black)
-  "#999999", // mid grey
-  "#8B4513", // brown
-];
 
 /** The player's stable index into `PLAYER_COLORS` — also what the badge number glyph shows. */
 export function playerColorIndex(originalColor: string): number {

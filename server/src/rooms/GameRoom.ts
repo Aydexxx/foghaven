@@ -1,9 +1,14 @@
-import { Room, ServerError, type Client, type Deferred } from "@colyseus/core";
+import { Room, ServerError, type Client, type Deferred, type Delayed } from "@colyseus/core";
 import {
   applyInputWithLocks,
+  applyLobbyInput,
   canSee,
   sanitizeDirection,
   resolveRoleCounts,
+  roleSelectOptionCount,
+  RANDOM_ROLE_PICK,
+  ROLE_SELECT_MS,
+  type RoleOptionsMessage,
   ROLE_DEFINITIONS,
   ROLES,
   FACTION,
@@ -42,6 +47,7 @@ import {
   KILL_INITIAL_DELAY_MS,
   GHOSTS_CAN_DO_TASKS,
   TOWN_HALL,
+  isOnReadyPad,
   MEETING_SPAWN_RADIUS,
   REPORT_BODY_RANGE,
   BELL_RANGE,
@@ -51,7 +57,6 @@ import {
   MEETING_STAGE,
   SKIP_VOTE,
   VOTES_ARE_CHANGEABLE,
-  VOTES_ARE_PUBLIC,
   TIE_EJECTS_NOBODY,
   MAX_CHAT_LENGTH,
   CHAT_COOLDOWN_MS,
@@ -93,7 +98,7 @@ import {
   LANTERN_TOGGLE_COOLDOWN_MS,
 } from "@foghaven/shared";
 import { GameState, Player, Body, VoteTally, RevealedPlayer, PADDING_BODY_ID } from "./schema/GameState";
-import { generateRoomCode, randomSpawn, pickRandom } from "./util";
+import { generateRoomCode, lobbySpawn, randomSpawn, pickRandom } from "./util";
 import { ABILITIES, cameras, voteWeights, type AbilityContext } from "../abilities";
 import { getAuthProvider, type Identity } from "../auth/provider";
 import { getFriendProvider } from "../friends/provider";
@@ -220,6 +225,43 @@ export class GameRoom extends Room<GameState> {
    */
   private readonly roles = new Map<string, Role>();
 
+  // --- Role selection (server-only, all three) -----------------------------
+  //
+  // Every one of these maps is a faction oracle: `roleSelectFactions` says it
+  // outright, and the other two say it by implication, because both an offer
+  // set and a pick are drawn from one faction's pool. None of them may ever
+  // be mirrored into `GameState` — schema is broadcast, and its filters gate
+  // *changes* rather than providing secrecy (see the note on
+  // `GameState.players`). The only thing about selection that reaches other
+  // clients is the public `Player.hasPickedRole` boolean.
+
+  /**
+   * Which faction each player was dealt, decided before selection opens
+   * because the offer has to come from somewhere. Cleared once selection
+   * resolves into `roles`, which supersedes it.
+   */
+  private readonly roleSelectFactions = new Map<string, Faction>();
+
+  /**
+   * The exact role multiset still to be handed out, per faction — the same
+   * distribution `resolveRoleCounts` would have dealt at random. Selection
+   * only decides *who takes which*, never what exists, so every count
+   * guarantee (stranger parity clamp included) survives untouched.
+   */
+  private readonly roleSelectPools = new Map<Faction, Role[]>();
+
+  /** What each player was offered. Validated against on `pick_role` — a client may only choose from its own hand. */
+  private readonly roleSelectOffers = new Map<string, Role[]>();
+
+  /** What each player chose, or `RANDOM_ROLE_PICK`. Absent means they never answered. */
+  private readonly roleSelectPicks = new Map<string, string>();
+
+  /** Fires when the shared selection window closes. Cleared if selection resolves early. */
+  private roleSelectTimer?: Delayed;
+
+  /** When the shared selection window closes, so a reconnecting client is told what's LEFT of it. */
+  private roleSelectEndsAt = 0;
+
   /**
    * Server-authoritative task progress: session id -> task id -> progress.
    * Whether a given entry counts toward the public bar is decided purely by
@@ -335,8 +377,10 @@ export class GameRoom extends Room<GameState> {
   /**
    * Ballots for the current vote: voter session id -> target session id (or
    * `SKIP_VOTE`). Server-only. Only aggregate counts are ever published, and
-   * individual ballots only if `VOTES_ARE_PUBLIC` — until then this map is
-   * the sole record of who chose whom.
+   * individual ballots only if the `votesArePublic` setting is on — until
+   * resolution this map is the sole record of who chose whom, and it stays
+   * that way for the whole room regardless of the setting, since a vote is
+   * never broadcast while the ballot is open either way.
    */
   private readonly votes = new Map<string, string>();
 
@@ -482,6 +526,8 @@ export class GameRoom extends Room<GameState> {
     this.onMessage("input", (client, message) => this.enqueueInput(client, message));
 
     this.onMessage("start", (client) => this.handleStart(client));
+
+    this.onMessage("pick_role", (client, message) => this.handlePickRole(client, message));
 
     this.onMessage("set_preset", (client, message) => this.handleSetPreset(client, message));
 
@@ -639,7 +685,10 @@ export class GameRoom extends Room<GameState> {
       ? auth.username
       : options.name?.trim() || `Player-${client.sessionId.slice(0, 4)}`;
 
-    const spawn = randomSpawn();
+    // Arrivals wait in the Tavern (the lobby is a walkable room — see
+    // `LOBBY_SPAWN_ZONE`). `handleStart` moves everyone out to the plaza as
+    // the round opens; nobody plays a round from where they were standing here.
+    const spawn = lobbySpawn();
     player.x = spawn.x;
     player.y = spawn.y;
 
@@ -795,6 +844,23 @@ export class GameRoom extends Room<GameState> {
       }
     }
 
+    // Dropped mid-selection: hand them back their OWN options so they can
+    // still choose. Re-sending is safe for exactly the reason the "role"
+    // message above is — this is the same per-socket payload they already
+    // received, rebuilt from the same server-only map, so a reconnection can
+    // never disclose more than the first send did. Everyone else's window is
+    // unaffected; the shared deadline keeps running, and a player who takes
+    // too long to come back simply resolves to Random like any non-answer.
+    if (this.state.phase === PHASE.ROLE_SELECT) {
+      const offer = this.roleSelectOffers.get(sessionId);
+      if (offer) {
+        client.send("roleOptions", {
+          options: offer,
+          deadlineMs: Math.max(0, this.roleSelectEndsAt - Date.now()),
+        } satisfies RoleOptionsMessage);
+      }
+    }
+
     // Same "what's left, not the full thing" reasoning as the ability
     // cooldown above — a reconnecting client otherwise has no way to know
     // how much of the repair race is already gone.
@@ -842,6 +908,13 @@ export class GameRoom extends Room<GameState> {
     this.inputs.delete(sessionId);
     this.sessionUserIds.delete(sessionId);
     this.roles.delete(sessionId);
+    // Leaving mid-selection: forget their hand and their answer. Their seat
+    // simply goes unclaimed — `resolveRoleSelect` deals only to players still
+    // in the room, so a departed player can never be handed a role that some
+    // present player then goes without.
+    this.roleSelectOffers.delete(sessionId);
+    this.roleSelectPicks.delete(sessionId);
+    this.roleSelectFactions.delete(sessionId);
     this.tasks.delete(sessionId);
     this.mediumRevealed.delete(sessionId);
     this.emergencyMeetingsUsed.delete(sessionId);
@@ -964,11 +1037,48 @@ export class GameRoom extends Room<GameState> {
     });
     absent.forEach((id) => this.removePlayer(id));
 
-    if (this.state.players.size < MIN_PLAYERS) {
+    // Ready is physical: the gate is how many players are actually standing
+    // on the Tavern's flagstone, not how many are in the room. Re-derived
+    // here from live positions rather than trusting the `ready` flags —
+    // `update()` maintains those every tick, but recomputing at the decision
+    // point means the start can never act on a stale flag from the tick a
+    // player stepped off. Counting ready players also subsumes the old
+    // head-count check: readiness implies presence.
+    let readyCount = 0;
+    this.state.players.forEach((player) => {
+      if (player.connected && isOnReadyPad(player.x, player.y)) {
+        readyCount++;
+      }
+    });
+    if (readyCount < MIN_PLAYERS) {
       return;
     }
 
     this.emergencyMeetingsUsed.clear();
+
+    // Out of the Tavern and into the town. Before the lobby was a walkable
+    // room, players already stood in the plaza while waiting and simply
+    // stayed put through the start — now that they wait in the Tavern, the
+    // round has to place them explicitly, or everyone would begin the game
+    // crammed into one building with the same sightlines. This restores the
+    // exact pre-existing round-start distribution (`randomSpawn`'s plaza
+    // `SPAWN_ZONE`), and clears the ready flags along with it: `ready` means
+    // nothing outside the lobby, and leaving it set would show stale green
+    // checks on the reveal screen.
+    this.state.players.forEach((player) => {
+      const spawn = randomSpawn();
+      player.x = spawn.x;
+      player.y = spawn.y;
+      player.ready = false;
+    });
+
+    // Role selection, when this game is running one, deals the factions and
+    // opens its own phase; roles, tasks and the reveal all follow from
+    // `resolveRoleSelect` instead of here. When it isn't, nothing below
+    // changes from what start has always done.
+    if (this.beginRoleSelect()) {
+      return;
+    }
 
     // Deal and deliver the secret roles *before* announcing the phase. Messages
     // and state patches share one socket in order, so every client is holding
@@ -979,6 +1089,19 @@ export class GameRoom extends Room<GameState> {
     // come after assignRoles.
     this.assignTasks();
 
+    this.enterRoleReveal();
+  }
+
+  /**
+   * Show the reveal, then open the world. Shared by the random deal and by
+   * role selection's resolution so both reach the world through identical
+   * timing — a game that ran selection must not, for instance, start the
+   * round a beat sooner and become distinguishable from one that didn't.
+   *
+   * Callers must have already dealt roles and tasks: the reveal only
+   * announces, it decides nothing.
+   */
+  private enterRoleReveal(): void {
     this.state.phase = PHASE.ROLE_REVEAL;
 
     // No `lock()` here on purpose. Locking would keep latecomers out, but the
@@ -1188,21 +1311,64 @@ export class GameRoom extends Room<GameState> {
    * `state`; the only copies that leave the server are each client's own
    * private "role" message.
    */
-  private assignRoles(): void {
-    const sessionIds = [...this.state.players.keys()];
+  /**
+   * The balance settings' contribution to role distribution, as
+   * `resolveRoleCounts` wants it. One place so the count the offers are
+   * built from and the count actually dealt can never diverge.
+   *
+   * 0 is the "Auto" sentinel — leave the base Stranger role's own
+   * per-headcount threshold table alone. A positive value forces exactly
+   * that many, still subject to `resolveRoleCounts`'s own parity clamp.
+   */
+  private roleCountOverrides(): Record<string, number> {
+    const strangerCount = this.getNumberSetting("strangerCount");
+    return strangerCount > 0 ? { [ROLES.STRANGER]: strangerCount } : {};
+  }
+
+  /** The lobby's enabled role ids as a plain array. */
+  private enabledRoleIdList(): string[] {
     const enabledIds: string[] = [];
     this.state.enabledRoleIds.forEach((id) => enabledIds.push(id));
-    // 0 is the "Auto" sentinel — leave the base Stranger role's own
-    // per-headcount threshold table alone. A positive value forces exactly
-    // that many, still subject to `resolveRoleCounts`'s own parity clamp.
-    const strangerCount = this.getNumberSetting("strangerCount");
-    const overrides: Record<string, number> =
-      strangerCount > 0 ? { [ROLES.STRANGER]: strangerCount } : {};
+    return enabledIds;
+  }
+
+  /**
+   * The exact multiset of roles this deal hands out, flattened to one entry
+   * per seat. Pure function of public inputs (`resolveRoleCounts`), so it is
+   * the same list whether roles are dealt at random or chosen — which is
+   * what lets selection change *who takes which* without touching any of the
+   * distribution guarantees the count tests pin.
+   */
+  private roleSeats(): Role[] {
+    const counts = resolveRoleCounts(
+      this.state.players.size,
+      this.enabledRoleIdList(),
+      this.roleCountOverrides(),
+    );
+    const seats: Role[] = [];
+    const fill = fillRole();
+    for (const definition of ROLE_DEFINITIONS) {
+      if (definition.id === fill.id) {
+        continue;
+      }
+      for (let i = 0; i < (counts[definition.id] ?? 0); i++) {
+        seats.push(definition.id as Role);
+      }
+    }
+    for (let i = 0; i < (counts[fill.id] ?? 0); i++) {
+      seats.push(fill.id as Role);
+    }
+    return seats;
+  }
+
+  private assignRoles(): void {
+    const sessionIds = [...this.state.players.keys()];
+    const enabledIds = this.enabledRoleIdList();
+    const overrides = this.roleCountOverrides();
     const counts = resolveRoleCounts(sessionIds.length, enabledIds, overrides);
     const shuffled = pickRandom(sessionIds, sessionIds.length);
 
     this.roles.clear();
-    this.abilityUsesLeft.clear();
 
     let cursor = 0;
     const fill = fillRole();
@@ -1220,8 +1386,19 @@ export class GameRoom extends Room<GameState> {
       this.roles.set(sessionId, fill.id);
     }
 
-    for (const sessionId of sessionIds) {
-      const role = this.roles.get(sessionId)!;
+    this.deliverRoles();
+  }
+
+  /**
+   * Seed each player's ability uses from their dealt role and send them
+   * their own private "role" message. The one delivery path, shared by the
+   * random deal above and by role selection's resolution — so a chosen role
+   * is armed and announced through exactly the same code (and exactly the
+   * same `fellowNames` disclosure rules) as a dealt one.
+   */
+  private deliverRoles(): void {
+    this.abilityUsesLeft.clear();
+    for (const [sessionId, role] of this.roles) {
       for (const slot of roleById(role)?.abilities ?? []) {
         this.abilityUsesLeft.set(this.abilityKey(sessionId, slot.ability), slot.uses);
       }
@@ -1230,6 +1407,243 @@ export class GameRoom extends Room<GameState> {
         fellows: this.fellowNames(sessionId),
       });
     }
+  }
+
+  // --- Role selection ------------------------------------------------------
+  //
+  // Adapted from Goose Goose Duck: after factions are dealt but before
+  // anything is revealed, each player privately chooses their own role from
+  // within their own faction.
+  //
+  // The threat model, stated plainly, because everything below is shaped by
+  // it: a player's offer set is drawn from their faction's pool, so ANY
+  // observable property of that offer — its contents, its size, or how long
+  // it took to choose from — is a faction disclosure. The three defences are
+  //
+  //   1. offers travel on one socket only (`client.send`, never schema);
+  //   2. every player is offered the same number of cards, a number derived
+  //      from public state alone (`roleSelectOptionCount`);
+  //   3. everyone is prompted at once, in one shared window, so there is no
+  //      per-player pick duration for the room to time.
+  //
+  // (2) and (3) are what make the public `hasPickedRole` flag safe to show.
+
+  /**
+   * Open the selection phase, if this game is running one. Returns false when
+   * it is not, in which case the caller deals at random exactly as before.
+   *
+   * Both reasons to skip are public knowledge — the host's
+   * `roleSelectionEnabled` setting, and whether the enabled roles leave any
+   * faction with too thin a pool to offer a real choice from
+   * (`roleSelectOptionCount`, a pure function of public state). So a client
+   * observing that selection did not run learns nothing it could not have
+   * computed from the lobby settings itself.
+   */
+  private beginRoleSelect(): boolean {
+    if (!this.getBooleanSetting("roleSelectionEnabled")) {
+      return false;
+    }
+
+    const enabledIds = this.enabledRoleIdList();
+    const overrides = this.roleCountOverrides();
+    const optionCount = roleSelectOptionCount(this.state.players.size, enabledIds, overrides);
+    if (optionCount === 0) {
+      return false;
+    }
+
+    // Deal the seats, then partition them by faction. The multiset is
+    // untouched by selection — only who ends up on which seat changes.
+    const seats = this.roleSeats();
+    const pools = new Map<Faction, Role[]>();
+    for (const seat of seats) {
+      const faction = factionOf(seat);
+      const pool = pools.get(faction) ?? [];
+      pool.push(seat);
+      pools.set(faction, pool);
+    }
+
+    // Assign factions by one unbiased shuffle sliced per faction — the same
+    // mechanism `assignRoles` uses, so who lands in which faction is uniform.
+    const sessionIds = [...this.state.players.keys()];
+    const shuffled = pickRandom(sessionIds, sessionIds.length);
+
+    this.roleSelectFactions.clear();
+    this.roleSelectPools.clear();
+    this.roleSelectOffers.clear();
+    this.roleSelectPicks.clear();
+
+    let cursor = 0;
+    for (const [faction, pool] of pools) {
+      this.roleSelectPools.set(faction, [...pool]);
+      for (const sessionId of shuffled.slice(cursor, cursor + pool.length)) {
+        this.roleSelectFactions.set(sessionId, faction);
+      }
+      cursor += pool.length;
+    }
+
+    for (const sessionId of sessionIds) {
+      const faction = this.roleSelectFactions.get(sessionId);
+      const pool = faction ? (this.roleSelectPools.get(faction) ?? []) : [];
+      // Distinct role ids only: being offered "villager" twice is not a
+      // choice. `optionCount` is guaranteed to fit — it is the minimum
+      // distinct pool size across every faction that has seats.
+      const distinct = [...new Set(pool)];
+      const offer = pickRandom(distinct, optionCount);
+      this.roleSelectOffers.set(sessionId, offer);
+
+      const player = this.state.players.get(sessionId);
+      if (player) {
+        player.hasPickedRole = false;
+      }
+      // The one place options ever leave the server, and it is addressed to
+      // exactly one socket. Never broadcast, never schema.
+      this.clientFor(sessionId)?.send("roleOptions", {
+        options: offer,
+        deadlineMs: ROLE_SELECT_MS,
+      } satisfies RoleOptionsMessage);
+    }
+
+    this.state.phase = PHASE.ROLE_SELECT;
+    this.roleSelectEndsAt = Date.now() + ROLE_SELECT_MS;
+    this.roleSelectTimer = this.clock.setTimeout(
+      () => this.resolveRoleSelect(),
+      ROLE_SELECT_MS,
+    );
+    return true;
+  }
+
+  /**
+   * Record one player's choice.
+   *
+   * The validation here is the trust boundary: a client may only ever name a
+   * role from *its own* offer set. Without that check a modified client could
+   * send any role id it liked and effectively pick its own faction, which is
+   * a far worse failure than any read-side leak — selection would become a
+   * way to *choose* to be a Stranger.
+   *
+   * Re-picking before the deadline is allowed (it costs nothing and spares a
+   * misclick), but `hasPickedRole` latches true on the first answer: the room
+   * is told that you have decided, never how many times you changed your mind.
+   */
+  private handlePickRole(client: Client, message: unknown): void {
+    if (this.state.phase !== PHASE.ROLE_SELECT) {
+      return;
+    }
+    const raw = (message ?? {}) as { roleId?: unknown };
+    const roleId = typeof raw.roleId === "string" ? raw.roleId : "";
+    const offer = this.roleSelectOffers.get(client.sessionId);
+    if (!offer) {
+      return;
+    }
+    if (roleId !== RANDOM_ROLE_PICK && !offer.includes(roleId as Role)) {
+      return;
+    }
+
+    this.roleSelectPicks.set(client.sessionId, roleId);
+    const player = this.state.players.get(client.sessionId);
+    if (player) {
+      player.hasPickedRole = true;
+    }
+
+    // Everyone in — close the window early rather than sitting on a deadline
+    // nobody is using. This is an aggregate over the whole room, not a
+    // per-player signal: it says "all N players answered", which reveals
+    // nothing about which of them answered when, or as what.
+    if (this.everyoneHasPicked()) {
+      this.resolveRoleSelect();
+    }
+  }
+
+  /**
+   * Drop every trace of a selection round. Called the moment it resolves —
+   * not at the end of the game — because each of these maps answers "what
+   * faction is X" and there is no reason for that answer to outlive the deal
+   * it was needed for. `roles` supersedes all of it.
+   */
+  private clearRoleSelectState(): void {
+    this.roleSelectOffers.clear();
+    this.roleSelectPicks.clear();
+    this.roleSelectPools.clear();
+    this.roleSelectFactions.clear();
+    this.roleSelectEndsAt = 0;
+    this.state.players.forEach((player) => {
+      player.hasPickedRole = false;
+    });
+  }
+
+  private everyoneHasPicked(): boolean {
+    let pending = 0;
+    this.state.players.forEach((player, sessionId) => {
+      // A player inside their reconnection grace period cannot answer; don't
+      // hold the room on them. They resolve to Random like any non-answer.
+      if (player.connected && !this.roleSelectPicks.has(sessionId)) {
+        pending++;
+      }
+    });
+    return pending === 0;
+  }
+
+  /**
+   * Turn preferences into an actual deal, then continue into the reveal.
+   *
+   * Honours each player's pick where the seat is still free, in one unbiased
+   * shuffle so that a contested role (two townsfolk both wanting the single
+   * Doctor seat) is decided fairly rather than by who clicked first — pick
+   * *order* must not be worth anything, or it becomes a reason to rush, and
+   * rushing is exactly the timing signal this design spends so much effort
+   * not producing. Whoever loses a tie, and anyone who chose Random or never
+   * answered, takes uniformly from what is left.
+   */
+  private resolveRoleSelect(): void {
+    if (this.state.phase !== PHASE.ROLE_SELECT) {
+      return;
+    }
+    this.roleSelectTimer?.clear();
+    this.roleSelectTimer = undefined;
+
+    this.roles.clear();
+
+    for (const [faction, pool] of this.roleSelectPools) {
+      const remaining = [...pool];
+      const members = [...this.roleSelectFactions.entries()]
+        .filter(([sessionId, memberFaction]) => {
+          // Only players still in the room. Someone who left mid-selection
+          // must not consume a seat, or a player who is still here would be
+          // dealt nothing at all.
+          return memberFaction === faction && this.state.players.has(sessionId);
+        })
+        .map(([sessionId]) => sessionId);
+      const order = pickRandom(members, members.length);
+
+      const unresolved: string[] = [];
+      for (const sessionId of order) {
+        const pick = this.roleSelectPicks.get(sessionId);
+        const index =
+          pick && pick !== RANDOM_ROLE_PICK ? remaining.indexOf(pick as Role) : -1;
+        if (index >= 0) {
+          this.roles.set(sessionId, remaining[index]!);
+          remaining.splice(index, 1);
+        } else {
+          unresolved.push(sessionId);
+        }
+      }
+
+      const leftovers = pickRandom(remaining, remaining.length);
+      for (const sessionId of unresolved) {
+        const role = leftovers.pop();
+        if (role) {
+          this.roles.set(sessionId, role);
+        }
+      }
+    }
+
+    // The offers and picks have done their job; drop them rather than leave
+    // a faction oracle sitting in memory for the rest of the round.
+    this.clearRoleSelectState();
+
+    this.deliverRoles();
+    this.assignTasks();
+    this.enterRoleReveal();
   }
 
   /**
@@ -2282,6 +2696,7 @@ export class GameRoom extends Room<GameState> {
    * is left at its default and the announcement says only who went.
    */
   private resolveVotes(): void {
+    const votesArePublic = this.getBooleanSetting("votesArePublic");
     const weights = voteWeights(this.roundStore);
     const counts = new Map<string, number>();
     const voterNames = new Map<string, string[]>();
@@ -2305,7 +2720,7 @@ export class GameRoom extends Room<GameState> {
       tally.targetName =
         targetId === SKIP_VOTE ? "" : (this.state.players.get(targetId)?.name ?? "?");
       tally.count = count;
-      tally.voterNames = VOTES_ARE_PUBLIC ? (voterNames.get(targetId) ?? []).join(", ") : "";
+      tally.voterNames = votesArePublic ? (voterNames.get(targetId) ?? []).join(", ") : "";
       this.state.voteResults.set(targetId, tally);
     }
 
@@ -2318,7 +2733,7 @@ export class GameRoom extends Room<GameState> {
         targetName: targetId === SKIP_VOTE ? "" : (this.state.players.get(targetId)?.name ?? "?"),
         count,
       })),
-      ballots: VOTES_ARE_PUBLIC
+      ballots: votesArePublic
         ? [...this.votes.entries()].map(([voterId, targetId]) => ({
             voterId,
             voterName: this.state.players.get(voterId)?.name ?? "?",
@@ -2705,8 +3120,11 @@ export class GameRoom extends Room<GameState> {
     this.meetingTimer = undefined;
     this.criticalSabotageTimer?.clear();
     this.criticalSabotageTimer = undefined;
+    this.roleSelectTimer?.clear();
+    this.roleSelectTimer = undefined;
 
     this.roles.clear();
+    this.clearRoleSelectState();
     this.tasks.clear();
     this.abilityReadyAt.clear();
     this.abilityUsesLeft.clear();
@@ -2768,7 +3186,11 @@ export class GameRoom extends Room<GameState> {
       player.alive = true;
       player.lanternState = "lit"; // relit for the new round — see `killPlayer`'s doc
       player.hasVoted = false;
-      const spawn = randomSpawn();
+      // Back to the Tavern to wait, and un-ready: last round's ready state
+      // must not carry into the next lobby, or a room could re-start itself
+      // the instant it returned here.
+      player.ready = false;
+      const spawn = lobbySpawn();
       player.x = spawn.x;
       player.y = spawn.y;
     });
@@ -3121,11 +3543,17 @@ export class GameRoom extends Room<GameState> {
    * are ignored entirely — position is derived on the server, never received.
    */
   private enqueueInput(client: Client, message: unknown): void {
-    // Movement is locked during a meeting or once the game has ended. This is
-    // intentionally narrower than "only while playing" — inputs have always
-    // been accepted before the world even opens, and that pre-existing
-    // behaviour isn't this change's concern.
-    if (this.state.phase === PHASE.MEETING || this.state.phase === PHASE.GAME_OVER) {
+    // Movement is locked during a meeting, during role selection, or once the
+    // game has ended. This is intentionally narrower than "only while
+    // playing" — inputs have always been accepted before the world even
+    // opens, and that pre-existing behaviour isn't this change's concern.
+    // Role selection is a modal choice with no world to move in, and holding
+    // still through it means a player cannot leak anything by drifting.
+    if (
+      this.state.phase === PHASE.MEETING ||
+      this.state.phase === PHASE.GAME_OVER ||
+      this.state.phase === PHASE.ROLE_SELECT
+    ) {
       return;
     }
 
@@ -3345,6 +3773,7 @@ export class GameRoom extends Room<GameState> {
     // redo it inside the loop below.
     const lockedRoomSlugs: string[] = [];
     this.state.lockedRoomSlugs.forEach((slug) => lockedRoomSlugs.push(slug));
+    const inLobby = this.state.phase === PHASE.LOBBY;
 
     this.state.players.forEach((player, sessionId) => {
       const state = this.inputs.get(sessionId);
@@ -3364,7 +3793,12 @@ export class GameRoom extends Room<GameState> {
       let lastSeq = player.lastSeq;
       for (let i = 0; i < steps; i++) {
         const command = state.queue[i]!;
-        pos = applyInputWithLocks(pos, command.dir, SIM_DT, lockedRoomSlugs);
+        // In the lobby the Tavern's own walls are the boundary — its
+        // doorways are ordinary walkable tiles, so without this a waiting
+        // player could walk straight out into a town that isn't running.
+        pos = inLobby
+          ? applyLobbyInput(pos, command.dir, SIM_DT)
+          : applyInputWithLocks(pos, command.dir, SIM_DT, lockedRoomSlugs);
         lastSeq = command.seq;
       }
       state.queue.splice(0, steps);
@@ -3373,6 +3807,23 @@ export class GameRoom extends Room<GameState> {
       player.y = pos.y;
       player.lastSeq = lastSeq;
     });
+
+    // Ready state, re-derived from where everyone actually is. Done here
+    // rather than inside the movement loop above because that loop skips any
+    // player with no queued input — a player who walks onto the stone and
+    // then stops moving must still register, and one who is shoved off it by
+    // any other means must stop registering. Writing the flag only when it
+    // actually changes keeps this off the wire on the overwhelming majority
+    // of ticks (Colyseus encodes an assignment as a change even when the
+    // value is identical), so an idle lobby still costs nothing per tick.
+    if (this.state.phase === PHASE.LOBBY) {
+      this.state.players.forEach((player) => {
+        const ready = isOnReadyPad(player.x, player.y);
+        if (player.ready !== ready) {
+          player.ready = ready;
+        }
+      });
+    }
 
     // The fog heartbeat. Colyseus only re-evaluates a `@filterChildren`
     // callback for a MapSchema entry that has a pending change THIS patch

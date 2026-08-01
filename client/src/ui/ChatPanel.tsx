@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { CHAT_CHANNEL, MAX_CHAT_LENGTH, type ChatMessage } from "@foghaven/shared";
+import { Button, Panel } from "./primitives";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -41,7 +42,7 @@ export function ChatPanel({ messages, canSend, isGhost, onSend }: ChatPanelProps
   };
 
   return (
-    <div className={`chat-panel ${isGhost ? "chat-panel-dead" : ""}`}>
+    <Panel className={`chat-panel ${isGhost ? "chat-panel-dead" : ""}`}>
       <h2>{isGhost ? t("chat.deadHeading") : t("chat.heading")}</h2>
 
       <div className="chat-log" ref={logRef}>
@@ -69,10 +70,10 @@ export function ChatPanel({ messages, canSend, isGhost, onSend }: ChatPanelProps
           onChange={(e) => setDraft(e.target.value)}
           disabled={!canSend}
         />
-        <button type="submit" disabled={!canSend || draft.trim() === ""}>
+        <Button type="submit" variant="primary" disabled={!canSend || draft.trim() === ""}>
           {t("chat.sendButton")}
-        </button>
+        </Button>
       </form>
-    </div>
+    </Panel>
   );
 }

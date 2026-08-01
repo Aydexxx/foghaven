@@ -1,4 +1,5 @@
 import { ARCHETYPES_BY_ID } from "./archetypes";
+import { PALETTE } from "./palette";
 import {
   ACCESSORY_VISUALS,
   HAT_VISUALS,
@@ -71,7 +72,7 @@ function drawArchetypeShape(
 
 /** A cosmetic overlay's points are already absolute rig-local coordinates — no per-frame pose applied, matching the live scene's fixed-anchor behaviour (see `cosmeticVisuals.ts`'s module doc). */
 function drawCosmeticShape(ctx: CanvasRenderingContext2D, shape: Shape): void {
-  fillPolygon(ctx, shape.points, shape.fill, shape.stroke ?? 0x14181f);
+  fillPolygon(ctx, shape.points, shape.fill, shape.stroke ?? PALETTE.ink);
 }
 
 /**

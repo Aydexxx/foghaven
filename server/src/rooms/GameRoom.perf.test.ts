@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { Server, type Room as ServerRoom } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { MAP, ROLE_REVEAL_MS, TICK_RATE } from "@foghaven/shared";
+import { LOBBY_READY_PAD_POINT, MAP, ROLE_REVEAL_MS, TICK_RATE } from "@foghaven/shared";
 import { GameRoom } from "./GameRoom";
 import type { GameState } from "./schema/GameState";
 import { InMemoryAuthProvider, setAuthProvider } from "../auth/provider";
@@ -78,6 +78,13 @@ async function seatAndPlay(room: ServerRoom<GameState>, count: number) {
   const clients = [];
   for (let i = 0; i < count; i++) {
     clients.push(await seat(room));
+  }
+  // Ready is physical: the start is refused unless MIN_PLAYERS are
+  // standing on the Tavern flagstone (see isOnReadyPad).
+  for (const c of clients) {
+    const p = room.state.players.get(c.sessionId)!;
+    p.x = LOBBY_READY_PAD_POINT.x;
+    p.y = LOBBY_READY_PAD_POINT.y;
   }
   clients[0]!.send("start");
   await tick(4);

@@ -4,6 +4,34 @@ import { lanternColors } from "./lanterns";
 /** How long the secret role reveal is shown before the world opens up. */
 export const ROLE_REVEAL_MS = 4000;
 
+/**
+ * How long the role-selection phase stays open. One shared deadline for the
+ * whole room, not a per-player turn: every player is prompted at the same
+ * instant and picks concurrently.
+ *
+ * That simultaneity is a SECURITY property, not a pacing choice. With
+ * per-player turns, how long someone takes to pick is visible to the room,
+ * and a faction whose pool offers fewer choices would be picked from faster
+ * — a statistical faction tell over repeated games. One shared window, and
+ * an option count that is identical for every player regardless of faction
+ * (`roleSelectOptionCount`), leaves nothing for an observer to correlate.
+ */
+export const ROLE_SELECT_MS = 20_000;
+
+/**
+ * The most role cards a player is ever offered, alongside the Random card.
+ * The actual number used in a given game is `roleSelectOptionCount`, which
+ * may be lower — but is always the SAME for every player in the room.
+ */
+export const MAX_ROLE_OPTIONS = 3;
+
+/**
+ * Below this many real cards, selection is not worth running: one card plus
+ * Random is not a choice. `roleSelectOptionCount` returns 0 (meaning "deal
+ * randomly, skip the phase") rather than offering a degenerate pick.
+ */
+export const MIN_ROLE_OPTIONS = 2;
+
 /** Time between a stranger's kills. */
 export const KILL_COOLDOWN_MS = 30_000;
 
@@ -81,9 +109,16 @@ export const SKIP_VOTE = "__skip__";
 export const VOTES_ARE_CHANGEABLE = false;
 
 /**
- * Whether the results screen reveals who voted for whom. When false only the
- * per-candidate counts are published — the individual ballots stay on the
- * server and are never broadcast at all.
+ * Whether the results screen reveals who voted for whom, by default. When
+ * false only the per-candidate counts are published — the individual
+ * ballots stay on the server and are never broadcast at all.
+ *
+ * This is the DEFAULT only — `shared/config/settings.ts`'s `votesArePublic`
+ * is the actual per-lobby setting a host toggles, and `GameRoom` reads that
+ * setting exclusively (`getBooleanSetting("votesArePublic")`), never this
+ * constant directly. It exists so the setting's default has a documented,
+ * named source rather than a bare `false`, the same relationship
+ * `CONFIRM_EJECTS` has with `confirmEjects`.
  */
 export const VOTES_ARE_PUBLIC = false;
 
@@ -337,6 +372,15 @@ export type JoinError = (typeof JOIN_ERROR)[keyof typeof JOIN_ERROR];
  */
 export const PHASE = {
   LOBBY: "lobby",
+  /**
+   * Each player privately chooses their own role from within the faction
+   * they've already been dealt — see `ROLE_SELECT_MS` and
+   * `roleSelectOptionCount`. Sits between the lobby and the reveal because
+   * factions must already be decided (to know which pool to offer from) but
+   * nothing may be revealed yet. Skipped entirely when the host turns the
+   * `roleSelectionEnabled` setting off.
+   */
+  ROLE_SELECT: "role_select",
   ROLE_REVEAL: "role_reveal",
   PLAYING: "playing",
   MEETING: "meeting",

@@ -17,6 +17,7 @@ import {
   type AdminUser,
   type BanHistoryEntry,
 } from "../net/admin";
+import { Button, Panel } from "./primitives";
 
 interface AdminPanelProps {
   token: string;
@@ -125,45 +126,43 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
 
   return (
     <div className="admin-overlay" role="dialog" aria-label={t("admin.heading")}>
-      <div className="admin-panel">
+      <Panel className="admin-panel">
         <div className="admin-header">
           <h2>
             {t("admin.heading")} <span className="admin-role-tag">{t(`admin.roles.${role}`)}</span>
           </h2>
-          <button type="button" className="link-button" onClick={onClose}>
+          <Button type="button" variant="link" onClick={onClose}>
             {t("admin.closeButton")}
-          </button>
+          </Button>
         </div>
 
         {/* Infra check, not a moderation action — admin-only (matches the
             server route's own stricter gate; see net/admin.ts). */}
         {role === USER_ROLE.ADMIN && (
           <div className="admin-observability">
-            <button type="button" className="secondary" onClick={sendClientTestError}>
+            <Button type="button" variant="default" className="secondary" onClick={sendClientTestError}>
               {t("admin.observability.sendClientTestError")}
-            </button>
-            <button type="button" className="secondary" onClick={sendTestErrorToServer}>
+            </Button>
+            <Button type="button" variant="default" className="secondary" onClick={sendTestErrorToServer}>
               {t("admin.observability.sendServerTestError")}
-            </button>
+            </Button>
             {testErrorNotice && <span className="hint">{testErrorNotice}</span>}
           </div>
         )}
 
         <div className="admin-tabs">
-          <button
-            type="button"
+          <Button
             className={tab === "reports" ? "admin-tab admin-tab-active" : "admin-tab"}
             onClick={() => setTab("reports")}
           >
             {t("admin.tabs.reports", { count: reports.length })}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             className={tab === "users" ? "admin-tab admin-tab-active" : "admin-tab"}
             onClick={() => setTab("users")}
           >
             {t("admin.tabs.users")}
-          </button>
+          </Button>
         </div>
 
         {tab === "reports" && (
@@ -200,21 +199,23 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                   {report.note && <p className="admin-report-note">“{report.note}”</p>}
 
                   <div className="admin-report-actions">
-                    <button
+                    <Button
                       type="button"
+                      variant="default"
                       className="secondary"
                       onClick={() => setExpanded(expanded === report.id ? null : report.id)}
                     >
                       {t("admin.viewEvidence", { count: report.chatExcerpt.length })}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      variant="default"
                       className="secondary"
                       onClick={() => openUser(report.reportedId)}
                       disabled={busy}
                     >
                       {t("admin.openUser")}
-                    </button>
+                    </Button>
                   </div>
 
                   {expanded === report.id && (
@@ -237,8 +238,9 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                             placeholder={t("admin.resolutionPlaceholder")}
                             onChange={(event) => setResolution(event.target.value)}
                           />
-                          <button
+                          <Button
                             type="button"
+                            variant="primary"
                             disabled={busy}
                             onClick={() =>
                               run(async () => {
@@ -254,9 +256,10 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                             }
                           >
                             {t("admin.markActioned")}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            variant="default"
                             className="secondary"
                             disabled={busy}
                             onClick={() =>
@@ -273,7 +276,7 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                             }
                           >
                             {t("admin.dismiss")}
-                          </button>
+                          </Button>
                         </div>
                       )}
 
@@ -297,9 +300,9 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                 placeholder={t("admin.searchPlaceholder")}
                 onChange={(event) => setQuery(event.target.value)}
               />
-              <button type="submit" disabled={busy}>
+              <Button type="submit" variant="primary" disabled={busy}>
                 {t("admin.searchButton")}
-              </button>
+              </Button>
             </form>
 
             {!selected && (
@@ -313,9 +316,9 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                       <span className="admin-role-tag">{t(`admin.roles.${user.role}`)}</span>
                     )}
                     <span className="hint">{t("admin.reportCount", { count: user.reportsAgainst })}</span>
-                    <button type="button" className="secondary" onClick={() => openUser(user.id)}>
+                    <Button type="button" variant="default" className="secondary" onClick={() => openUser(user.id)}>
                       {t("admin.openUser")}
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -323,9 +326,9 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
 
             {selected && (
               <div className="admin-user-detail">
-                <button type="button" className="link-button" onClick={() => setSelected(null)}>
+                <Button type="button" variant="link" onClick={() => setSelected(null)}>
                   {t("admin.backToResults")}
-                </button>
+                </Button>
 
                 <h3>{selected.username}</h3>
                 <p className="hint">
@@ -343,8 +346,9 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                           : t("admin.permanent"),
                       })}
                     </p>
-                    <button
+                    <Button
                       type="button"
+                      variant="primary"
                       disabled={busy}
                       onClick={() =>
                         run(async () => {
@@ -354,7 +358,7 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                       }
                     >
                       {t("admin.unbanButton")}
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="admin-ban-form">
@@ -374,8 +378,9 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                         onChange={(event) => setBanUntil(event.target.value)}
                       />
                     </label>
-                    <button
+                    <Button
                       type="button"
+                      variant="destructive"
                       className="admin-ban-button"
                       disabled={busy || !banReason.trim()}
                       onClick={() =>
@@ -393,7 +398,7 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                       }
                     >
                       {banUntil ? t("admin.banTemporaryButton") : t("admin.banPermanentButton")}
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -403,9 +408,10 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                     <span>{t("admin.roleLabel")}</span>
                     {([USER_ROLE.PLAYER, USER_ROLE.MODERATOR, USER_ROLE.ADMIN] as const).map(
                       (option) => (
-                        <button
+                        <Button
                           key={option}
                           type="button"
+                          variant="default"
                           className={
                             selected.role === option ? "preset-button preset-button-active" : "preset-button"
                           }
@@ -418,7 +424,7 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                           }
                         >
                           {t(`admin.roles.${option}`)}
-                        </button>
+                        </Button>
                       ),
                     )}
                   </div>
@@ -442,8 +448,9 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                 </ul>
 
                 <div className="admin-chat-lookup">
-                  <button
+                  <Button
                     type="button"
+                    variant="default"
                     className="secondary"
                     disabled={busy}
                     onClick={() =>
@@ -456,7 +463,7 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
                     }
                   >
                     {t("admin.fetchChatButton")}
-                  </button>
+                  </Button>
                   {chatLog && (
                     <div className="admin-evidence">
                       {chatLog.length === 0 && <p className="hint">{t("admin.noEvidence")}</p>}
@@ -478,7 +485,7 @@ export function AdminPanel({ token, role, onClose }: AdminPanelProps) {
         )}
 
         {error && <p className="error">{t(`admin.errors.${error}`, t("admin.errors.unknown"))}</p>}
-      </div>
+      </Panel>
     </div>
   );
 }

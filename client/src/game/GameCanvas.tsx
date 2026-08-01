@@ -6,6 +6,7 @@ import type { GameState } from "../net/types";
 import { GameScene, type AbilitySlotInfo, type AbilityTargetInfo } from "./GameScene";
 import { TouchControls } from "../ui/TouchControls";
 import { useIsTouchDevice } from "../ui/useIsTouchDevice";
+import { colors } from "../theme/tokens";
 
 /**
  * The canvas element's own size. The *world* (the town map — see
@@ -90,7 +91,7 @@ export function GameCanvas({
       parent: container,
       width: VIEWPORT_WIDTH,
       height: VIEWPORT_HEIGHT,
-      backgroundColor: "#16120c",
+      backgroundColor: colors.ink,
       scene: [],
       // Keeps the internal simulation/render resolution fixed at
       // VIEWPORT_WIDTH x VIEWPORT_HEIGHT (no gameplay/camera math changes)

@@ -242,11 +242,134 @@ export const CRITICAL_REPAIR_POINTS = {
 export type CriticalRepairPointId = keyof typeof CRITICAL_REPAIR_POINTS;
 
 /**
- * The rectangle `randomSpawn` draws lobby positions from: open plaza floor,
- * clear of Town Hall's footprint and every door threshold, so every point in
- * it is walkable by construction and needs no rejection sampling.
+ * The rectangle `randomSpawn` draws ROUND-START positions from: open plaza
+ * floor, clear of Town Hall's footprint and every door threshold, so every
+ * point in it is walkable by construction and needs no rejection sampling.
+ *
+ * Note this is where a round *begins*, not where a lobby waits — the waiting
+ * room is the Tavern (see `LOBBY_*` below). `GameRoom.handleStart` moves
+ * everyone from the one to the other as the round opens.
  */
 export const SPAWN_ZONE = rect(12, 21, 24, 10);
+
+// ---------------------------------------------------------------------------
+// The lobby — the Tavern interior (ART_BIBLE §5.2: "Tavern (also the lobby)").
+//
+// Deliberately the real Tavern from the town grid above rather than a separate
+// off-map room: movement, collision and prediction all run through
+// `applyInputWithLocks` against THIS grid on both client and server, so a
+// lobby built anywhere else would need a second collision world for the two
+// sides to agree on. Reusing the Tavern means the waiting room is walkable,
+// server-authoritative and desync-proof for free.
+//
+// Every rect below sits strictly inside `TAVERN_INTERIOR` (cols 3-8, rows
+// 15-21), so every point in each is walkable by construction — the same
+// property `SPAWN_ZONE` has, and for the same reason: no rejection sampling.
+// ---------------------------------------------------------------------------
+
+/**
+ * The Tavern's full footprint, walls included — what the lobby camera frames
+ * and what the lobby renderer draws its walls from. Exported rather than
+ * re-typed client-side so the drawn room and the walkable room are the same
+ * rectangle by construction.
+ */
+export const TAVERN_LOBBY_BOUNDS: TileRect = TAVERN_OUTER;
+
+/**
+ * The Tavern's two doorways, for the lobby renderer to draw as openings in
+ * the wall rather than solid ink. Purely cosmetic here — lobby movement is
+ * confined to the interior (`isInsideLobby`), so these are thresholds you can
+ * see but not cross while waiting; they're what makes "the flagstone by the
+ * door" legible instead of an unexplained marked square.
+ */
+export const TAVERN_LOBBY_DOORS: readonly TileRect[] = [
+  TAVERN_PLAZA_DOOR,
+  TAVERN_TUNNEL_DOOR,
+];
+
+/**
+ * Where lobby arrivals appear. The Tavern's west/south floor — deliberately
+ * clear of `LOBBY_READY_PAD` (so nobody spawns already-ready, which would
+ * make the ready gate meaningless for whoever happened to land on it) and of
+ * `LOBBY_SETTINGS_TABLE` (so nobody spawns inside the furniture).
+ */
+export const LOBBY_SPAWN_ZONE = rect(3, 18, 4, 3);
+
+/**
+ * The marked flagstone by the Tavern's plaza door: stand on it to declare
+ * ready. Placed at the door rather than anywhere else on purpose — "I am
+ * standing at the exit" is a physical statement of intent to leave for the
+ * round, which is exactly what ready means, and it needs no legend to read.
+ *
+ * Two tiles wide so several players can crowd it at once and so a player's
+ * own 16px radius never has to be pixel-perfect to register — the same
+ * "never make a target exactly one player wide" rule the corridor widths
+ * above follow.
+ */
+export const LOBBY_READY_PAD = rect(7, 17, 2, 2);
+
+/**
+ * Centre of the ready flagstone — a legal standing position for a
+ * `PLAYER_RADIUS` player, so it doubles as "walk here to ready up" for
+ * anything that needs to name the spot rather than test a point against it.
+ */
+export const LOBBY_READY_PAD_POINT: Vec2 = center(LOBBY_READY_PAD);
+
+/**
+ * The long table the host's settings overlay opens from (§5.2's signature
+ * Tavern prop). Interaction is proximity-based, exactly like a task station:
+ * see `LOBBY_TABLE_RANGE`.
+ */
+export const LOBBY_SETTINGS_TABLE = rect(3, 15, 2, 2);
+
+/** Centre of the settings table, for proximity checks and for drawing. */
+export const LOBBY_SETTINGS_TABLE_POINT: Vec2 = center(LOBBY_SETTINGS_TABLE);
+
+/**
+ * How close a player must stand to `LOBBY_SETTINGS_TABLE_POINT` for the
+ * settings prompt to appear. Matches the feel of the task-interaction range
+ * rather than sharing its constant — this is furniture in a waiting room,
+ * not a task station, and the two should be free to diverge.
+ */
+export const LOBBY_TABLE_RANGE = 64;
+
+/**
+ * Whether a player of the given radius sits wholly within the Tavern's
+ * interior floor — the lobby's movement boundary (see `applyLobbyInput`).
+ *
+ * Deliberately the INTERIOR, so the doorways themselves are out of bounds:
+ * a player standing in the open doorway would be half in a town that isn't
+ * running, and is the one position from which the next step leaves the room
+ * entirely.
+ */
+export function isInsideLobby(x: number, y: number, radius: number): boolean {
+  const interior = inset(TAVERN_LOBBY_BOUNDS);
+  return (
+    x - radius >= interior.x * TILE_SIZE &&
+    x + radius <= (interior.x + interior.w) * TILE_SIZE &&
+    y - radius >= interior.y * TILE_SIZE &&
+    y + radius <= (interior.y + interior.h) * TILE_SIZE
+  );
+}
+
+/**
+ * Whether a world point stands on the ready flagstone.
+ *
+ * Pure and shared on purpose: the SERVER decides ready state (it owns the
+ * flag on `Player`), but the client calls this same function on its own
+ * predicted position to light the pad up the instant you step on it, rather
+ * than a round-trip later. Same relationship `applyInput` has with movement —
+ * one function, both sides, no chance of the two disagreeing about where the
+ * stone is.
+ */
+export function isOnReadyPad(x: number, y: number): boolean {
+  return (
+    x >= LOBBY_READY_PAD.x * TILE_SIZE &&
+    x < (LOBBY_READY_PAD.x + LOBBY_READY_PAD.w) * TILE_SIZE &&
+    y >= LOBBY_READY_PAD.y * TILE_SIZE &&
+    y < (LOBBY_READY_PAD.y + LOBBY_READY_PAD.h) * TILE_SIZE
+  );
+}
 
 /**
  * Every room's OUTER footprint (walls included), for `roomSlugAt` — point-

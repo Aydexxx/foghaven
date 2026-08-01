@@ -64,11 +64,14 @@ export default tseslint.config(
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/theme/**"],
     rules: {
-      // "warn" until the docs/TOKEN_DEBT.md repaint (Phase 7.13) actually
-      // moves these to art-bible tokens — set to "error" as the last step
-      // of that work, once there's nothing left for it to flag.
+      // The docs/TOKEN_DEBT.md repaint (Phase 7.13) is done — every
+      // remaining hex literal outside theme/ has been moved to an
+      // ART_BIBLE §3 token (or, for palettes that answer a different
+      // question than "what does the world look like" — colour-blind
+      // badges, minigame tile IDs — to their own dedicated theme/ token
+      // file). Nothing left for this to flag, so it's an error now.
       "no-restricted-syntax": [
-        "warn",
+        "error",
         {
           selector: "Literal[value=/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]",
           message:

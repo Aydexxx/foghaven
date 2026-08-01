@@ -26,9 +26,9 @@ Remember: `.env` is gitignored, so it must be created by hand on each machine.
 | 7.10 | Ejection cutscene | C | Done — pending commit |
 | 7.11 | Meeting call cutscene | C | Done — pending commit |
 | — | **Playtest checkpoint** | — | play a real round with friends |
-| 7.12 | Component kit | D | |
-| 7.13 | Lobby as a playable room | D | |
-| 7.14 | Role selection screen | D | |
+| 7.12 | Component kit | D | Done — pending commit |
+| 7.13 | Lobby as a playable room | D | Done — pending commit |
+| 7.14 | Role selection screen | D | Done — pending commit. Runs only when both faction pools can fill an equal hand (Chaos, 10+ players) — see the note under 7.14 |
 | 7.15 | Discussion & voting screen | D | |
 | 7.16 | Round end screen | D | |
 | 7.17 | Fog & lighting rework | E | |
@@ -423,6 +423,42 @@ with faction — if Strangers get fewer options and therefore pick faster, that'
 Add a lobby setting to disable role selection entirely and fall back to the current random
 assignment.
 ```
+
+### Decisions taken while building 7.14
+
+**Simultaneous, not sequential.** The prompt says "prompted in randomised order", which
+reads as per-player turns — but a turn has an observable length, and a faction whose pool
+offers fewer cards is quicker to choose from. That makes "who finished first" a statistical
+faction tell no amount of careful payload addressing can undo. Everyone is prompted in one
+shared window instead; the randomised order survives as the order the roster is displayed
+in. See the note on `ROLE_SELECT_MS`.
+
+**One option count for the whole room.** `roleSelectOptionCount` returns a single number,
+the minimum across every faction's pool, capped at `MAX_ROLE_OPTIONS`. It is a pure function
+of *public* inputs (roster size, `enabledRoleIds`, balance overrides) — exactly like
+`strangerFactionCount` — so every client can compute it and knowing it conveys nothing. A
+per-faction count would be the leak, not a mitigation.
+
+**Selection permutes the deal, it never changes it.** The multiset `resolveRoleCounts`
+produces is dealt either way; picking only decides who takes which seat. This is not
+conservatism for its own sake: only the base `stranger` role carries `kill`, so a design
+where picks reshaped the multiset would let every Stranger choose a non-killing role and
+leave the town unable to lose. Every existing distribution guarantee (the parity clamp
+included) therefore survives untouched, and there is a test pinning that.
+
+**Known limitation — when it actually runs.** Because the offer is drawn from roles that
+have a seat in *this* deal, and the Stranger faction's seat count is small at low player
+counts, selection currently only engages under Chaos at 10+ players; below that it silently
+falls back to the random deal, and the lobby says so. Widening it means letting picks
+substitute roles into the deal, which is the balance change ruled out above — it needs the
+kill-capability guarantee designing first, not just a looser pool. Pinned in
+`GameRoomRoleSelect.test.ts` ("turns on only once BOTH pools can fill an equal hand") so a
+threshold change makes the reach visible rather than silently altering it.
+
+**Emblems are placeholders.** `art/approved/` holds no role-emblem sheet yet, so each card
+shows a rope-bordered disc with a two-letter code, keyed `role-emblem-<roleId>`
+(`roleEmblemKey`). `ROLE_EMBLEM_SYMBOL` records which symbol from
+`art/prompts/role-emblems.txt` belongs to which role, so the art pass has the mapping.
 
 ## 7.15 — Discussion and voting screen
 **Model:** Sonnet 5

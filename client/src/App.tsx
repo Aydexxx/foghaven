@@ -15,6 +15,7 @@ import {
   type ClientTask,
   type GameSummaryMessage,
   type RoleAssignment,
+  type RoleOptionsMessage,
   type TaskProgressMessage,
   type TasksMessage,
 } from "@foghaven/shared";
@@ -28,10 +29,12 @@ import { audioEngine } from "./audio/audioEngine";
 import { useGameAudio } from "./audio/useGameAudio";
 import { useGameJuice } from "./juice/useGameJuice";
 import { useButtonJuice } from "./juice/useButtonJuice";
+import { Button } from "./ui/primitives";
 import { AuthScreen } from "./ui/AuthScreen";
 import { MainMenu } from "./ui/MainMenu";
 import { LobbyRoom } from "./ui/LobbyRoom";
 import { RoleReveal } from "./ui/RoleReveal";
+import { RoleSelectScreen } from "./ui/RoleSelectScreen";
 import { MeetingScreen } from "./ui/MeetingScreen";
 import { GameOverScreen } from "./ui/GameOverScreen";
 import { ReconnectOverlay } from "./ui/ReconnectOverlay";
@@ -65,6 +68,7 @@ type Screen =
   | "auth"
   | "menu"
   | "lobby"
+  | "roleSelect"
   | "reveal"
   | "game"
   | "meeting"
@@ -72,6 +76,7 @@ type Screen =
 
 const SCREEN_FOR_PHASE: Record<string, Screen> = {
   [PHASE.LOBBY]: "lobby",
+  [PHASE.ROLE_SELECT]: "roleSelect",
   [PHASE.ROLE_REVEAL]: "reveal",
   [PHASE.PLAYING]: "game",
   [PHASE.MEETING]: "meeting",
@@ -130,6 +135,14 @@ function App() {
   const [name, setName] = useState(() => loadAuth()?.user.username ?? "");
   const [room, setRoom] = useState<Room<GameState> | null>(null);
   const [assignment, setAssignment] = useState<RoleAssignment | null>(null);
+  /**
+   * This client's OWN role-selection hand, or null when the game isn't
+   * running selection. Never contains anyone else's options — the server
+   * only ever addresses this payload to one socket.
+   */
+  const [roleOptions, setRoleOptions] = useState<
+    (RoleOptionsMessage & { receivedAt: number }) | null
+  >(null);
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [playerCount, setPlayerCount] = useState(0);
   const [enabledRoleIds, setEnabledRoleIds] = useState<string[]>([]);
@@ -434,6 +447,7 @@ function App() {
   const returnToMenu = useCallback(() => {
     setRoom(null);
     setAssignment(null);
+    setRoleOptions(null);
     setTasks([]);
     setChat([]);
     setGameSummary(null);
@@ -641,6 +655,17 @@ function App() {
     // screen that displays it does not exist yet when it lands.
     const offRole: () => void = room.onMessage<RoleAssignment>("role", setAssignment);
 
+    // This client's OWN role options, and only ever its own — the server
+    // addresses this message to one socket (see `GameRoom.beginRoleSelect`).
+    // Registered here for the same reason the role message is: it arrives in
+    // the same tick that flips the phase, before the screen that shows it
+    // exists. `receivedAt` is captured now so the countdown restarts cleanly
+    // if a reconnect re-sends the hand with less time left on it.
+    const offRoleOptions: () => void = room.onMessage<RoleOptionsMessage>(
+      "roleOptions",
+      (msg) => setRoleOptions({ ...msg, receivedAt: Date.now() }),
+    );
+
     // Same reasoning as the role message: the initial task list is sent in
     // the same server tick that starts the reveal, well before the game
     // screen (and its GameCanvas) exists to receive it directly.
@@ -714,6 +739,9 @@ function App() {
       // everything carried over from it for the next one.
       if (phase === PHASE.LOBBY) {
         setAssignment(null);
+        // A hand from last round must not survive into the next lobby — the
+        // next game may not even run selection.
+        setRoleOptions(null);
         setTasks([]);
         setChat([]);
         setGameSummary(null);
@@ -766,6 +794,7 @@ function App() {
 
     return () => {
       offRole();
+      offRoleOptions();
       offTasks();
       offTaskProgress();
       offChat();
@@ -817,6 +846,14 @@ function App() {
           onOpenFriends={auth ? () => setShowFriends(true) : undefined}
         />
       )}
+      {screen === "roleSelect" && room && roleOptions && (
+        <RoleSelectScreen
+          room={room}
+          options={roleOptions.options}
+          deadlineMs={roleOptions.deadlineMs}
+          receivedAt={roleOptions.receivedAt}
+        />
+      )}
       {screen === "reveal" && (
         <RoleReveal
           assignment={assignment}
@@ -843,6 +880,7 @@ function App() {
           role={assignment?.role ?? null}
           cameraReveal={cameraReveal}
           silenced={silenced}
+          voice={voice}
           onReport={auth ? (id, name) => setReportTarget({ id, name }) : undefined}
           onVoteMute={(id) => room.send("vote_mute", { targetId: id })}
         />
@@ -869,47 +907,39 @@ function App() {
       {wantsFullscreenLandscape && (
         <>
           <div className="rotate-device-overlay">{t("game.rotateDevicePrompt")}</div>
-          <button
-            type="button"
-            className="fullscreen-toggle"
-            onClick={toggleFullscreen}
-            title={t("game.fullscreenToggle")}
-          >
+          <Button className="fullscreen-toggle" onClick={toggleFullscreen} title={t("game.fullscreenToggle")}>
             ⛶
-          </button>
+          </Button>
         </>
       )}
 
       {/* Reachable from every screen past the name prompt, not just the game itself. */}
       {screen !== "auth" && screen !== "resuming" && (
-        <button
-          type="button"
+        <Button
           className="audio-settings-toggle"
           onClick={() => setShowAudioSettings(true)}
           aria-label={t("audioSettings.heading")}
         >
           🔊
-        </button>
+        </Button>
       )}
       {screen !== "auth" && screen !== "resuming" && (
-        <button
-          type="button"
+        <Button
           className="graphics-settings-toggle"
           onClick={() => setShowGraphicsSettings(true)}
           aria-label={t("graphicsSettings.heading")}
         >
           🎨
-        </button>
+        </Button>
       )}
       {screen !== "auth" && screen !== "resuming" && (
-        <button
-          type="button"
+        <Button
           className="keybinding-settings-toggle"
           onClick={() => setShowKeybindingSettings(true)}
           aria-label={t("keybindingSettings.heading")}
         >
           ⌨️
-        </button>
+        </Button>
       )}
       <LanguageSwitcher />
       {showAudioSettings && (
@@ -994,14 +1024,9 @@ function App() {
       {/* Only rendered once the SERVER has confirmed the role — see the
           `fetchAdminIdentity` effect above. */}
       {adminRole && adminRole !== USER_ROLE.PLAYER && screen !== "auth" && screen !== "resuming" && (
-        <button
-          type="button"
-          className="admin-toggle"
-          onClick={() => setShowAdmin(true)}
-          aria-label={t("admin.heading")}
-        >
+        <Button className="admin-toggle" onClick={() => setShowAdmin(true)} aria-label={t("admin.heading")}>
           🛡️
-        </button>
+        </Button>
       )}
 
       {moderationNotice && (

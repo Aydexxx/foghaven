@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { AudioBus } from "../audio/audioEngine";
 import { useAudioSettings } from "../audio/useAudioSettings";
+import { Button, Panel, Slider } from "./primitives";
 
 interface AudioSettingsPanelProps {
   onClose: () => void;
@@ -24,7 +25,7 @@ export function AudioSettingsPanel({ onClose }: AudioSettingsPanelProps) {
 
   return (
     <div className="audio-settings-overlay" role="dialog" aria-label={t("audioSettings.heading")}>
-      <div className="audio-settings-panel">
+      <Panel className="audio-settings-panel">
         <h2>{t("audioSettings.heading")}</h2>
 
         {BUSES.map((bus) => {
@@ -34,32 +35,33 @@ export function AudioSettingsPanel({ onClose }: AudioSettingsPanelProps) {
               <label className="audio-settings-label" htmlFor={`audio-volume-${bus}`}>
                 {t(`audioSettings.${bus}`)}
               </label>
-              <input
+              <Slider
                 id={`audio-volume-${bus}`}
-                type="range"
                 min={0}
                 max={1}
                 step={0.01}
                 value={settings[bus]}
                 disabled={muted}
-                onChange={(e) => setVolume(bus, Number(e.target.value))}
+                onChange={(value) => setVolume(bus, value)}
+                formatValue={(value) => `${Math.round(value * 100)}%`}
               />
-              <button
+              <Button
                 type="button"
+                variant="default"
                 className={muted ? "audio-mute-button audio-mute-active" : "audio-mute-button"}
                 onClick={() => setMuted(bus, !muted)}
                 aria-pressed={muted}
               >
                 {muted ? t("audioSettings.unmute") : t("audioSettings.mute")}
-              </button>
+              </Button>
             </div>
           );
         })}
 
-        <button type="button" className="secondary" onClick={onClose}>
+        <Button type="button" variant="default" className="secondary" onClick={onClose}>
           {t("audioSettings.closeButton")}
-        </button>
-      </div>
+        </Button>
+      </Panel>
     </div>
   );
 }

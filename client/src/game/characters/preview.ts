@@ -3,6 +3,7 @@ import { ARCHETYPES } from "./archetypes";
 import { FRAME_SIZE, RIG_ORIGIN } from "./rig";
 import { buildCharacterSpriteSheet } from "./spriteSheet";
 import { phaserTextStyle } from "../../theme/phaserText";
+import { colors } from "../../theme/tokens";
 
 const SCALE = 3;
 const ROW_HEIGHT = FRAME_SIZE * SCALE + 40;
@@ -44,13 +45,13 @@ class PreviewScene extends Phaser.Scene {
       const headroomY = feetY - FRAME_SIZE * SCALE + 40;
 
       this.add
-        .text(20, feetY - 40, rig.id, { ...phaserTextStyle("numeric", "label"), color: "#fff" })
+        .text(20, feetY - 40, rig.id, { ...phaserTextStyle("numeric", "label"), color: colors.foam })
         .setOrigin(0, 0.5);
 
       animKeys.forEach((anim, col) => {
         const x = 160 + col * COL_WIDTH;
         this.add
-          .text(x, headroomY, anim, { ...phaserTextStyle("numeric", "caption"), color: "#aaa" })
+          .text(x, headroomY, anim, { ...phaserTextStyle("numeric", "caption"), color: colors.mist })
           .setOrigin(0.5, 0.5);
         const sprite = this.add
           .sprite(x, feetY, "characters")
@@ -68,6 +69,6 @@ new Phaser.Game({
   parent: document.body,
   width: 160 + 5 * COL_WIDTH,
   height: 60 + ARCHETYPES.length * ROW_HEIGHT,
-  backgroundColor: "#1d1d26",
+  backgroundColor: colors.ink,
   scene: [PreviewScene],
 });
