@@ -538,7 +538,9 @@
       "busy": "Zaten bir işin başındasın.",
       "not_started": "Ona başlamamıştın.",
       "too_fast": "Bu gerçek olamayacak kadar hızlıydı.",
-      "unconfirmed": "Önce riski kabul etmelisin."
+      "unconfirmed": "Önce riski kabul etmelisin.",
+      "not_dark": "Bu iş yalnızca karanlıkta olur. Önce feneri söndür.",
+      "relit": "Fenerin tutuştu. Yaptığın her şey boşa gitti."
     }
   },
   "taskList": {
@@ -557,9 +559,17 @@
       "instructions": "Yayı sarmak için basılı tut. İşaretli bantta bırak — geç bırakırsan kol geri teper.",
       "crankLabel": "Sarmak için basılı tut"
     },
-    "bilge": {
-      "instructions": "Su tepeye ulaşmadan pompala.",
-      "pumpLabel": "Pompala"
+    "plate": {
+      "instructions": "Tepsiyi soldan sağa, acele etmeden tek hareketle sil."
+    },
+    "phosphor": {
+      "instructions": "Tablodaki işaretlerden yalnızca biri gerçekten parlıyor. Ona dokun.",
+      "markLabel": "Tablo işareti"
+    },
+    "mirror": {
+      "instructions": "Işın banda girdiği an Yakala'ya dokun.",
+      "progress": "{{successes}} / {{target}} yakalandı",
+      "catchLabel": "Yakala"
     },
     "ledger": {
       "instructions": "Her kaydı ait olduğu sütuna sürükle.",

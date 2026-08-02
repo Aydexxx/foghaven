@@ -1031,7 +1031,7 @@ button.secondary {
   text-align: center;
 }
 
-/* --- §8.3 the six harbour mini-games -------------------------------------- */
+/* --- §8.3/8.4 the eight harbour mini-games --------------------------------- */
 
 /* Trim the Wick — vertical drag gauge, flame height vs. a target band. */
 .wick-track {
@@ -1223,42 +1223,57 @@ button.secondary {
   animation: gear-kickback 0.3s ease-out;
 }
 
-/* Pump the Bilge — a rising water line and one big pump button. */
-.bilge-well {
+/* Set the Signal Mirror (8.4, DARK) — a self-sweeping beam, timing only. */
+.mirror-gauge {
+  width: 260px;
+}
+
+.mirror-gauge-track {
   position: relative;
-  width: 120px;
-  height: 200px;
-  background: var(--color-void);
-  border: 1px solid var(--color-ink);
+  height: 22px;
+  background: var(--color-ink);
+  border: 1px solid var(--color-void);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
 
-.bilge-water {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--color-fog-mid) 70%, transparent), var(--color-fog-dark));
-  transition: height 0.1s linear;
-}
-
-.bilge-overflow-line {
+.mirror-gauge-zone {
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--color-stranger-red);
+  bottom: 0;
+  background: rgba(95, 224, 220, 0.28);
+  border-left: 2px solid var(--color-lantern-cyan);
+  border-right: 2px solid var(--color-lantern-cyan);
 }
 
-.bilge-pump {
+.mirror-gauge-beam {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 4px;
+  background: var(--color-flame-core);
+  box-shadow: 0 0 10px 2px var(--color-flame-glow);
+  transform: translateX(-50%);
+}
+
+.mirror-progress {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
+}
+
+.mirror-catch {
   width: 140px;
   font-weight: 700;
 }
 
-.bilge-pump-pressed {
-  transform: translateY(2px);
+.mirror-catch-hit {
+  background: var(--color-lantern-cyan);
+  color: var(--color-ink);
+}
+
+.mirror-catch-miss {
+  background: var(--danger-well);
 }
 
 /* Sort the Ledger — drag-to-column. */
@@ -1427,6 +1442,79 @@ button.secondary {
   width: 120px;
   font-weight: 700;
   touch-action: none;
+}
+
+/* Develop the Plate (8.4, DARK) — wipe-to-reveal, timed not zoned. */
+.plate-tray {
+  position: relative;
+  width: 260px;
+  height: 120px;
+  background: var(--color-ink);
+  border: 1px solid var(--color-void);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.plate-image {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 35% 40%, color-mix(in srgb, var(--color-lantern-rust) 55%, transparent), transparent 60%),
+    linear-gradient(160deg, var(--color-wood-mid), var(--color-wood-dark));
+}
+
+.plate-tray-ruined .plate-image {
+  animation: plate-overexpose 0.3s ease-out forwards;
+}
+
+@keyframes plate-overexpose {
+  to {
+    background: var(--color-foam);
+    filter: brightness(2.2);
+  }
+}
+
+.plate-wiper {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-lantern-rust);
+  box-shadow: 0 0 8px 1px var(--color-lantern-rust);
+  transform: translateX(-50%);
+}
+
+.plate-wiper-active {
+  box-shadow: 0 0 12px 3px var(--color-lantern-rust);
+}
+
+/* Read the Phosphor Chart (8.4, DARK) — spot the one genuinely glowing mark. */
+.phosphor-chart {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--color-ink);
+  border: 1px solid var(--color-void);
+  border-radius: var(--radius-md);
+}
+
+.phosphor-mark {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  background: var(--color-void);
+  border: 1px solid var(--color-stone-dark);
+  border-radius: 50%;
+}
+
+.phosphor-mark-glow {
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  background: var(--color-lantern-jade);
+  box-shadow: 0 0 14px 4px var(--color-lantern-jade);
 }
 
 /* Ghost banner */

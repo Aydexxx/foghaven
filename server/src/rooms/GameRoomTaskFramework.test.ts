@@ -5,6 +5,7 @@ import { ColyseusTestServer } from "@colyseus/testing";
 import {
   FACTION,
   factionOf,
+  LANTERN_TOGGLE_COOLDOWN_MS,
   LOBBY_READY_PAD_POINT,
   PHASE,
   PLAYER_CONDITION,
@@ -139,9 +140,10 @@ function assignTaskAt(room: ServerRoom<GameState>, s: Seat, taskId: string): voi
   s.player.y = def.y;
 }
 
-const SAFE_TASK = TASK_DEFINITIONS.find((t) => t.tier === "safe")!;
+const SAFE_TASK = TASK_DEFINITIONS.find((t) => t.tier === "safe" && !t.dark)!;
 const INJURY_TASK = TASK_DEFINITIONS.find((t) => t.tier === "injury")!;
 const LETHAL_TASK = TASK_DEFINITIONS.find((t) => t.tier === "lethal")!;
+const DARK_TASK = TASK_DEFINITIONS.find((t) => t.dark)!;
 
 /** Long enough for the band's floor to have passed. */
 const pastFloor = (taskId: string) =>
@@ -648,4 +650,130 @@ describe("§8.2 attempts do not outlive the world they belong to", () => {
     expect(s.started).toHaveLength(0);
     expect(s.rejected.at(-1)?.reason).toBe("phase");
   });
+});
+
+describe("§8.4 dark tasks", () => {
+  it("refuses to open a dark attempt while the lantern is lit", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const s = seats[0]!;
+    assignTaskAt(room, s, DARK_TASK.id);
+    expect(s.player.lanternState).toBe("lit");
+    await tick(2);
+
+    s.client.send("task_start", { taskId: DARK_TASK.id });
+    await tick(3);
+
+    expect(s.started).toHaveLength(0);
+    expect(s.rejected.at(-1)?.reason).toBe("not_dark");
+    const attempts = (room as unknown as { taskAttempts: Map<string, unknown> }).taskAttempts;
+    expect(attempts.has(s.client.sessionId)).toBe(false);
+  });
+
+  it("opens once the lantern is out, and a hostile claim of darkness while still lit never gets in ahead of it", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const s = seats[0]!;
+    assignTaskAt(room, s, DARK_TASK.id);
+    await tick(2);
+
+    // Spamming the request while lit buys nothing — the server never trusts
+    // anything the client sends about its own lantern, only its own record
+    // of `lanternState`.
+    for (let i = 0; i < 3; i++) {
+      s.client.send("task_start", { taskId: DARK_TASK.id });
+    }
+    await tick(3);
+    expect(s.started).toHaveLength(0);
+    expect(s.rejected.every((r) => r.reason === "not_dark")).toBe(true);
+
+    s.client.send("toggle_lantern");
+    await tick(2);
+    expect(s.player.lanternState).toBe("extinguished");
+
+    s.client.send("task_start", { taskId: DARK_TASK.id });
+    await tick(2);
+    expect(s.started).toHaveLength(1);
+  });
+
+  it("cancels an in-flight dark attempt the instant the lantern is relit — no outcome either way", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const s = seats[0]!;
+    assignTaskAt(room, s, DARK_TASK.id);
+    s.client.send("toggle_lantern");
+    await tick(2);
+
+    s.client.send("task_start", { taskId: DARK_TASK.id });
+    await tick(2);
+    expect(s.started).toHaveLength(1);
+
+    // Past `LANTERN_TOGGLE_COOLDOWN_MS` — this second toggle is a genuine
+    // relight, not spam, and must not be swallowed by the same cooldown that
+    // guards against strobing.
+    await wait(LANTERN_TOGGLE_COOLDOWN_MS + 50);
+    s.client.send("toggle_lantern");
+    await tick(2);
+
+    expect(s.player.lanternState).toBe("lit");
+    expect(s.rejected.at(-1)?.reason).toBe("relit");
+    expect(s.outcomes).toHaveLength(0); // cancelled, not resolved either way
+    const attempts = (room as unknown as { taskAttempts: Map<string, unknown> }).taskAttempts;
+    expect(attempts.has(s.client.sessionId)).toBe(false);
+
+    // And nothing chases them later — the attempt is really gone, not merely hidden.
+    await wait(TASK_BAND_BOUNDS[DARK_TASK.band].maxMs + 500);
+    expect(s.outcomes).toHaveLength(0);
+    expect(s.player.alive).toBe(true);
+  }, 30_000);
+
+  it("relighting after the attempt already closed does nothing — there is nothing left to cancel", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const s = seats[0]!;
+    assignTaskAt(room, s, DARK_TASK.id);
+    s.client.send("toggle_lantern");
+    await tick(2);
+
+    s.client.send("task_start", { taskId: DARK_TASK.id });
+    await pastFloor(DARK_TASK.id);
+    s.client.send("task_resolve", { taskId: DARK_TASK.id, success: true });
+    await tick(3);
+    expect(s.outcomes).toHaveLength(1);
+    expect(s.outcomes[0]!.success).toBe(true);
+
+    s.rejected.length = 0;
+    s.client.send("toggle_lantern");
+    await tick(2);
+
+    expect(s.player.lanternState).toBe("lit");
+    expect(s.rejected).toHaveLength(0);
+  }, 15_000);
+
+  it("re-checks darkness at resolve, not only at open, so a lit resolve cannot slip through some other path", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const s = seats[0]!;
+    assignTaskAt(room, s, DARK_TASK.id);
+    s.client.send("toggle_lantern");
+    await tick(2);
+
+    s.client.send("task_start", { taskId: DARK_TASK.id });
+    await tick(2);
+    expect(s.started).toHaveLength(1);
+
+    // Force the lantern back to "lit" directly, bypassing the toggle handler
+    // (and therefore its cancel-on-relight branch) entirely — the same
+    // adversarial premise every other test in this file uses: assume the
+    // normal path was skipped, and check the fallback still holds.
+    s.player.lanternState = "lit";
+    await pastFloor(DARK_TASK.id);
+    s.client.send("task_resolve", { taskId: DARK_TASK.id, success: true });
+    await tick(3);
+
+    expect(s.outcomes).toHaveLength(1);
+    expect(s.outcomes[0]!.success).toBe(false);
+    // `safe` tier: an unresolved dark task still costs nothing but the time.
+    expect(s.player.alive).toBe(true);
+  }, 15_000);
 });

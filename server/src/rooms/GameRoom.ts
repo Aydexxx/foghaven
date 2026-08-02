@@ -1872,6 +1872,14 @@ export class GameRoom extends Room<GameState> {
       reject("busy");
       return;
     }
+    // 8.4: "the station won't start while you're holding a light." Checked
+    // against the player's own server-side `lanternState`, never anything the
+    // client asserts — a client claiming darkness while lit is refused here
+    // regardless of what it sends.
+    if (definition.dark && player.lanternState !== "extinguished") {
+      reject("not_dark");
+      return;
+    }
     // "Never a surprise death": a lethal attempt cannot even be opened
     // without the client having shown, and the player having accepted, the
     // warning. A client that skips its own UI is refused here, so nobody can
@@ -2017,7 +2025,19 @@ export class GameRoom extends Room<GameState> {
     // away mid-task and then claims the work is claiming work it did not do.
     // A timeout skips the check — the deadline's outcome is owed wherever
     // they ended up.
-    const resolved = success && !timedOut && this.withinTaskRange(player, definition);
+    //
+    // Darkness gets the same re-check for a `dark` task, for the same reason.
+    // In the honest client it can never actually fire — relighting cancels
+    // the attempt on the spot (`handleToggleLantern`), so there is no path
+    // left by which a resolve could arrive with the lantern lit — but it is
+    // written as an explicit gate rather than left to that invariant alone,
+    // exactly as the roadmap asks: "verify the lantern was actually
+    // extinguished server-side for the whole duration."
+    const resolved =
+      success &&
+      !timedOut &&
+      this.withinTaskRange(player, definition) &&
+      (!definition.dark || player.lanternState === "extinguished");
 
     this.clientFor(sessionId)?.send("taskOutcome", {
       taskId: attempt.taskId,
@@ -2847,7 +2867,32 @@ export class GameRoom extends Room<GameState> {
     }
     this.lastLanternToggleAt.set(client.sessionId, now);
 
-    player.lanternState = player.lanternState === "lit" ? "extinguished" : "lit";
+    const next = player.lanternState === "lit" ? "extinguished" : "lit";
+    if (next === "lit") {
+      // 8.4: "relighting mid-task cancels the task." A dark task's whole
+      // premise is a lantern that stays out for the entire attempt, so
+      // relighting doesn't merely invalidate the eventual resolve — it ends
+      // the attempt right here, the same way walking into a meeting does.
+      this.cancelDarkTaskOnRelight(client.sessionId);
+    }
+    player.lanternState = next;
+  }
+
+  /** See the relight branch of `handleToggleLantern`. */
+  private cancelDarkTaskOnRelight(sessionId: string): void {
+    const attempt = this.taskAttempts.get(sessionId);
+    if (!attempt) {
+      return;
+    }
+    const definition = TASK_DEFINITIONS_BY_ID.get(attempt.taskId);
+    if (!definition?.dark) {
+      return;
+    }
+    this.clearTaskAttempt(sessionId);
+    this.clientFor(sessionId)?.send("taskRejected", {
+      taskId: attempt.taskId,
+      reason: "relit",
+    } satisfies TaskRejectedMessage);
   }
 
   /**

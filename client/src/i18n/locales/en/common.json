@@ -538,7 +538,9 @@
       "busy": "You're already working on something.",
       "not_started": "You hadn't started that.",
       "too_fast": "That was too quick to be real.",
-      "unconfirmed": "You have to accept the risk first."
+      "unconfirmed": "You have to accept the risk first.",
+      "not_dark": "This only works in the dark. Put your lantern out first.",
+      "relit": "Your lantern caught. Whatever you were doing is lost."
     }
   },
   "taskList": {
@@ -557,9 +559,17 @@
       "instructions": "Hold to wind the spring. Release inside the marked band — release late and it kicks back.",
       "crankLabel": "Hold to wind"
     },
-    "bilge": {
-      "instructions": "Pump before the water reaches the top.",
-      "pumpLabel": "Pump"
+    "plate": {
+      "instructions": "Wipe the tray open, left to right, in one unhurried pass."
+    },
+    "phosphor": {
+      "instructions": "Only one mark on the chart is actually glowing. Tap it.",
+      "markLabel": "Chart mark"
+    },
+    "mirror": {
+      "instructions": "Tap Catch the moment the beam sits inside the band.",
+      "progress": "{{successes}} / {{target}} caught",
+      "catchLabel": "Catch"
     },
     "ledger": {
       "instructions": "Drag each entry into the column it belongs to.",

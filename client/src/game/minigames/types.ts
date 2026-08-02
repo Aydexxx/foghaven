@@ -31,14 +31,15 @@ export interface MinigameProps {
    * injured. Each puzzle decides what "its window" means, which is why this is
    * a plain number rather than a prescribed rule.
    *
-   * Only the two puzzles that HAVE a window use it today, and that is
-   * deliberate rather than unfinished: `CalibrationGame` narrows its success
-   * zone and `PatternMemoryGame` shortens each flash. The other four (code
-   * entry, ordering, rotation, wires) are untimed exact-match puzzles with
-   * nothing to narrow — bolting a timer onto them to "be consistent" would
-   * change what those tasks are rather than how hard they are while hurt.
-   * A new mini-game with a window should use this; one without should ignore
-   * it.
+   * Only the puzzles that HAVE a window use it, and that is deliberate rather
+   * than unfinished: `WickGame` and `GearGame` narrow their target band,
+   * `CraneGame` narrows its safe zone, `PlateGame` raises its no-rush floor,
+   * `PhosphorGame` dims the gap between the real mark and the decoys, and
+   * `MirrorGame` narrows its catch window. `NetGame` and `LedgerGame` are
+   * untimed exact-match puzzles with nothing to narrow — bolting a timer onto
+   * them to "be consistent" would change what those tasks are rather than how
+   * hard they are while hurt. A new mini-game with a window should use this;
+   * one without should ignore it.
    *
    * Now that 8.2 stakes real outcomes on a mini-game, this is no longer a
    * free-floating difficulty knob: an injured player really is likelier to

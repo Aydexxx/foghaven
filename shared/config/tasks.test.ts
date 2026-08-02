@@ -9,14 +9,14 @@ import {
 } from "./tasks";
 
 /**
- * §8.3's remap of the placeholder task roster onto the six named harbour
- * mini-games. `server/src/map.test.ts` already pins the room-coverage
- * invariant (one task per task-eligible room) and
- * `server/src/rooms/GameRoomTaskFramework.test.ts` already pins the tier
- * budget generically; this file is the id-and-mechanic-specific half —
- * exactly the part a future room reshuffle is most likely to get wrong by
- * accident, since nothing else would catch a copy-pasted id or a tier that
- * quietly drifted off its intended task.
+ * §8.3's remap of the placeholder task roster onto named harbour mini-games,
+ * and §8.4's further swap of three of those for DARK tasks.
+ * `server/src/map.test.ts` already pins the room-coverage invariant (one task
+ * per task-eligible room) and `server/src/rooms/GameRoomTaskFramework.test.ts`
+ * already pins the tier budget generically; this file is the
+ * id-and-mechanic-specific half — exactly the part a future room reshuffle is
+ * most likely to get wrong by accident, since nothing else would catch a
+ * copy-pasted id or a tier that quietly drifted off its intended task.
  */
 
 describe("§8.3 the task roster", () => {
@@ -25,23 +25,35 @@ describe("§8.3 the task roster", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("uses every one of the six mini-games at least once", () => {
-    const used = new Set(TASK_DEFINITIONS.map((task) => task.minigame));
-    const all: MinigameType[] = ["wick", "net", "gear", "bilge", "ledger", "crane"];
-    for (const type of all) {
-      expect(used.has(type), `no task uses "${type}"`).toBe(true);
-    }
-  });
-
-  it("gives `wick` and `net` exactly two tasks each — the rest exactly one", () => {
+  it("uses every one of the eight mini-games exactly once", () => {
+    const all: MinigameType[] = [
+      "wick",
+      "net",
+      "gear",
+      "ledger",
+      "crane",
+      "plate",
+      "phosphor",
+      "mirror",
+    ];
     const counts = new Map<MinigameType, number>();
     for (const task of TASK_DEFINITIONS) {
       counts.set(task.minigame, (counts.get(task.minigame) ?? 0) + 1);
     }
-    expect(counts.get("wick")).toBe(2);
-    expect(counts.get("net")).toBe(2);
-    for (const solo of ["gear", "bilge", "ledger", "crane"] as const) {
-      expect(counts.get(solo), solo).toBe(1);
+    for (const type of all) {
+      expect(counts.get(type), type).toBe(1);
+    }
+  });
+
+  it("puts the dark flag on exactly the three §8.4 tasks, all of them safe tier", () => {
+    const dark = TASK_DEFINITIONS.filter((task) => task.dark);
+    expect(dark.map((task) => task.id).sort()).toEqual(
+      ["develop-the-plate", "read-the-phosphor-chart", "set-the-signal-mirror"].sort(),
+    );
+    for (const task of dark) {
+      // "These are `safe` tier — the risk is being alone in the dark, not
+      // the task itself."
+      expect(task.tier, task.id).toBe("safe");
     }
   });
 

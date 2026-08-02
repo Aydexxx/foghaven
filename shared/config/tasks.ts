@@ -4,23 +4,36 @@ import { TASK_ROOM_ANCHOR } from "../map/townMap";
 export type TaskType = "short" | "long" | "common" | "visual";
 
 /**
- * The six harbour mini-games (docs/ROADMAP_PHASE8.md 8.3) a task point can
- * present. This is a purely client-side rendering concern — the server never
- * looks at it; every step of a task re-plays the same mini-game, freshly
- * randomised each time. `wick` and `net` each cover two `TASK_DEFINITIONS`
- * entries — the same reuse the placeholder set this replaced already had.
+ * The eight harbour mini-games (docs/ROADMAP_PHASE8.md 8.3, 8.4) a task point
+ * can present — one per `TASK_DEFINITIONS` entry, one per task-eligible room.
+ * This is a purely client-side rendering concern — the server never looks at
+ * it; every step of a task re-plays the same mini-game, freshly randomised
+ * each time.
  *
- *   - `wick`   — Trim the Wick: drag a flame's height into a band; overshoot resets it.
- *   - `net`    — Mend the Net: drag rope ends to their matching knots.
- *   - `gear`   — Wind the Lighthouse Gear: hold to wind, release in the
- *                window. The one INJURY-tier game — release late and the
- *                crank kicks back.
- *   - `bilge`  — Pump the Bilge: timed presses against a rising water line.
- *   - `ledger` — Sort the Ledger: drag entries into the correct column.
- *   - `crane`  — Haul the Crane: balance a swinging load across a beam. The
- *                one LETHAL-tier game — drop it on yourself and you die.
+ *   - `wick`     — Trim the Wick: drag a flame's height into a band; overshoot resets it.
+ *   - `net`      — Mend the Net: drag rope ends to their matching knots.
+ *   - `gear`     — Wind the Lighthouse Gear: hold to wind, release in the
+ *                  window. The one INJURY-tier game — release late and the
+ *                  crank kicks back.
+ *   - `ledger`   — Sort the Ledger: drag entries into the correct column.
+ *   - `crane`    — Haul the Crane: balance a swinging load across a beam. The
+ *                  one LETHAL-tier game — drop it on yourself and you die.
+ *   - `plate`    — Develop the Plate (8.4, DARK): wipe the tray open at a
+ *                  patient, unhurried pace — rush it and the plate overexposes.
+ *   - `phosphor` — Read the Phosphor Chart (8.4, DARK): pick out the one
+ *                  glowing mark from the rest of the chart before it fades.
+ *   - `mirror`   — Set the Signal Mirror (8.4, DARK): catch the lighthouse
+ *                  beam in the mirror's band as it sweeps past, again and again.
  */
-export type MinigameType = "wick" | "net" | "gear" | "bilge" | "ledger" | "crane";
+export type MinigameType =
+  | "wick"
+  | "net"
+  | "gear"
+  | "ledger"
+  | "crane"
+  | "plate"
+  | "phosphor"
+  | "mirror";
 
 /**
  * A single stage of a task. Steps are placeholders for now — completing one
@@ -135,10 +148,14 @@ export interface TaskDefinition {
   witness: boolean;
   /**
    * Requires the player's lantern to be extinguished for the whole attempt
-   * (8.4). Declared now, **not enforced yet**: the server-side "was it
-   * actually dark the entire time" check is 8.4's job, and a half-enforced
-   * version would be worse than none — a client could learn exactly how much
-   * darkness it had to fake.
+   * (8.4). Enforced at both ends: `GameRoom.handleTaskStart` refuses to open
+   * one while lit, and relighting mid-attempt (`GameRoom.handleToggleLantern`)
+   * cancels it outright rather than merely flagging it — the alternative,
+   * letting the client "pay for" a lit interval it now admits to, would mean
+   * the enforcement inspects rather than prevents. Every dark task is `safe`
+   * tier: the risk this asks the player to take is being unseen and half-blind
+   * alone, which the extinguish mechanic already models — see its own doc on
+   * `GameRoom.handleToggleLantern`.
    */
   dark: boolean;
 }
@@ -196,16 +213,21 @@ export const TASK_DEFINITIONS: readonly TaskDefinition[] = [
     steps: [{ id: "1" }],
   },
   {
-    id: "pump-the-bilge",
-    type: "long",
-    minigame: "bilge",
+    // 8.4's first DARK task, replacing `pump-the-bilge`. Docks rather than
+    // the lighthouse itself: the lighthouse room is `wind-the-lighthouse-gear`
+    // (the one INJURY-tier task, not to be displaced), but the docks face it
+    // across open water — exactly where you would stand to catch its beam
+    // in a mirror.
+    id: "set-the-signal-mirror",
+    type: "short",
+    minigame: "mirror",
     room: "docks",
     ...TASK_ROOM_ANCHOR.docks,
-    band: "long",
+    band: "short",
     tier: "safe",
     witness: false,
-    dark: false,
-    steps: [{ id: "1" }, { id: "2" }, { id: "3" }],
+    dark: true,
+    steps: [{ id: "1" }],
   },
   {
     id: "sort-the-ledger",
@@ -237,35 +259,33 @@ export const TASK_DEFINITIONS: readonly TaskDefinition[] = [
     steps: [{ id: "1" }],
   },
   {
-    // Not one of 8.3's six named tasks — the roadmap asks for six mini-games,
-    // not eight, and `map.test.ts` pins one task per task-eligible room. This
-    // reuses `wick`'s dial-drag mechanic (a chart reading is exactly the kind
-    // of "get the needle in the band" fiddling the wick gauge already does),
-    // the same way `calibration` used to cover two rooms.
-    id: "read-the-chart",
+    // 8.4's second DARK task, replacing `read-the-chart` — same station, same
+    // idea of reading a chart, now legible only by its own glow with the
+    // lantern out.
+    id: "read-the-phosphor-chart",
     type: "visual",
-    minigame: "wick",
+    minigame: "phosphor",
     room: "infirmary",
     ...TASK_ROOM_ANCHOR.infirmary,
     band: "short",
     tier: "safe",
     witness: false,
-    dark: false,
+    dark: true,
     steps: [{ id: "1" }],
   },
   {
-    // As above — reuses `net`'s drag-to-match mechanic (matching manifest
-    // entries by connecting them is mechanically the same shape as tying
-    // ropes to knots).
-    id: "decode-the-manifest",
+    // 8.4's third DARK task, replacing `decode-the-manifest`. The cellar has
+    // no windows — the one room in the harbour that was already a darkroom
+    // before this made it one on purpose.
+    id: "develop-the-plate",
     type: "long",
-    minigame: "net",
+    minigame: "plate",
     room: "cellar",
     ...TASK_ROOM_ANCHOR.cellar,
     band: "long",
     tier: "safe",
     witness: false,
-    dark: false,
+    dark: true,
     steps: [{ id: "1" }, { id: "2" }],
   },
 ];
@@ -329,7 +349,16 @@ export interface TaskProgressMessage {
 // attempt itself at the deadline — as a FAILURE. Every branch below exists
 // because the client is assumed hostile; see `GameRoom.handleTaskStart`.
 
-/** Why the server refused to open or resolve an attempt. Only ever about the asker's own state. */
+/**
+ * Why the server refused to open or resolve an attempt, or tore one down
+ * mid-flight. Only ever about the asker's own state.
+ *
+ * `not_dark` and `relit` are 8.4's: the first refuses to even open a `dark`
+ * task while the lantern is lit, the second is not a refusal at all but a
+ * forced cancellation — sent when a player relights partway through one,
+ * which ends the attempt outright rather than merely noting the lapse. See
+ * `GameRoom.handleToggleLantern`.
+ */
 export type TaskRejectReason =
   | "phase"
   | "not_assigned"
@@ -339,7 +368,9 @@ export type TaskRejectReason =
   | "busy"
   | "not_started"
   | "too_fast"
-  | "unconfirmed";
+  | "unconfirmed"
+  | "not_dark"
+  | "relit";
 
 /** `task_start` — request to open an attempt. */
 export interface TaskStartMessage {

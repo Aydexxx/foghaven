@@ -14,16 +14,23 @@ import type { MinigameProps } from "../game/minigames/types";
 import * as juiceEvents from "../juice/juiceEvents";
 import { Button, Panel } from "./primitives";
 
-// Lazy so none of the six mini-games' code ships in the initial bundle — only
-// one is ever shown at a time, and a given session may never open some of them
-// at all. Each becomes its own chunk, fetched the first time it is needed.
+// Lazy so none of the eight mini-games' code ships in the initial bundle —
+// only one is ever shown at a time, and a given session may never open some
+// of them at all. Each becomes its own chunk, fetched the first time it is
+// needed.
 const MINIGAMES: Record<MinigameType, ComponentType<MinigameProps>> = {
   wick: lazy(() => import("../game/minigames/WickGame").then((m) => ({ default: m.WickGame }))),
   net: lazy(() => import("../game/minigames/NetGame").then((m) => ({ default: m.NetGame }))),
   gear: lazy(() => import("../game/minigames/GearGame").then((m) => ({ default: m.GearGame }))),
-  bilge: lazy(() => import("../game/minigames/BilgeGame").then((m) => ({ default: m.BilgeGame }))),
   ledger: lazy(() => import("../game/minigames/LedgerGame").then((m) => ({ default: m.LedgerGame }))),
   crane: lazy(() => import("../game/minigames/CraneGame").then((m) => ({ default: m.CraneGame }))),
+  plate: lazy(() => import("../game/minigames/PlateGame").then((m) => ({ default: m.PlateGame }))),
+  phosphor: lazy(() =>
+    import("../game/minigames/PhosphorGame").then((m) => ({ default: m.PhosphorGame })),
+  ),
+  mirror: lazy(() =>
+    import("../game/minigames/MirrorGame").then((m) => ({ default: m.MirrorGame })),
+  ),
 };
 
 /**
@@ -93,6 +100,14 @@ export function TaskAttemptOverlay({ room, task, injured = false, onClose }: Tas
     });
     const offRejected: () => void = room.onMessage<TaskRejectedMessage>("taskRejected", (msg) => {
       if (msg.taskId !== task.id) return;
+      // Every other rejection reason arrives before `taskStarted` ever does,
+      // so `openedRef` is still false. `relit` is the one exception — the
+      // server already tore the attempt down when it sent this (see
+      // `GameRoom.cancelDarkTaskOnRelight`), so there is nothing left for an
+      // unmount to abort.
+      if (msg.reason === "relit") {
+        openedRef.current = false;
+      }
       setRejection(msg.reason);
       setStage("verdict");
     });
