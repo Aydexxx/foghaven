@@ -469,6 +469,9 @@
     "reasonCriticalSabotage": "The Lighthouse flooded before it could be repaired.",
     "backToLobby": "Back to Lobby",
     "waitingForHost": "Waiting for the host to return to the lobby…",
+    "roster": {
+      "heading": "Roster"
+    },
     "summary": {
       "heading": "Round Summary",
       "survived": "Survived",

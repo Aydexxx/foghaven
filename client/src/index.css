@@ -1675,6 +1675,68 @@ button.secondary {
   }
 }
 
+/* §9/§10 round-end cutscene: the losing side's lanterns extinguish one by
+   one, 80ms apart, before the result title slams in — `GameOverScreen`
+   renders this in place of the results panel until the sequence completes. */
+.round-end-cutscene {
+  width: min(640px, 94vw);
+  min-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xl);
+  padding: var(--space-xl);
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+}
+
+.round-end-lanterns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  max-width: 80%;
+}
+
+.round-end-lantern {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--round-end-lantern-color);
+  box-shadow: 0 0 10px 3px var(--round-end-lantern-color);
+  transition:
+    opacity 200ms linear,
+    box-shadow 200ms linear; /* LANTERN_EXTINGUISH_FADE_MS */
+}
+
+/* One by one, 80ms apart — see `isExtinguishedAt` in roundEndTimeline.ts. */
+.round-end-lantern-out {
+  opacity: 0.15;
+  box-shadow: none;
+}
+
+.round-end-reduced-motion .round-end-lantern {
+  transition: none;
+}
+
+.round-end-cutscene-title {
+  margin: 0;
+  max-width: 90%;
+  font-family: var(--font-display);
+  font-size: var(--font-size-title);
+  line-height: var(--line-height-title);
+  text-align: center;
+  color: var(--color-foam);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  animation: meeting-call-title-slam 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.round-end-reduced-motion .round-end-cutscene-title {
+  animation: none;
+}
+
 /* Watchman's camera reveal — its own quiet panel above the stage content. */
 .camera-reveal {
   width: 100%;
@@ -2046,8 +2108,11 @@ button.secondary {
   font-size: var(--font-size-caption);
 }
 
-/* Game over / results screen — reuses .reveal-intro, .reveal-role, .roster */
+/* Game over / results screen — reuses .reveal-intro, .reveal-role. Widened
+   past the default Panel width for the same reason `.meeting` is: a Card
+   grid needs room to actually read as a grid. */
 .game-over {
+  width: min(640px, 94vw);
   align-items: center;
   text-align: center;
   border-radius: var(--radius-sm);
@@ -2061,10 +2126,6 @@ button.secondary {
   color: var(--color-stranger-red);
 }
 
-.game-over-roster li {
-  justify-content: space-between;
-}
-
 .role-tag {
   font-size: var(--font-size-caption);
   font-weight: 600;
@@ -2075,6 +2136,90 @@ button.secondary {
 
 .role-tag-stranger {
   color: var(--color-stranger-red);
+}
+
+.role-tag-neutral {
+  color: var(--color-mist);
+}
+
+/* The roster's per-player Card: sprite, role emblem, name, faction — the
+   drama payoff right after the cutscene, so unlike the two sections below it
+   this one opens expanded by default (see `GameOverScreen`'s `open` prop). */
+.game-over-roster-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: var(--space-sm);
+}
+
+.game-over-roster-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  background: var(--color-void);
+  text-align: center;
+  position: relative;
+}
+
+.game-over-roster-name {
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  color: var(--color-foam);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* A Card that is also a native `<details>` disclosure — §8's Card border/fill
+   (the `ph-card` class, applied directly since `Card` itself is a fixed
+   `<div>`) wrapping a collapsible section, so the roster/summary/vote-history
+   split reads as three Cards rather than a wall of data on first view. */
+.game-over-disclosure {
+  width: 100%;
+  text-align: left;
+  overflow: hidden;
+}
+
+.game-over-disclosure-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: 48px;
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: var(--font-size-label);
+  color: var(--color-flame-glow);
+}
+
+.game-over-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.game-over-disclosure-summary:focus-visible {
+  outline: 3px solid var(--color-flame-glow);
+  outline-offset: -3px;
+}
+
+.game-over-disclosure-summary::after {
+  content: "▾";
+  font-size: var(--font-size-caption);
+  transition: transform 150ms ease-out;
+}
+
+.game-over-disclosure[open] .game-over-disclosure-summary::after {
+  transform: rotate(180deg);
+}
+
+.game-over-disclosure-body {
+  padding: 0 var(--space-md) var(--space-md);
 }
 
 /*
@@ -2844,11 +2989,6 @@ button.secondary {
   font-size: var(--font-size-caption);
 }
 
-/* The victory-pose mini portrait on the results roster. */
-.game-over-roster li {
-  gap: var(--space-sm);
-}
-
 /* A destructive primary action — account deletion. Same shape as an ordinary
    button, but built from the danger palette instead of brass so it never
    reads as "just another button" in a list of them. */
@@ -3137,22 +3277,8 @@ button.danger {
   color: var(--color-mist);
 }
 
-/* End-of-game summary (GameOverScreen) */
-.game-summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--color-ink);
-}
-
-.game-summary-heading {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--font-size-label);
-  color: var(--color-flame-glow);
-}
-
+/* End-of-game summary (GameOverScreen) — each section's own heading now
+   lives in its `<summary>` (see `.game-over-disclosure-summary`), not here. */
 .game-summary-players {
   list-style: none;
   margin: 0;

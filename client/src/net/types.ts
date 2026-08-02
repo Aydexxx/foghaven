@@ -137,4 +137,6 @@ export interface RevealedPlayerState extends Schema {
   outfitId: string;
   victoryPoseId: string;
   deathEffectId: string;
+  /** The §3.5 identity light, denormalised for the round-end extinguish cutscene. See the server schema's own doc. */
+  lanternColor: string;
 }

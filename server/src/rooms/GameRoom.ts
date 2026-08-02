@@ -2982,6 +2982,9 @@ export class GameRoom extends Room<GameState> {
       // Denormalised for the results screen's costumed pose preview — see
       // the doc on `RevealedPlayer.color`.
       entry.color = player.color;
+      // Denormalised for the round-end extinguish cutscene — see the doc on
+      // `RevealedPlayer.lanternColor`.
+      entry.lanternColor = player.lanternColor;
       entry.hatId = player.hatId;
       entry.accessoryId = player.accessoryId;
       entry.petId = player.petId;

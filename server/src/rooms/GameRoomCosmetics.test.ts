@@ -264,5 +264,7 @@ describe("coin economy at game over", () => {
     const revealed = room.state.finalRoster.get(client.sessionId)!;
     expect(revealed.hatId).toBe("top_hat");
     expect(revealed.color).toBe(room.state.players.get(client.sessionId)?.color ?? revealed.color);
+    expect(revealed.lanternColor).toBe(room.state.players.get(client.sessionId)?.lanternColor);
+    expect(revealed.lanternColor).not.toBe("");
   });
 });

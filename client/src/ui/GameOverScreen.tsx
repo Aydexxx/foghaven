@@ -6,6 +6,8 @@ import type { GameState } from "../net/types";
 import { archetypeForColor } from "../game/characters/assign";
 import { VICTORY_POSE_VISUALS } from "../game/characters/cosmeticVisuals";
 import { RigPreview } from "./RigPreview";
+import { RoleEmblem } from "./RoleEmblem";
+import { RoundEndCutscene } from "./roundEnd/RoundEndCutscene";
 import { Button, Card, Panel } from "./primitives";
 
 interface GameOverScreenProps {
@@ -32,6 +34,7 @@ interface RosterEntry {
   name: string;
   role: string;
   color: string;
+  lanternColor: string;
   hatId: string;
   accessoryId: string;
   petId: string;
@@ -53,6 +56,7 @@ function readRoster(room: Room<GameState>): RosterEntry[] {
       name: entry.name,
       role: entry.role,
       color: entry.color,
+      lanternColor: entry.lanternColor,
       hatId: entry.hatId,
       accessoryId: entry.accessoryId,
       petId: entry.petId,
@@ -71,16 +75,32 @@ const REASON_KEY: Record<string, string> = {
   [WIN_REASON.CRITICAL_SABOTAGE]: "gameOver.reasonCriticalSabotage",
 };
 
+const FACTION_TAG_CLASS: Record<string, string> = {
+  [FACTION.STRANGER]: "role-tag role-tag-stranger",
+  [FACTION.NEUTRAL]: "role-tag role-tag-neutral",
+};
+
 /**
- * The results screen: winning faction, every role revealed, and a "Back to
- * Lobby" reset that only the host can trigger — the same host-only pattern
- * as starting the game. Resetting is a request; the server decides whether
- * it actually happens and drives every client back via the phase change.
+ * The results screen: a §9/§10-style cutscene — the losing side's lanterns
+ * extinguish one by one, 80ms apart, before the result title slams in — and
+ * only then the roster (role emblem, faction, sprite), round summary and
+ * voting history. The drama comes first; the statistics, tucked into
+ * collapsible Cards, come second and start closed so the screen isn't a wall
+ * of data on first view.
+ *
+ * "Back to Lobby" stays a host-only reset — the same host-only pattern as
+ * starting the game. Resetting is a request; the server decides whether it
+ * actually happens and drives every client back via the phase change.
  */
 export function GameOverScreen({ room, summary, onReport }: GameOverScreenProps) {
   const { t } = useTranslation();
   const [roster, setRoster] = useState(() => readRoster(room));
   const [hostId, setHostId] = useState(room.state.hostId);
+  // Local-only and per-client, the same way `EjectionCutscene`'s skip is:
+  // nothing here talks to the server, so one player's cutscene finishing a
+  // beat sooner or later than another's changes nothing about how the round
+  // itself resolved.
+  const [cutsceneDone, setCutsceneDone] = useState(false);
 
   useEffect(() => {
     const sync = () => setRoster(readRoster(room));
@@ -96,117 +116,150 @@ export function GameOverScreen({ room, summary, onReport }: GameOverScreenProps)
   const isHost = hostId === room.sessionId;
   const townsfolkWon = room.state.winningFaction === FACTION.TOWNSFOLK;
   const reasonKey = REASON_KEY[room.state.winReason] ?? "gameOver.reasonTasks";
+  const titleKey = townsfolkWon ? "gameOver.townsfolkWin" : "gameOver.strangersWin";
+
+  if (!cutsceneDone) {
+    // Roster order (join order, identical on every client — see
+    // `readRoster`'s own doc) doubles as the extinguish order: no separate
+    // sequencing decision to keep in sync with the roster below it.
+    const losingLanternColors = roster
+      .filter((entry) => roleById(entry.role)?.faction !== room.state.winningFaction)
+      .map((entry) => entry.lanternColor);
+    return (
+      <RoundEndCutscene
+        losingLanternColors={losingLanternColors}
+        titleKey={titleKey}
+        onComplete={() => setCutsceneDone(true)}
+      />
+    );
+  }
 
   return (
     <Panel
       className={`panel game-over ${townsfolkWon ? "game-over-townsfolk" : "game-over-stranger"}`}
     >
       <p className="reveal-intro">{t("gameOver.intro")}</p>
-      <h1 className="reveal-role">
-        {townsfolkWon ? t("gameOver.townsfolkWin") : t("gameOver.strangersWin")}
-      </h1>
+      <h1 className="reveal-role">{t(titleKey)}</h1>
       <p className="hint">{t(reasonKey)}</p>
 
-      <ul className="roster game-over-roster">
-        {roster.map((entry) => {
-          // Registry-driven: the label comes from the role's own i18n entry
-          // and the styling from its faction, so a new role reveals itself
-          // here with no change to this file.
-          const entryFaction = roleById(entry.role)?.faction;
-          const hostileFaction = entryFaction === FACTION.STRANGER;
-          // Shown for the winning side only — a loser's equipped victory
-          // pose stays exactly that: equipped, unused this round.
-          const isWinner = entryFaction === room.state.winningFaction;
-          return (
-            <li key={entry.id}>
-              {isWinner && (
-                <Card>
+      <details className="ph-card game-over-disclosure" open>
+        <summary className="game-over-disclosure-summary">
+          <span>{t("gameOver.roster.heading")}</span>
+        </summary>
+        <ul className="game-over-roster-grid">
+          {roster.map((entry) => {
+            // Registry-driven: the label comes from the role's own i18n
+            // entry and the styling from its faction, so a new role reveals
+            // itself here with no change to this file.
+            const entryFaction = roleById(entry.role)?.faction;
+            const factionTagClass = (entryFaction && FACTION_TAG_CLASS[entryFaction]) || "role-tag";
+            // The victory pose is shown for the winning side only — a
+            // loser's equipped pose stays exactly that: equipped, unused
+            // this round. Every card still gets the base sprite, though —
+            // "a player card without a face is a spreadsheet row" (ART_BIBLE §8).
+            const isWinner = entryFaction === room.state.winningFaction;
+            return (
+              <li key={entry.id}>
+                <Card className="game-over-roster-card">
                   <RigPreview
                     archetypeId={archetypeForColor(entry.color).id}
                     hat={entry.hatId || undefined}
                     accessory={entry.accessoryId || undefined}
                     outfit={entry.outfitId || undefined}
                     pet={entry.petId || undefined}
-                    pose={entry.victoryPoseId ? VICTORY_POSE_VISUALS[entry.victoryPoseId] : undefined}
+                    pose={
+                      isWinner && entry.victoryPoseId
+                        ? VICTORY_POSE_VISUALS[entry.victoryPoseId]
+                        : undefined
+                    }
                     size={40}
                   />
+                  <RoleEmblem roleId={entry.role} />
+                  <span className="game-over-roster-name">{entry.name}</span>
+                  <span className={factionTagClass}>
+                    {t(`factions.${entryFaction ?? FACTION.TOWNSFOLK}`)}
+                  </span>
+                  {onReport && entry.id !== room.sessionId && (
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="moderation-button"
+                      title={t("moderation.reportTitle")}
+                      aria-label={t("moderation.reportLabel", { name: entry.name })}
+                      onClick={() => onReport(entry.id, entry.name)}
+                    >
+                      ⚑
+                    </Button>
+                  )}
                 </Card>
-              )}
-              <span>{entry.name}</span>
-              <span className={hostileFaction ? "role-tag role-tag-stranger" : "role-tag"}>
-                {t(`roleInfo.${entry.role}.name`)}
-              </span>
-              {onReport && entry.id !== room.sessionId && (
-                <Button
-                  type="button"
-                  variant="default"
-                  className="moderation-button"
-                  title={t("moderation.reportTitle")}
-                  aria-label={t("moderation.reportLabel", { name: entry.name })}
-                  onClick={() => onReport(entry.id, entry.name)}
-                >
-                  ⚑
-                </Button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
 
       {summary && (
-        <div className="game-summary">
-          <h2 className="game-summary-heading">{t("gameOver.summary.heading")}</h2>
-          <ul className="game-summary-players">
-            {summary.players.map((entry) => (
-              <li key={entry.id} className="game-summary-player-row">
-                <span>{entry.name}</span>
-                <span className={entry.survived ? "game-summary-survived" : "game-summary-eliminated"}>
-                  {t(entry.survived ? "gameOver.summary.survived" : "gameOver.summary.eliminated")}
-                </span>
-                <span className="game-summary-tasks">
-                  {t("gameOver.summary.tasks", {
-                    completed: entry.tasksCompleted,
-                    total: entry.tasksTotal,
-                  })}
-                </span>
-              </li>
-            ))}
-          </ul>
+        <details className="ph-card game-over-disclosure">
+          <summary className="game-over-disclosure-summary">
+            <span>{t("gameOver.summary.heading")}</span>
+          </summary>
+          <div className="game-over-disclosure-body">
+            <ul className="game-summary-players">
+              {summary.players.map((entry) => (
+                <li key={entry.id} className="game-summary-player-row">
+                  <span>{entry.name}</span>
+                  <span className={entry.survived ? "game-summary-survived" : "game-summary-eliminated"}>
+                    {t(entry.survived ? "gameOver.summary.survived" : "gameOver.summary.eliminated")}
+                  </span>
+                  <span className="game-summary-tasks">
+                    {t("gameOver.summary.tasks", {
+                      completed: entry.tasksCompleted,
+                      total: entry.tasksTotal,
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
+      )}
 
-          {summary.voteRounds.length > 0 && (
-            <div className="game-summary-votes">
-              <h3 className="game-summary-heading">{t("gameOver.summary.voteHistory")}</h3>
-              {summary.voteRounds.map((round, index) => (
-                <div key={index} className="game-summary-vote-round">
-                  <p className="game-summary-vote-round-label">
-                    {t("gameOver.summary.meetingNumber", { number: index + 1 })}
-                  </p>
-                  <ul className="game-summary-vote-results">
-                    {round.results.map((result) => (
-                      <li key={result.targetId}>
-                        {result.targetId
-                          ? t("gameOver.summary.voteCount", { name: result.targetName, count: result.count })
-                          : t("gameOver.summary.voteCountSkip", { count: result.count })}
+      {summary && summary.voteRounds.length > 0 && (
+        <details className="ph-card game-over-disclosure">
+          <summary className="game-over-disclosure-summary">
+            <span>{t("gameOver.summary.voteHistory")}</span>
+          </summary>
+          <div className="game-over-disclosure-body game-summary-votes">
+            {summary.voteRounds.map((round, index) => (
+              <div key={index} className="game-summary-vote-round">
+                <p className="game-summary-vote-round-label">
+                  {t("gameOver.summary.meetingNumber", { number: index + 1 })}
+                </p>
+                <ul className="game-summary-vote-results">
+                  {round.results.map((result) => (
+                    <li key={result.targetId}>
+                      {result.targetId
+                        ? t("gameOver.summary.voteCount", { name: result.targetName, count: result.count })
+                        : t("gameOver.summary.voteCountSkip", { count: result.count })}
+                    </li>
+                  ))}
+                </ul>
+                {round.ballots.length > 0 && (
+                  <ul className="game-summary-vote-ballots">
+                    {round.ballots.map((ballot, ballotIndex) => (
+                      <li key={ballotIndex}>
+                        {t("gameOver.summary.ballotLine", {
+                          voter: ballot.voterName,
+                          target: ballot.targetName || t("gameOver.summary.skipVote"),
+                        })}
                       </li>
                     ))}
                   </ul>
-                  {round.ballots.length > 0 && (
-                    <ul className="game-summary-vote-ballots">
-                      {round.ballots.map((ballot, ballotIndex) => (
-                        <li key={ballotIndex}>
-                          {t("gameOver.summary.ballotLine", {
-                            voter: ballot.voterName,
-                            target: ballot.targetName || t("gameOver.summary.skipVote"),
-                          })}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {isHost ? (

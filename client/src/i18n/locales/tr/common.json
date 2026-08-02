@@ -469,6 +469,9 @@
     "reasonCriticalSabotage": "Deniz Feneri onarılamadan su bastı.",
     "backToLobby": "Lobiye Dön",
     "waitingForHost": "Ev sahibinin lobiye dönmesi bekleniyor…",
+    "roster": {
+      "heading": "Kadro"
+    },
     "summary": {
       "heading": "Tur Özeti",
       "survived": "Hayatta kaldı",

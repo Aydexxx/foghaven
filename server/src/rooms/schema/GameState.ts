@@ -178,6 +178,15 @@ export class RevealedPlayer extends Schema {
   @type("string") outfitId = "";
   @type("string") victoryPoseId = "";
   @type("string") deathEffectId = "";
+
+  /**
+   * Denormalised for the same reason `color` is, but distinct from it — see
+   * `Player.lanternColor`'s own doc. The round end screen's §10-style
+   * extinguish cutscene needs the actual identity light, not the legacy
+   * preview-rig colour, and a dead player's `Player` row is equally gone by
+   * the time that cutscene runs.
+   */
+  @type("string") lanternColor = "";
 }
 
 /**
