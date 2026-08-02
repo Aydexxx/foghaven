@@ -507,33 +507,75 @@
   "taskBar": {
     "label": "Tasks"
   },
+  "task": {
+    "risk": {
+      "injury": "Dangerous",
+      "lethal": "Lethal"
+    },
+    "resolving": "Checking the work…",
+    "brief": {
+      "lethalWarning": "This one can kill you.",
+      "lethalDetail": "The load swings free above the beam. Misjudge it three times and it comes down on you. Nobody is going to make you do this.",
+      "back": "Step away",
+      "accept": "Take the risk"
+    },
+    "verdict": {
+      "success": "Done. The work holds.",
+      "timedOut": "You left it too long. It got away from you.",
+      "close": "Close",
+      "failed": {
+        "safe": "Botched — nothing lost but the time.",
+        "injury": "It kicked back. You're hurt.",
+        "lethal": "The load came down."
+      }
+    },
+    "rejected": {
+      "phase": "Not now.",
+      "not_assigned": "That isn't your job.",
+      "already_complete": "Already done.",
+      "out_of_range": "You're not close enough.",
+      "dead": "Not any more.",
+      "busy": "You're already working on something.",
+      "not_started": "You hadn't started that.",
+      "too_fast": "That was too quick to be real.",
+      "unconfirmed": "You have to accept the risk first."
+    }
+  },
   "taskList": {
     "heading": "Your Tasks"
   },
   "minigame": {
     "cancel": "Cancel",
-    "wires": {
-      "instructions": "Drag each wire to the socket of the same colour.",
-      "plugLabel": "Wire"
+    "wick": {
+      "instructions": "Drag the flame up into the highlighted band, then let go."
     },
-    "code": {
-      "instructions": "Enter the code shown above."
+    "net": {
+      "instructions": "Drag each rope end to its matching knot.",
+      "ropeLabel": "Rope end"
     },
-    "calibration": {
-      "instructions": "Stop the indicator inside the highlighted zone.",
-      "stopButton": "Stop"
+    "gear": {
+      "instructions": "Hold to wind the spring. Release inside the marked band — release late and it kicks back.",
+      "crankLabel": "Hold to wind"
     },
-    "pattern": {
-      "watching": "Watch the sequence…",
-      "yourTurn": "Repeat the sequence.",
-      "wrong": "Not quite — watch again."
+    "bilge": {
+      "instructions": "Pump before the water reaches the top.",
+      "pumpLabel": "Pump"
     },
-    "ordering": {
-      "instructions": "Drag the items into ascending order."
+    "ledger": {
+      "instructions": "Drag each entry into the column it belongs to.",
+      "columnLabel": {
+        "incoming": "Incoming",
+        "outgoing": "Outgoing"
+      },
+      "entryLabel": {
+        "incoming": "Delivery",
+        "outgoing": "Shipment"
+      }
     },
-    "rotation": {
-      "instructions": "Click each dial to align it with its target.",
-      "dialLabel": "Dial {{index}}"
+    "crane": {
+      "instructions": "Hold Left or Right to keep the load balanced on the beam.",
+      "pullLeft": "Pull Left",
+      "pullRight": "Pull Right"
     }
   },
   "moderation": {

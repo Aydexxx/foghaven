@@ -9,6 +9,8 @@ import {
   playLossStinger,
   playMeetingStartStinger,
   playSabotageAlarmStinger,
+  playTaskCompleteStinger,
+  playTaskInjuryStinger,
   playTunnelStinger,
   playWinStinger,
 } from "./synth/stingers";
@@ -29,7 +31,9 @@ export type StingerKind =
   | "bellToll"
   | "win"
   | "loss"
-  | "tunnel";
+  | "tunnel"
+  | "taskComplete"
+  | "taskInjury";
 
 const STINGERS: Record<StingerKind, typeof playKillStinger> = {
   kill: playKillStinger,
@@ -41,6 +45,8 @@ const STINGERS: Record<StingerKind, typeof playKillStinger> = {
   win: playWinStinger,
   loss: playLossStinger,
   tunnel: playTunnelStinger,
+  taskComplete: playTaskCompleteStinger,
+  taskInjury: playTaskInjuryStinger,
 };
 
 const VOLUME_RAMP_S = 0.05;

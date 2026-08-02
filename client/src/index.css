@@ -930,6 +930,88 @@ button.secondary {
   color: var(--color-flame-glow);
 }
 
+/* --- §8.2 task attempt overlay -------------------------------------------
+   The standard chrome every task wears. A dangerous station has to LOOK
+   dangerous before the player commits, so the tier drives a border and a
+   badge rather than only a line of copy someone can skim past. */
+.task-attempt-injury {
+  border-color: var(--color-flame-deep);
+}
+
+.task-attempt-lethal {
+  border-color: var(--color-stranger-red);
+}
+
+.task-risk-badge {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--font-size-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.task-risk-injury {
+  color: var(--color-ink);
+  background: var(--color-flame-glow);
+}
+
+.task-risk-lethal {
+  color: var(--color-foam);
+  background: var(--color-stranger-red);
+}
+
+/* The lethal brief — the confirm step. Nothing is sent to the server until
+   the player clicks through this, which is what makes the server's
+   `confirmed` flag an honest report rather than a client-side assertion. */
+.task-brief {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+  text-align: center;
+}
+
+.task-brief-warning {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-title);
+  line-height: var(--line-height-title);
+  color: var(--color-stranger-red);
+}
+
+.task-brief-detail {
+  margin: 0;
+  font-size: var(--font-size-label);
+  line-height: 1.5;
+  color: var(--color-mist);
+}
+
+.task-brief-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.task-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg) 0;
+  text-align: center;
+}
+
+.task-verdict-line {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-label);
+  line-height: 1.5;
+  color: var(--color-foam);
+}
+
 .minigame-panel-close {
   padding: var(--space-xs) var(--space-sm);
   font-size: var(--font-size-caption);
@@ -949,26 +1031,89 @@ button.secondary {
   text-align: center;
 }
 
-/* Wire connecting */
-.wires-board {
+/* --- §8.3 the six harbour mini-games -------------------------------------- */
+
+/* Trim the Wick — vertical drag gauge, flame height vs. a target band. */
+.wick-track {
+  position: relative;
+  width: 56px;
+  height: 220px;
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  transition: border-color 0.2s;
+}
+
+.wick-track-gutter {
+  border-color: var(--color-stranger-red);
+  animation: wick-gutter-flash 0.26s ease-out;
+}
+
+@keyframes wick-gutter-flash {
+  0% {
+    background: var(--danger-well);
+  }
+  100% {
+    background: var(--color-void);
+  }
+}
+
+.wick-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(143, 184, 92, 0.33);
+  border-top: 2px solid var(--color-town-green);
+  border-bottom: 2px solid var(--color-town-green);
+}
+
+.wick-flame {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  background: linear-gradient(180deg, var(--color-flame-glow), var(--color-flame-deep));
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: height 0.05s linear;
+}
+
+.wick-handle {
+  position: absolute;
+  left: 50%;
+  width: 44px;
+  height: 10px;
+  background: var(--color-rope-tan);
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  transform: translate(-50%, 50%);
+  touch-action: none;
+}
+
+.wick-handle-active {
+  box-shadow: 0 0 0 3px var(--highlight);
+}
+
+/* Mend the Net — drag-to-match, the same shape the old wire game had. */
+.net-board {
   position: relative;
 }
 
-.wires-svg {
+.net-svg {
   position: absolute;
   top: 0;
   left: 0;
   pointer-events: none;
 }
 
-.wire-plug,
-.wire-socket {
+.net-rope-end,
+.net-knot {
   position: absolute;
   /* 36px, short of the site-wide 48px interactive-target floor (§8) — the
-     board is only 300x200 (see WireConnectingGame.tsx's BOARD_WIDTH/
-     BOARD_HEIGHT), so hitting 48px here means growing the board itself, a
-     minigame-geometry call for a human, not a mechanical CSS bump. Tracked
-     as open debt — see docs/TOKEN_DEBT.md §3c. */
+     board is only 300x200 (see NetGame.tsx's BOARD_WIDTH/BOARD_HEIGHT), so
+     hitting 48px here means growing the board itself, a minigame-geometry
+     call for a human, not a mechanical CSS bump. Tracked as open debt — see
+     docs/TOKEN_DEBT.md §3c. */
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -976,21 +1121,21 @@ button.secondary {
   padding: 0;
 }
 
-.wire-plug {
+.net-rope-end {
   border: 2px solid rgba(0, 0, 0, 0.4);
   cursor: grab;
   touch-action: none;
 }
 
-.wire-plug:disabled {
+.net-rope-end:disabled {
   cursor: default;
 }
 
-.wire-plug-connected {
+.net-rope-end-tied {
   opacity: 0.55;
 }
 
-.wire-socket {
+.net-knot {
   background: var(--color-void);
   border: 3px solid;
   /* Must stay hit-testable: drop detection reads elementFromPoint() at
@@ -999,91 +1144,25 @@ button.secondary {
   pointer-events: auto;
 }
 
-.wire-socket-connected {
+.net-knot-tied {
   box-shadow: 0 0 0 3px var(--highlight) inset;
 }
 
-/* Code entry */
-.code-display {
-  display: flex;
-  gap: var(--space-sm);
+/* Wind the Lighthouse Gear — hold-and-release gauge, injury tier. */
+.gear-gauge {
+  width: 260px;
 }
 
-.code-digit {
-  width: 2.2rem;
-  height: 2.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-title);
-  font-weight: 700;
-  background: var(--color-void);
-  border: 1px solid var(--color-ink);
-  border-radius: var(--radius-sm);
-  color: var(--color-flame-glow);
-}
-
-.code-entry {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.code-entry-slot {
-  width: 2.2rem;
-  height: 2.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-title);
-  font-weight: 700;
-  background: var(--color-void);
-  border: 1px solid var(--color-flame-deep);
-  border-radius: var(--radius-sm);
-  color: var(--color-foam);
-  transition:
-    border-color 0.2s,
-    background 0.2s;
-}
-
-.code-entry-error .code-entry-slot {
-  border-color: var(--color-stranger-red);
-  background: var(--danger-well);
-}
-
-.keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 3.2rem);
-  gap: var(--space-sm);
-}
-
-.keypad-key {
-  width: 3.2rem;
-  height: 3.2rem;
-  padding: 0;
-  font-size: var(--font-size-body);
-  background: linear-gradient(180deg, var(--color-ink), var(--color-wood-mid));
-  color: var(--color-foam);
-  border-color: var(--color-ink);
-}
-
-/* Calibration bar */
-.calibration-track {
+.gear-gauge-track {
   position: relative;
-  width: 280px;
-  height: 20px;
+  height: 22px;
   background: var(--color-void);
   border: 1px solid var(--color-ink);
   border-radius: var(--radius-md);
-  transition: border-color 0.2s;
+  overflow: hidden;
 }
 
-.calibration-track-miss {
-  border-color: var(--color-stranger-red);
-}
-
-.calibration-zone {
+.gear-gauge-safe {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -1092,122 +1171,262 @@ button.secondary {
   border-right: 2px solid var(--color-town-green);
 }
 
-.calibration-indicator {
+.gear-gauge-danger {
   position: absolute;
-  top: -4px;
-  width: 6px;
-  height: 28px;
+  top: 0;
+  bottom: 0;
+  background: var(--danger-well);
+}
+
+.gear-gauge-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
   background: var(--color-flame-glow);
-  border-radius: var(--radius-sm);
-  transform: translateX(-50%);
+  opacity: 0.85;
+  transition: width 0.05s linear;
 }
 
-.calibration-indicator-locked {
-  background: var(--color-town-green);
+.gear-gauge-kicked .gear-gauge-track {
+  animation: gear-kickback 0.3s ease-out;
 }
 
-.calibration-stop {
-  width: 140px;
+@keyframes gear-kickback {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  55% {
+    transform: translateX(6px);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 
-/* Pattern memory */
-.pattern-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 70px);
-  gap: var(--space-md);
+.gear-crank {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  font-weight: 700;
+  touch-action: none;
 }
 
-.pattern-tile {
-  width: 70px;
-  height: 70px;
-  padding: 0;
+.gear-crank-winding {
+  background: var(--color-flame-glow);
+}
+
+.gear-crank-kicked {
+  animation: gear-kickback 0.3s ease-out;
+}
+
+/* Pump the Bilge — a rising water line and one big pump button. */
+.bilge-well {
+  position: relative;
+  width: 120px;
+  height: 200px;
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
   border-radius: var(--radius-md);
-  opacity: 0.55;
-  transition: opacity 0.15s;
+  overflow: hidden;
 }
 
-.pattern-tile:disabled {
-  cursor: default;
+.bilge-water {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-fog-mid) 70%, transparent), var(--color-fog-dark));
+  transition: height 0.1s linear;
 }
 
-.pattern-tile-lit {
-  opacity: 1;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.65) inset;
+.bilge-overflow-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-stranger-red);
 }
 
-/* Ordering */
-.ordering-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.bilge-pump {
+  width: 140px;
+  font-weight: 700;
+}
+
+.bilge-pump-pressed {
+  transform: translateY(2px);
+}
+
+/* Sort the Ledger — drag-to-column. */
+.ledger-tray {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: var(--space-sm);
-  width: 220px;
-}
-
-.ordering-item {
-  display: flex;
-  align-items: center;
   justify-content: center;
   min-height: var(--space-xxxl);
+}
+
+.ledger-columns {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.ledger-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 120px;
+}
+
+.ledger-column-label {
+  font-size: var(--font-size-caption);
+  color: var(--color-mist);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ledger-column-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+  min-height: 100px;
   padding: var(--space-sm);
-  text-align: center;
-  font-size: var(--font-size-body);
+  background: var(--color-void);
+  border: 1px dashed var(--color-ink);
+  border-radius: var(--radius-sm);
+}
+
+.ledger-entry {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-caption);
   font-weight: 600;
   background: linear-gradient(180deg, var(--color-ink), var(--color-wood-mid));
   border: 1px solid var(--color-ink);
   border-radius: var(--radius-sm);
   color: var(--color-foam);
   cursor: grab;
+  touch-action: none;
+  transition: transform 0.15s;
 }
 
-.ordering-item-dragging {
+.ledger-entry-dragging {
   opacity: 0.4;
 }
 
-/* Rotation puzzle */
-.rotation-dials {
-  display: flex;
-  gap: var(--space-xl);
+.ledger-entry-bounced {
+  animation: ledger-bounce-back 0.26s ease-out;
 }
 
-.rotation-dial {
+@keyframes ledger-bounce-back {
+  0% {
+    transform: translateX(0);
+  }
+  30% {
+    transform: translateX(-6px);
+  }
+  60% {
+    transform: translateX(6px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.ledger-entry-placed {
+  cursor: default;
+  touch-action: auto;
+}
+
+/* Haul the Crane — balance beam, lethal tier. */
+.crane-beam {
   position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
+  width: 280px;
+  height: 28px;
   background: var(--color-void);
-  border: 2px solid var(--color-ink);
-  padding: 0;
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-md);
 }
 
-.rotation-dial-aligned {
-  border-color: var(--color-town-green);
-}
-
-.rotation-target,
-.rotation-needle {
+.crane-beam-danger {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform-origin: 0 0;
-  pointer-events: none;
+  top: 0;
+  bottom: 0;
+  width: 18%;
+  background: var(--danger-well);
 }
 
-.rotation-target {
-  width: 30px;
-  height: 3px;
-  margin-top: -1.5px;
-  background: rgba(143, 184, 92, 0.4);
+.crane-beam-danger-left {
+  left: 0;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
-.rotation-needle {
-  width: 30px;
-  height: var(--space-xs);
-  margin-top: -2px;
-  background: var(--color-flame-glow);
+.crane-beam-danger-right {
+  right: 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.crane-beam-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 39%;
+  width: 22%;
+  background: rgba(143, 184, 92, 0.25);
+}
+
+.crane-load {
+  position: absolute;
+  top: -8px;
+  width: 22px;
+  height: 44px;
+  background: var(--color-ink);
+  border: 2px solid var(--color-rope-tan);
   border-radius: var(--radius-sm);
+  transform: translateX(-50%);
+  transition: left 0.03s linear;
+}
+
+.crane-beam-dropped .crane-load {
+  animation: crane-drop 0.4s ease-in forwards;
+}
+
+@keyframes crane-drop {
+  to {
+    transform: translate(-50%, 120px) rotate(35deg);
+    opacity: 0;
+  }
+}
+
+.crane-stability-track {
+  width: 280px;
+  height: 10px;
+  background: var(--color-void);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.crane-stability-fill {
+  height: 100%;
+  background: var(--color-town-green);
+  transition: width 0.1s linear;
+}
+
+.crane-controls {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.crane-button {
+  width: 120px;
+  font-weight: 700;
+  touch-action: none;
 }
 
 /* Ghost banner */

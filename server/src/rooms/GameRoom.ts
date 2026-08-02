@@ -47,6 +47,13 @@ import {
   TASK_DEFINITIONS_BY_ID,
   type ClientTask,
   TASK_INTERACT_RADIUS,
+  TASK_BAND_BOUNDS,
+  type TaskDefinition,
+  type RiskTier,
+  type TaskRejectReason,
+  type TaskRejectedMessage,
+  type TaskStartedMessage,
+  type TaskOutcomeMessage,
   KILL_INITIAL_DELAY_MS,
   GHOSTS_CAN_DO_TASKS,
   TOWN_HALL,
@@ -146,6 +153,27 @@ const MAX_INPUT_BUDGET = INPUT_RATE;
 interface TaskProgress {
   totalSteps: number;
   completedSteps: number;
+}
+
+/**
+ * One task attempt the server has open for one player (8.2).
+ *
+ * The server owns this record end to end: it is created by `task_start`,
+ * closed by `task_resolve`, and — if the client says nothing — closed by
+ * `timer` regardless. A player may only ever have one, which is both the
+ * "one thing at a time" rule and the completion-rate cap: with a minimum
+ * duration per attempt and no concurrency, the fastest anyone can possibly
+ * finish tasks is one per `TASK_BAND_BOUNDS[band].minMs`.
+ */
+interface TaskAttempt {
+  taskId: string;
+  /** Server clock, never the client's. */
+  startedAt: number;
+  minMs: number;
+  maxMs: number;
+  tier: RiskTier;
+  /** Fires at the deadline and resolves the attempt as a failure. */
+  timer: Delayed;
 }
 
 export interface JoinOptions {
@@ -272,6 +300,13 @@ export class GameRoom extends Room<GameState> {
    * here is ever written to `state`.
    */
   private readonly tasks = new Map<string, Map<string, TaskProgress>>();
+
+  /**
+   * Task attempts currently open, one per player at most (8.2). Server-only,
+   * like `tasks` — an attempt in public state would tell the whole room who
+   * is mid-task and where, which is exactly the information a Stranger wants.
+   */
+  private readonly taskAttempts = new Map<string, TaskAttempt>();
 
   /**
    * Server-only ability cooldowns, keyed by `` `${sessionId}:${abilityId}` ``
@@ -540,9 +575,9 @@ export class GameRoom extends Room<GameState> {
 
     this.onMessage("set_setting", (client, message) => this.handleSetSetting(client, message));
 
-    this.onMessage("task_interact", (client, message) =>
-      this.handleTaskInteract(client, message),
-    );
+    this.onMessage("task_start", (client, message) => this.handleTaskStart(client, message));
+    this.onMessage("task_resolve", (client, message) => this.handleTaskResolve(client, message));
+    this.onMessage("task_abort", (client, message) => this.handleTaskAbort(client, message));
 
     this.onMessage("ability", (client, message) => this.handleAbility(client, message));
 
@@ -899,6 +934,9 @@ export class GameRoom extends Room<GameState> {
       factionOf(role) === FACTION.STRANGER;
 
     this.releaseTaskShare(sessionId);
+    // Their deadline dies with them: `closeTaskAttempt` would find no player
+    // and no-op, but leaving an armed timer per departure is a slow leak.
+    this.clearTaskAttempt(sessionId);
 
     const definition = role ? roleById(role) : undefined;
     for (const slot of definition?.abilities ?? []) {
@@ -1681,7 +1719,7 @@ export class GameRoom extends Room<GameState> {
    * Deal every player a task list — every "common" task plus a random draw of
    * the rest — and deliver it privately. A stranger's list has the exact same
    * shape as a townsfolk's; only `assignRoles` decided who is which, and only
-   * `handleTaskInteract` ever checks it again. The shared bar's total is the
+   * `creditTaskStep` ever checks it again. The shared bar's total is the
    * sum of *townsfolk* steps only, fixed for the round the moment it starts.
    */
   private assignTasks(): void {
@@ -1740,68 +1778,311 @@ export class GameRoom extends Room<GameState> {
         y: def.y,
         totalSteps: task.totalSteps,
         completedSteps: task.completedSteps,
+        // The 8.2 module declaration, copied straight off the definition and
+        // never varied by who is receiving it. A Stranger's fake list has to
+        // describe the same stations with the same declared risk, or the
+        // list itself would be a faction tell.
+        band: def.band,
+        tier: def.tier,
+        witness: def.witness,
+        dark: def.dark,
       });
     }
     return payload;
   }
 
+  // --- Task attempts (8.2) --------------------------------------------------
+  //
+  // THE SERVER OWNS BOTH COMPLETION AND FAILURE. The client reports an
+  // attempt; nothing it says is trusted beyond "something happened at my end".
+  // Four hostile behaviours shape every check below, and each is answered
+  // structurally rather than by asking the client nicely:
+  //
+  //  1. **Complete instantly or remotely.** `minMs` and a range check at BOTH
+  //     ends of the attempt. Position is re-read from server state at resolve,
+  //     so walking away mid-task voids the work.
+  //  2. **Report success when it failed.** Bounded, not detectable: the server
+  //     cannot see the puzzle. What it CAN do is cap how often a success is
+  //     possible (one attempt at a time x `minMs`) and require presence for
+  //     the whole of it. Stated plainly because pretending otherwise would be
+  //     worse than the gap — see `handleTaskResolve`.
+  //  3. **Report failure when it succeeded**, to manufacture an injury as an
+  //     alibi. Answered by making it true rather than by detecting it: a
+  //     reported failure IS a failure, with the real injury or the real
+  //     corpse. There is no cheap fake, because the server never fakes.
+  //  4. **Decline to report at all** when the outcome would hurt. This is the
+  //     important one, and the reason an attempt is a server-side object with
+  //     its own timer: at `maxMs` the server closes it as a failure whether or
+  //     not the client ever speaks again. Going silent on a lethal task is not
+  //     an escape, it is the slowest possible way to take the same outcome.
+
   /**
-   * Handle one "E" press. Every check here is authoritative — the client's
-   * proximity indicator is UX only, this is what actually decides whether the
-   * interaction counts:
-   *   - the player must have this exact task in their own assigned list
-   *   - the task must not already be finished
-   *   - the player's server-tracked position must be within interact range
-   * The player is always told their own new progress, real or fake — that's
-   * what makes the two indistinguishable on their own screen. Only a
-   * townsfolk's completion is added to the public bar.
+   * Open an attempt. Every gate here is authoritative — the client's proximity
+   * indicator is UX only.
+   *
+   * A rejection is answered rather than ignored (unlike the ability handler,
+   * which stays silent) because the client has an overlay open and must be
+   * told to close it. Every reason is a fact about the asker's own state, so
+   * none of them reveals anything they could not already see.
    */
-  private handleTaskInteract(client: Client, message: unknown): void {
-    if (this.state.phase !== PHASE.PLAYING) {
+  private handleTaskStart(client: Client, message: unknown): void {
+    const raw = (message ?? {}) as { taskId?: unknown; confirmed?: unknown };
+    const taskId = typeof raw.taskId === "string" ? raw.taskId : undefined;
+    if (!taskId) {
       return;
     }
+    const reject = (reason: TaskRejectReason) =>
+      client.send("taskRejected", { taskId, reason } satisfies TaskRejectedMessage);
 
+    if (this.state.phase !== PHASE.PLAYING) {
+      reject("phase");
+      return;
+    }
     const player = this.state.players.get(client.sessionId);
     if (!player) {
       return;
     }
     if (!player.alive && !GHOSTS_CAN_DO_TASKS) {
-      return;
-    }
-
-    const raw = (message ?? {}) as { taskId?: unknown };
-    const taskId = typeof raw.taskId === "string" ? raw.taskId : undefined;
-    if (!taskId) {
+      reject("dead");
       return;
     }
 
     const definition = TASK_DEFINITIONS_BY_ID.get(taskId);
     if (!definition) {
+      reject("not_assigned");
+      return;
+    }
+    // Must be on THIS player's own list — a task id is public, an assignment
+    // is not, and doing someone else's job must never fill the bar.
+    const progress = this.tasks.get(client.sessionId)?.get(taskId);
+    if (!progress) {
+      reject("not_assigned");
+      return;
+    }
+    if (progress.completedSteps >= progress.totalSteps) {
+      reject("already_complete");
+      return;
+    }
+    if (!this.withinTaskRange(player, definition)) {
+      reject("out_of_range");
+      return;
+    }
+    // One at a time. Also the completion-rate cap — see `TaskAttempt`.
+    if (this.taskAttempts.has(client.sessionId)) {
+      reject("busy");
+      return;
+    }
+    // "Never a surprise death": a lethal attempt cannot even be opened
+    // without the client having shown, and the player having accepted, the
+    // warning. A client that skips its own UI is refused here, so nobody can
+    // die at a station whose danger they were never given the chance to see.
+    if (definition.tier === "lethal" && raw.confirmed !== true) {
+      reject("unconfirmed");
       return;
     }
 
-    const progress = this.tasks.get(client.sessionId)?.get(taskId);
+    const bounds = TASK_BAND_BOUNDS[definition.band];
+    const attempt: TaskAttempt = {
+      taskId,
+      startedAt: Date.now(),
+      minMs: bounds.minMs,
+      maxMs: bounds.maxMs,
+      tier: definition.tier,
+      timer: this.clock.setTimeout(
+        () => this.closeTaskAttempt(client.sessionId, false, true),
+        bounds.maxMs,
+      ),
+    };
+    this.taskAttempts.set(client.sessionId, attempt);
+    client.send("taskStarted", {
+      taskId,
+      deadlineMs: bounds.maxMs,
+      tier: definition.tier,
+    } satisfies TaskStartedMessage);
+  }
+
+  /**
+   * The client reporting how its puzzle went.
+   *
+   * On the honest limit of this: the server has no view of the puzzle itself,
+   * so a client that always claims success cannot be caught by inspection.
+   * What that buys is only skipping the puzzle's difficulty — it cannot
+   * exceed the assignment (a task must be on your own list, and each step
+   * completes once), cannot exceed the rate (`minMs`, one attempt at a time),
+   * and cannot be done anywhere but at the station. Closing the remaining gap
+   * needs the puzzle itself simulated server-side, which is a different and
+   * much larger design; this is a plausibility boundary and is documented as
+   * one rather than dressed up as proof.
+   */
+  private handleTaskResolve(client: Client, message: unknown): void {
+    const raw = (message ?? {}) as { taskId?: unknown; success?: unknown };
+    const taskId = typeof raw.taskId === "string" ? raw.taskId : undefined;
+    if (!taskId) {
+      return;
+    }
+    const attempt = this.taskAttempts.get(client.sessionId);
+    if (!attempt || attempt.taskId !== taskId) {
+      client.send("taskRejected", {
+        taskId,
+        reason: "not_started",
+      } satisfies TaskRejectedMessage);
+      return;
+    }
+
+    // Too fast to be real. The attempt is deliberately NOT closed: a client
+    // must not be able to use a premature claim to shake off a deadline it is
+    // already committed to. It stays open, and the timer still owns it.
+    if (Date.now() - attempt.startedAt < attempt.minMs) {
+      logAntiCheatEvent(this.log, "task_too_fast", {
+        sessionId: client.sessionId,
+        userId: this.sessionUserIds.get(client.sessionId) ?? null,
+        detail: { taskId, elapsedMs: Date.now() - attempt.startedAt },
+      });
+      client.send("taskRejected", { taskId, reason: "too_fast" } satisfies TaskRejectedMessage);
+      return;
+    }
+
+    this.closeTaskAttempt(client.sessionId, raw.success === true, false);
+  }
+
+  /**
+   * Back out. Honoured only for `safe` tasks: once a player has accepted a
+   * risky station the commitment IS the mechanic, and letting them cancel on
+   * seeing they were about to fail would make every injury and every death
+   * opt-in. A refused abort leaves the attempt — and its deadline — running.
+   */
+  private handleTaskAbort(client: Client, message: unknown): void {
+    const raw = (message ?? {}) as { taskId?: unknown };
+    const taskId = typeof raw.taskId === "string" ? raw.taskId : undefined;
+    const attempt = this.taskAttempts.get(client.sessionId);
+    if (!taskId || !attempt || attempt.taskId !== taskId) {
+      return;
+    }
+    if (attempt.tier !== "safe") {
+      return;
+    }
+    this.clearTaskAttempt(client.sessionId);
+  }
+
+  /** Drop an attempt without applying any outcome. */
+  private clearTaskAttempt(sessionId: string): void {
+    const attempt = this.taskAttempts.get(sessionId);
+    if (!attempt) {
+      return;
+    }
+    attempt.timer.clear();
+    this.taskAttempts.delete(sessionId);
+  }
+
+  /**
+   * Abandon every attempt in flight, with no outcome for any of them. Used
+   * wherever the world stops being somewhere a task could be happening — a
+   * meeting starting, the round ending, the lobby being returned to.
+   *
+   * Deliberately NOT a mass failure: a meeting interrupting your work is not
+   * you dropping a crane on yourself. The only thing that turns an unfinished
+   * attempt into a failure is its own deadline, which can only run during
+   * open play.
+   */
+  private clearAllTaskAttempts(): void {
+    for (const sessionId of [...this.taskAttempts.keys()]) {
+      this.clearTaskAttempt(sessionId);
+    }
+  }
+
+  /** Server-side truth for "is this player at that station right now". */
+  private withinTaskRange(player: Player, definition: TaskDefinition): boolean {
+    return Math.hypot(player.x - definition.x, player.y - definition.y) <= TASK_INTERACT_RADIUS;
+  }
+
+  /**
+   * Close an open attempt and apply its outcome. The single exit for every
+   * path — a reported resolve, and the deadline firing on a silent client —
+   * so the two can never drift into behaving differently.
+   */
+  private closeTaskAttempt(sessionId: string, success: boolean, timedOut: boolean): void {
+    const attempt = this.taskAttempts.get(sessionId);
+    if (!attempt) {
+      return;
+    }
+    this.clearTaskAttempt(sessionId);
+
+    const player = this.state.players.get(sessionId);
+    const definition = TASK_DEFINITIONS_BY_ID.get(attempt.taskId);
+    if (!player || !definition) {
+      return;
+    }
+
+    // Range is re-checked at resolve, not only at start: a client that walks
+    // away mid-task and then claims the work is claiming work it did not do.
+    // A timeout skips the check — the deadline's outcome is owed wherever
+    // they ended up.
+    const resolved = success && !timedOut && this.withinTaskRange(player, definition);
+
+    this.clientFor(sessionId)?.send("taskOutcome", {
+      taskId: attempt.taskId,
+      success: resolved,
+      tier: attempt.tier,
+      timedOut,
+    } satisfies TaskOutcomeMessage);
+
+    if (resolved) {
+      this.creditTaskStep(sessionId, attempt.taskId);
+      return;
+    }
+    this.applyTaskOutcome(player, attempt.tier);
+  }
+
+  /**
+   * A successful step. Progress is reported to the player whether their task
+   * was real or fake — that indistinguishability is the whole point — while
+   * only a townsfolk's work moves the public bar.
+   */
+  private creditTaskStep(sessionId: string, taskId: string): void {
+    const progress = this.tasks.get(sessionId)?.get(taskId);
     if (!progress || progress.completedSteps >= progress.totalSteps) {
       return;
     }
-
-    const distance = Math.hypot(player.x - definition.x, player.y - definition.y);
-    if (distance > TASK_INTERACT_RADIUS) {
-      return;
-    }
-
     progress.completedSteps += 1;
-    client.send("taskProgress", { taskId, completedSteps: progress.completedSteps });
+    this.clientFor(sessionId)?.send("taskProgress", {
+      taskId,
+      completedSteps: progress.completedSteps,
+    });
 
     // This is the one line that decides whether the interaction was real —
     // only townsfolk-faction work fills the bar, whatever the exact role.
-    const role = this.roles.get(client.sessionId);
+    const role = this.roles.get(sessionId);
     if (role && factionOf(role) === FACTION.TOWNSFOLK) {
       this.state.taskBarCompleted += 1;
       // The only way the "all tasks done" condition can ever become true, so
       // this is the only place besides a death that needs to check for it.
       this.checkWinConditionNow();
     }
+  }
+
+  /**
+   * What a failure costs, taken straight from the task's declared tier.
+   *
+   * **Never consults the actor's faction, and must not.** A Stranger's fake
+   * copy of a task carries the same tier and the same consequence, because a
+   * Stranger who could fail the crane and walk away unhurt would be
+   * identifying themselves the moment anyone noticed. Risk is a property of
+   * the station, not of who is standing at it.
+   *
+   * A lethal failure goes through `applyDeath(player, null)` — the same path
+   * a murder takes, with no killer — so the corpse it leaves is
+   * indistinguishable from one a Stranger made. That is the whole of Phase
+   * 8's identity mechanic, and `GameRoomDeathCause.test.ts` pins it.
+   */
+  private applyTaskOutcome(player: Player, tier: RiskTier): void {
+    if (tier === "injury") {
+      this.injure(player);
+      return;
+    }
+    if (tier === "lethal") {
+      this.applyDeath(player, null);
+    }
+    // `safe` costs nothing but the time already spent.
   }
 
   /**
@@ -2341,6 +2622,13 @@ export class GameRoom extends Room<GameState> {
     // a shapeshift confuses *live* observers, not the death record.
     this.restoreDisguise(victim.id);
 
+    // Whatever they were doing, they have stopped. Left armed, a lethal
+    // task's deadline would fire against an already-dead player and try to
+    // kill them a second time — harmless today (`applyDeath` is idempotent on
+    // a corpse) but exactly the kind of thing that stops being harmless once
+    // something else hangs off a death.
+    this.clearTaskAttempt(victim.id);
+
     this.setCondition(victim, PLAYER_CONDITION.DEAD);
     // §4.4's death sequence: the lantern detaches and hits the ground. This
     // is what tells every ghost's Havener (and, via `visionRadiusAt`,
@@ -2632,6 +2920,11 @@ export class GameRoom extends Room<GameState> {
     // the alderman's armed double vote) end with the round of play that
     // produced them — see the doc on `roundStore`.
     this.roundStore.clear();
+
+    // Any task someone was mid-way through is abandoned, not failed: being
+    // called to a meeting is not the crane falling on you. See
+    // `clearAllTaskAttempts`.
+    this.clearAllTaskAttempts();
 
     // A Shapeshifter's disguise never carries into a meeting — two ballot
     // rows with the same name/color would be a UI mess this game has no
@@ -3045,6 +3338,10 @@ export class GameRoom extends Room<GameState> {
     this.criticalSabotageTimer = undefined;
     this.state.criticalSabotageActive = false;
     this.roundStore.clear();
+    // No deadline may outlive the round it belongs to — a timer left armed
+    // here would resolve a task, and possibly kill someone, after the game
+    // had already ended.
+    this.clearAllTaskAttempts();
 
     this.state.phase = PHASE.GAME_OVER;
     this.state.winningFaction = faction;
@@ -3219,6 +3516,7 @@ export class GameRoom extends Room<GameState> {
     this.roles.clear();
     this.clearRoleSelectState();
     this.tasks.clear();
+    this.clearAllTaskAttempts();
     this.abilityReadyAt.clear();
     this.abilityUsesLeft.clear();
     this.roundStore.clear();

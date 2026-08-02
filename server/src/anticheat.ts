@@ -18,7 +18,15 @@ export type AntiCheatReason =
   | "meeting_quota"
   | "chat_rate_limit"
   | "chat_profanity"
-  | "report_rate_limit";
+  | "report_rate_limit"
+  /**
+   * A task attempt claimed to resolve faster than its band's `minMs` allows
+   * (8.2). Distinct from the ordinary rejections above because there is no
+   * benign race that produces it: the client itself was told the deadline
+   * when the attempt opened, so a too-fast claim is either a modified client
+   * or a replayed message.
+   */
+  | "task_too_fast";
 
 export interface AntiCheatContext {
   sessionId: string;

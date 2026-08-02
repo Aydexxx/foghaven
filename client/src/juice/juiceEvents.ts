@@ -72,6 +72,20 @@ export const LANTERN_EXTINGUISH_STAGGER_MS = 80;
 export const TASK_COMPLETE_PUNCH_SCALE = 1.05;
 export const TASK_COMPLETE_PUNCH_MS = duration.base;
 
+/**
+ * §8.3: an injury-tier task's failure "kicking back" on the player. Smaller
+ * and shorter than `kill()`'s shake+flash on purpose — a task injuring you is
+ * a setback, not the screen-defining violence a Stranger's kill is, and the
+ * two must stay visually distinct even though both eventually flip the same
+ * `condition` field. No hit-stop: that beat is reserved for a discrete,
+ * violent instant (a kill, a body found), and a kickback is a jolt, not a
+ * freeze-frame.
+ */
+export const TASK_INJURY_SHAKE_PX = 4;
+export const TASK_INJURY_SHAKE_MS = 180;
+export const TASK_INJURY_FLASH_ALPHA = 0.22;
+export const TASK_INJURY_FLASH_MS = 90;
+
 // --- Sequencing ------------------------------------------------------------
 
 /**
@@ -145,6 +159,17 @@ export function taskComplete(bar: HTMLElement | null | undefined): void {
   if (bar) {
     juice.punch(bar, TASK_COMPLETE_PUNCH_SCALE, TASK_COMPLETE_PUNCH_MS);
   }
+}
+
+/**
+ * An injury-tier task failing. Screen-level (unlike `taskComplete`, which
+ * targets one DOM element) because an injury is public and dramatic in a way
+ * a wasted safe attempt is not — see `TASK_INJURY_SHAKE_PX`'s own doc for why
+ * this stays smaller than `kill()`.
+ */
+export function taskInjury(): void {
+  juice.shake(TASK_INJURY_SHAKE_PX, TASK_INJURY_SHAKE_MS);
+  juice.flash(colors.flameGlow, TASK_INJURY_FLASH_ALPHA, TASK_INJURY_FLASH_MS);
 }
 
 /**

@@ -507,33 +507,75 @@
   "taskBar": {
     "label": "Görevler"
   },
+  "task": {
+    "risk": {
+      "injury": "Tehlikeli",
+      "lethal": "Ölümcül"
+    },
+    "resolving": "İş kontrol ediliyor…",
+    "brief": {
+      "lethalWarning": "Bu iş seni öldürebilir.",
+      "lethalDetail": "Yük kirişin üstünde serbest sallanıyor. Üç kez yanlış hesapla, üstüne iner. Kimse seni buna zorlamıyor.",
+      "back": "Geri çekil",
+      "accept": "Riski göze al"
+    },
+    "verdict": {
+      "success": "Tamam. İş sağlam.",
+      "timedOut": "Fazla oyalandın. Elinden kaçtı.",
+      "close": "Kapat",
+      "failed": {
+        "safe": "Beceremedin — kaybettiğin tek şey zaman.",
+        "injury": "Geri tepti. Yaralandın.",
+        "lethal": "Yük üstüne indi."
+      }
+    },
+    "rejected": {
+      "phase": "Şimdi olmaz.",
+      "not_assigned": "Bu senin işin değil.",
+      "already_complete": "Zaten yapıldı.",
+      "out_of_range": "Yeterince yakın değilsin.",
+      "dead": "Artık değil.",
+      "busy": "Zaten bir işin başındasın.",
+      "not_started": "Ona başlamamıştın.",
+      "too_fast": "Bu gerçek olamayacak kadar hızlıydı.",
+      "unconfirmed": "Önce riski kabul etmelisin."
+    }
+  },
   "taskList": {
     "heading": "Görevleriniz"
   },
   "minigame": {
     "cancel": "İptal",
-    "wires": {
-      "instructions": "Her kabloyu aynı renkteki sokete sürükleyin.",
-      "plugLabel": "Kablo"
+    "wick": {
+      "instructions": "Alevi sürükleyerek işaretli banda getir, sonra bırak."
     },
-    "code": {
-      "instructions": "Yukarıda gösterilen kodu girin."
+    "net": {
+      "instructions": "Her ip ucunu kendi düğümüne sürükle.",
+      "ropeLabel": "İp ucu"
     },
-    "calibration": {
-      "instructions": "Göstergeyi vurgulanan bölgenin içinde durdurun.",
-      "stopButton": "Durdur"
+    "gear": {
+      "instructions": "Yayı sarmak için basılı tut. İşaretli bantta bırak — geç bırakırsan kol geri teper.",
+      "crankLabel": "Sarmak için basılı tut"
     },
-    "pattern": {
-      "watching": "Sırayı izleyin…",
-      "yourTurn": "Sırayı tekrarlayın.",
-      "wrong": "Tam değil — tekrar izleyin."
+    "bilge": {
+      "instructions": "Su tepeye ulaşmadan pompala.",
+      "pumpLabel": "Pompala"
     },
-    "ordering": {
-      "instructions": "Öğeleri artan sıraya göre sürükleyin."
+    "ledger": {
+      "instructions": "Her kaydı ait olduğu sütuna sürükle.",
+      "columnLabel": {
+        "incoming": "Gelen",
+        "outgoing": "Giden"
+      },
+      "entryLabel": {
+        "incoming": "Teslimat",
+        "outgoing": "Sevkiyat"
+      }
     },
-    "rotation": {
-      "instructions": "Her kadranı hedefiyle hizalamak için tıklayın.",
-      "dialLabel": "Kadran {{index}}"
+    "crane": {
+      "instructions": "Yükü kiriş üzerinde dengede tutmak için Sol veya Sağ'ı basılı tut.",
+      "pullLeft": "Sola Çek",
+      "pullRight": "Sağa Çek"
     }
   },
   "moderation": {

@@ -2013,9 +2013,9 @@ export class GameScene extends Phaser.Scene {
    * Show a "press E" prompt when the local player is near one of their own
    * tasks, and open its mini-game on a fresh E press. This proximity check is
    * UX only: the mini-game itself doesn't complete the task, it just decides
-   * *when* to ask the server to. The server re-checks distance and ownership
-   * itself at that point and is the only thing that actually grants the
-   * completion — see `GameRoom.handleTaskInteract`.
+   * *when* to ask the server to open an attempt (8.2). The server re-checks
+   * distance and ownership itself, both when the attempt opens and again
+   * when it resolves — see `GameRoom.handleTaskStart`/`closeTaskAttempt`.
    */
   private updateTaskInteraction(): boolean {
     const local = this.entities.get(this.room.sessionId);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Room } from "colyseus.js";
 import {
@@ -18,13 +18,14 @@ import { GameCanvas } from "../game/GameCanvas";
 import type { AbilitySlotInfo, AbilityTargetInfo } from "../game/GameScene";
 import { TaskBar } from "./TaskBar";
 import { TaskList } from "./TaskList";
-import { MinigameModal } from "./MinigameModal";
+import { TaskAttemptOverlay } from "./TaskAttemptOverlay";
 import { AbilityButton } from "./AbilityButton";
 import { AbilityHintToast } from "./AbilityHintToast";
 import { CriticalSabotageBanner } from "./CriticalSabotageBanner";
 import { OnboardingHintToast } from "./OnboardingHintToast";
 import { useOnboardingHint } from "../onboarding/useOnboardingHint";
 import { Button, Panel } from "./primitives";
+import * as juiceEvents from "../juice/juiceEvents";
 
 interface GameViewProps {
   room: Room<GameState>;
@@ -67,6 +68,22 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
     total: room.state.taskBarTotal,
   });
   const [activeTask, setActiveTask] = useState<ClientTask | null>(null);
+  /**
+   * The task bar's own fill element, so its §9/8.3 completion punch
+   * (`juiceEvents.taskComplete`) has something to animate. A ref rather than
+   * a callback prop because `TaskBar` is a plain presentational component —
+   * threading a DOM node out through it is simpler than teaching it about
+   * juice.
+   */
+  const taskBarFillRef = useRef<HTMLDivElement>(null);
+  /**
+   * The PUBLIC bar's last known value, compared on every state sync to detect
+   * a genuine advance. Deliberately not driven by the private `taskProgress`
+   * message: that fires for a fake task too, and the punch is meant to track
+   * what the room actually just accomplished, the same aggregate everyone
+   * else sees tick up.
+   */
+  const lastTaskBarCompletedRef = useRef(room.state.taskBarCompleted);
   const [abilityTargets, setAbilityTargets] = useState<Record<string, AbilityTargetInfo | null>>(
     {},
   );
@@ -122,6 +139,10 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
     const sync = () => {
       setPlayerCount(room.state.players.size);
       setTaskBar({ completed: room.state.taskBarCompleted, total: room.state.taskBarTotal });
+      if (room.state.taskBarCompleted > lastTaskBarCompletedRef.current) {
+        juiceEvents.taskComplete(taskBarFillRef.current);
+      }
+      lastTaskBarCompletedRef.current = room.state.taskBarCompleted;
       // Read liveness from the public bodies map rather than `alive`: the
       // per-child filter means a living client never receives another
       // player's `alive: false`, so bodies are the one reliable signal.
@@ -225,18 +246,13 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
     setActiveTask(task);
   }, []);
 
-  const handleMinigameComplete = useCallback(() => {
-    setActiveTask((task) => {
-      if (task) {
-        // The server re-checks distance and ownership itself right now —
-        // solving the mini-game only earns the *request*, not the credit.
-        room.send("task_interact", { taskId: task.id });
-      }
-      return null;
-    });
-  }, [room]);
-
-  const handleMinigameCancel = useCallback(() => setActiveTask(null), []);
+  /**
+   * Unmount the overlay. It does NOT decide the outcome — every message about
+   * an attempt (start, resolve, abort) is sent by `TaskAttemptOverlay`, and
+   * the server decides what any of it meant. See its own doc for why the
+   * network lives there rather than here.
+   */
+  const handleAttemptClose = useCallback(() => setActiveTask(null), []);
 
   const handleUseAbility = useCallback(
     (abilityId: string, target: AbilityTargetInfo) => {
@@ -280,7 +296,7 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
         <Button onClick={onLeave}>{t("game.leaveButton")}</Button>
       </header>
 
-      <TaskBar completed={taskBar.completed} total={taskBar.total} />
+      <TaskBar completed={taskBar.completed} total={taskBar.total} fillRef={taskBarFillRef} />
 
       {criticalSabotage && (
         <CriticalSabotageBanner
@@ -330,11 +346,11 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
       </div>
 
       {activeTask && (
-        <MinigameModal
+        <TaskAttemptOverlay
+          room={room}
           task={activeTask}
-          onComplete={handleMinigameComplete}
-          onCancel={handleMinigameCancel}
           injured={injured}
+          onClose={handleAttemptClose}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Room } from "colyseus.js";
-import { PHASE, roleById } from "@foghaven/shared";
+import { PHASE, roleById, type TaskOutcomeMessage } from "@foghaven/shared";
 import type { GameState } from "../net/types";
 import { audioEngine } from "./audioEngine";
 
@@ -70,11 +70,25 @@ export function useGameAudio(room: Room<GameState> | null, localRole: string | n
       audioEngine.playStinger("kill"),
     );
 
+    // §8.3's two new stingers. A lethal failure needs no branch here at all —
+    // `applyDeath` sends the same `"killed"` message a murder does, so
+    // `offKilled` above already covers it, and covering it a second time here
+    // would be the two-writers-to-one-signal bug this file's own doc warns
+    // against for `ejection`/`meetingStart`.
+    const offTaskOutcome = room.onMessage<TaskOutcomeMessage>("taskOutcome", (msg) => {
+      if (msg.success) {
+        audioEngine.playStinger("taskComplete");
+      } else if (msg.tier === "injury") {
+        audioEngine.playStinger("taskInjury");
+      }
+    });
+
     return () => {
       unlistenPhase();
       unlistenSabotage();
       offKilled();
       offKillConfirmed();
+      offTaskOutcome();
     };
   }, [room]);
 }

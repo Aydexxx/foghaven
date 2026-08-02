@@ -47,6 +47,7 @@ import {
   SIM_DT,
   TASK_DEFINITIONS,
   TASK_DEFINITIONS_BY_ID,
+  TASK_BAND_BOUNDS,
   TASK_INTERACT_RADIUS,
   TASK_ROOM_ANCHOR,
   type TaskProgressMessage,
@@ -271,6 +272,28 @@ async function seat(
  * does not use this. Composite-keyed by ability id since a role can have
  * several abilities now (Stranger: kill, sabotage, tunnel).
  */
+/**
+ * Drive one task step through the real 8.2 lifecycle: open an attempt, wait
+ * out the band's plausibility floor, then report success.
+ *
+ * There is no longer any single-message way to complete a task — `task_interact`
+ * was removed precisely so a hostile client could not use one — so every test
+ * that just needs a step done goes through this. `confirmed` is always sent
+ * because a lethal station refuses to open without it; a safe one ignores it.
+ */
+async function completeTaskStep(
+  seat: { client: { send(type: string, payload: unknown): void } },
+  taskId: string,
+): Promise<void> {
+  const def = TASK_DEFINITIONS_BY_ID.get(taskId)!;
+  seat.client.send("task_start", { taskId, confirmed: true });
+  await new Promise((resolve) =>
+    setTimeout(resolve, TASK_BAND_BOUNDS[def.band].minMs + 250),
+  );
+  seat.client.send("task_resolve", { taskId, success: true });
+  await tick(3);
+}
+
 function armAbility(room: ServerRoom<GameState>, sessionId: string, abilityId: string): void {
   (
     room as unknown as { abilityReadyAt: Map<string, number> }
@@ -963,7 +986,7 @@ describe("GameRoom tasks", () => {
     const seats = await seatAndStart(room); // still in role_reveal, not playing
     const s = seats[0]!;
 
-    s.client.send("task_interact", {
+    s.client.send("task_start", {
       taskId: s.taskMessages[0]?.tasks[0]?.id ?? "wiring-reactor",
     });
     await tick(3);
@@ -982,7 +1005,7 @@ describe("GameRoom tasks", () => {
 
     s.player.x = foreignTask.x;
     s.player.y = foreignTask.y;
-    s.client.send("task_interact", { taskId: foreignTask.id });
+    s.client.send("task_start", { taskId: foreignTask.id });
     await tick(3);
 
     expect(s.taskProgressMessages).toHaveLength(0);
@@ -1000,7 +1023,7 @@ describe("GameRoom tasks", () => {
     s.player.x = def.x + TASK_INTERACT_RADIUS * 5;
     s.player.y = def.y;
 
-    s.client.send("task_interact", { taskId: task.id });
+    s.client.send("task_start", { taskId: task.id });
     await tick(3);
 
     expect(s.taskProgressMessages).toHaveLength(0);
@@ -1017,8 +1040,7 @@ describe("GameRoom tasks", () => {
     s.player.y = def.y;
 
     const before = room.state.taskBarCompleted;
-    s.client.send("task_interact", { taskId: task.id });
-    await tick(3);
+    await completeTaskStep(s, task.id);
 
     expect(s.taskProgressMessages).toEqual([{ taskId: task.id, completedSteps: 1 }]);
     expect(room.state.taskBarCompleted).toBe(before + 1);
@@ -1039,8 +1061,7 @@ describe("GameRoom tasks", () => {
     s.player.y = def.y;
 
     const before = room.state.taskBarCompleted;
-    s.client.send("task_interact", { taskId: task.id });
-    await tick(3);
+    await completeTaskStep(s, task.id);
 
     expect(s.taskProgressMessages).toEqual([{ taskId: task.id, completedSteps: 1 }]);
     expect(room.state.taskBarCompleted).toBe(before);
@@ -1048,8 +1069,9 @@ describe("GameRoom tasks", () => {
 
   it("requires multiple interacts to finish a multi-step task, and ignores interacts past completion", async () => {
     const room = await colyseus.createRoom<GameState>("game");
-    // 8 players independently drawing 4 of 7 non-common tasks makes the odds
-    // of nobody getting either multi-step task astronomically small (~3e-7).
+    // Guaranteed to find one: `sort-the-ledger` is `type: "common"` (§8.3),
+    // so every seat's own list already starts with a 3-step `long` task
+    // before the random draw even runs — no longer a probabilistic pool hit.
     const seats = await seatAndPlay(room, 8);
 
     let target: { seat: (typeof seats)[number]; taskId: string; totalSteps: number } | undefined;
@@ -1067,28 +1089,32 @@ describe("GameRoom tasks", () => {
     s.player.x = def.x;
     s.player.y = def.y;
 
+    // Each step is now its own attempt, so these run sequentially rather
+    // than as a burst of presses — a burst would be refused as "busy".
     for (let i = 0; i < totalSteps; i++) {
-      s.client.send("task_interact", { taskId });
+      await completeTaskStep(s, taskId);
     }
-    await tick(3);
 
     expect(s.taskProgressMessages).toHaveLength(totalSteps);
     expect(s.taskProgressMessages.at(-1)!.completedSteps).toBe(totalSteps);
 
-    // One more press past completion must be a no-op, not a 4th progress step.
-    s.client.send("task_interact", { taskId });
-    await tick(3);
+    // One more attempt past completion must be refused, not a further step.
+    await completeTaskStep(s, taskId);
     expect(s.taskProgressMessages).toHaveLength(totalSteps);
-  });
+    // Explicit timeout: this now deterministically draws a 3-step `long`
+    // task (see above), which is 4 real `completeTaskStep` round trips at
+    // `TASK_BAND_BOUNDS.long.minMs` (2.5s) each — comfortably over Vitest's
+    // 15s default even with no contention at all.
+  }, 30_000);
 
   it("ignores a malformed or missing taskId without throwing", async () => {
     const room = await colyseus.createRoom<GameState>("game");
     const seats = await seatAndPlay(room);
     const s = seats[0]!;
 
-    s.client.send("task_interact", {});
-    s.client.send("task_interact", { taskId: 12345 });
-    s.client.send("task_interact", { taskId: "does-not-exist" });
+    s.client.send("task_start", {});
+    s.client.send("task_start", { taskId: 12345 });
+    s.client.send("task_start", { taskId: "does-not-exist" });
     await tick(3);
 
     expect(s.taskProgressMessages).toHaveLength(0);
@@ -1101,13 +1127,18 @@ describe("GameRoom tasks", () => {
     const room = await colyseus.createRoom<GameState>("game");
     const seats = await seatAndPlay(room, 8);
 
-    for (const s of seats) {
-      const task = s.taskMessages[0]!.tasks[0]!;
-      const def = TASK_DEFINITIONS_BY_ID.get(task.id)!;
-      s.player.x = def.x;
-      s.player.y = def.y;
-      s.client.send("task_interact", { taskId: task.id });
-    }
+    // Concurrently: attempts are per-player, so eight at once is both far
+    // faster than eight in series and a slightly better test — it also
+    // exercises the room holding several open attempts at the same time.
+    await Promise.all(
+      seats.map((s) => {
+        const task = s.taskMessages[0]!.tasks[0]!;
+        const def = TASK_DEFINITIONS_BY_ID.get(task.id)!;
+        s.player.x = def.x;
+        s.player.y = def.y;
+        return completeTaskStep(s, task.id);
+      }),
+    );
     await tick(3);
 
     // An exact key list, so any new public field has to be considered here
@@ -1404,8 +1435,7 @@ describe("GameRoom kill", () => {
     victim.player.y = def.y;
 
     const barBefore = room.state.taskBarCompleted;
-    victim.client.send("task_interact", { taskId: task.id });
-    await tick(3);
+    await completeTaskStep(victim, task.id);
 
     expect(GHOSTS_CAN_DO_TASKS).toBe(true);
     expect(victim.taskProgressMessages.at(-1)).toEqual({ taskId: task.id, completedSteps: 1 });
@@ -2390,14 +2420,14 @@ describe("GameRoom chat", () => {
 
 describe("GameRoom win conditions", () => {
   /** Complete one real task, pushing the bar from one-short to full. */
-  function finishLastTask(room: ServerRoom<GameState>, finisher: { player: Player; taskMessages: TasksMessage[]; client: { send(type: string, message?: unknown): void } }): void {
+  async function finishLastTask(room: ServerRoom<GameState>, finisher: { player: Player; taskMessages: TasksMessage[]; client: { send(type: string, message?: unknown): void } }): Promise<void> {
     room.state.taskBarCompleted = room.state.taskBarTotal - 1;
 
     const task = finisher.taskMessages[0]!.tasks.find((t) => t.totalSteps === 1)!;
     const def = TASK_DEFINITIONS_BY_ID.get(task.id)!;
     finisher.player.x = def.x;
     finisher.player.y = def.y;
-    finisher.client.send("task_interact", { taskId: task.id });
+    await completeTaskStep(finisher, task.id);
   }
 
   it("declares a townsfolk win when the task bar reaches 100%", async () => {
@@ -2405,7 +2435,7 @@ describe("GameRoom win conditions", () => {
     const seats = await seatAndPlay(room, 8);
     const { townsfolk } = splitRoles(seats);
 
-    finishLastTask(room, townsfolk[0]!);
+    await finishLastTask(room, townsfolk[0]!);
     await tick(3);
 
     expect(room.state.phase).toBe(PHASE.GAME_OVER);
@@ -2425,8 +2455,7 @@ describe("GameRoom win conditions", () => {
     const def = TASK_DEFINITIONS_BY_ID.get(task.id)!;
     finisher.player.x = def.x;
     finisher.player.y = def.y;
-    finisher.client.send("task_interact", { taskId: task.id });
-    await tick(3);
+    await completeTaskStep(finisher, task.id);
 
     expect(room.state.phase).toBe(PHASE.PLAYING);
   });
@@ -2497,7 +2526,7 @@ describe("GameRoom win conditions", () => {
     const seats = await seatAndPlay(room, 8);
     const { strangers, townsfolk } = splitRoles(seats);
 
-    finishLastTask(room, townsfolk[0]!);
+    await finishLastTask(room, townsfolk[0]!);
     await tick(3);
     expect(room.state.phase).toBe(PHASE.GAME_OVER);
 
@@ -2529,7 +2558,7 @@ describe("GameRoom win conditions", () => {
     await tick(4);
     expect(townsfolk[0]!.player.alive).toBe(false);
 
-    finishLastTask(room, townsfolk[1]!);
+    await finishLastTask(room, townsfolk[1]!);
     await tick(3);
     expect(room.state.phase).toBe(PHASE.GAME_OVER);
 
@@ -2543,7 +2572,7 @@ describe("GameRoom win conditions", () => {
     const seats = await seatAndPlay(room, 8);
     const { townsfolk } = splitRoles(seats);
 
-    finishLastTask(room, townsfolk[0]!);
+    await finishLastTask(room, townsfolk[0]!);
     await tick(3);
     expect(room.state.phase).toBe(PHASE.GAME_OVER);
 
@@ -2569,8 +2598,7 @@ describe("GameRoom return to lobby", () => {
     const def = TASK_DEFINITIONS_BY_ID.get(task.id)!;
     finisher.player.x = def.x;
     finisher.player.y = def.y;
-    finisher.client.send("task_interact", { taskId: task.id });
-    await tick(3);
+    await completeTaskStep(finisher, task.id);
     expect(room.state.phase).toBe(PHASE.GAME_OVER);
 
     return seats;
@@ -2782,8 +2810,7 @@ describe("GameRoom reconnection", () => {
     const def = TASK_DEFINITIONS_BY_ID.get(task.id)!;
     worker.player.x = def.x;
     worker.player.y = def.y;
-    worker.client.send("task_interact", { taskId: task.id });
-    await tick(3);
+    await completeTaskStep(worker, task.id);
 
     const token = await dropConnection(worker);
     const back = await reconnectWith(token);

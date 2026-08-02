@@ -510,7 +510,7 @@ export class GameState extends Schema {
   /**
    * The shared task bar. Both fields count only *real* (townsfolk) task
    * steps — a stranger's completions are never added to `taskBarCompleted`,
-   * see `GameRoom.handleTaskInteract`. This is safe to be public: the
+   * see `GameRoom.creditTaskStep`. This is safe to be public: the
    * percentage of tasks done reveals nothing about who did them.
    */
   @type("number") taskBarCompleted = 0;

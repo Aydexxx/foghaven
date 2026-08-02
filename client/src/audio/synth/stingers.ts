@@ -23,6 +23,16 @@ import { createNoiseBuffer } from "./noise";
  *   - win: a bright ascending major arpeggio, high register.
  *   - loss: a slow descending minor pair, low register — win played backwards
  *     and inverted, so the two payoff stingers read as opposites at a glance.
+ *   - taskComplete (8.3): two soft ascending bell-like tones — a small, warm
+ *     payoff, deliberately quieter and shorter than `win` so it never
+ *     competes with it; this fires many times a round, `win` fires once.
+ *   - taskInjury (8.3): a metallic kick-back — a short detuned clang plus a
+ *     percussive snap. Distinct from `kill`'s low noise-stab: that one is
+ *     violence done TO someone, this is a spring snapping back at you.
+ *     (A lethal task's own failure reuses `kill` outright — `applyDeath`
+ *     sends the same `"killed"` message a murder does, and this file's own
+ *     `playKillStinger` already answers it identically either way, which is
+ *     exactly the point: a task death and a murder must sound the same.)
  *
  * Every function fires a self-contained, self-cleaning Web Audio graph:
  * nodes are created, scheduled, and `stop()`-ped a beat after their own
@@ -209,4 +219,39 @@ export function playTunnelStinger({ ctx, destination }: StingerCtx): void {
   noise.connect(filter).connect(gain).connect(destination);
   noise.start(now);
   noise.stop(now + duration + 0.1);
+}
+
+/** §8.3: a task attempt resolving successfully — small, warm, fires often. */
+export function playTaskCompleteStinger({ ctx, destination }: StingerCtx): void {
+  const now = ctx.currentTime;
+  // Two-note rise, a fifth apart, both soft triangles — a miniature version
+  // of `playWinStinger`'s shape at a fraction of the loudness and length, so
+  // the two never read as the same event even heard back to back.
+  tone(ctx, destination, 523.25, "triangle", now, 0.008, 0.16, 0.22);
+  tone(ctx, destination, 783.99, "triangle", now + 0.09, 0.008, 0.18, 0.28);
+}
+
+/** §8.3: an injury-tier task kicking back on failure. */
+export function playTaskInjuryStinger({ ctx, destination }: StingerCtx): void {
+  const now = ctx.currentTime;
+  const duration = 0.22;
+
+  // A short percussive snap — the mechanism giving way.
+  const noise = ctx.createBufferSource();
+  noise.buffer = createNoiseBuffer(ctx, duration, "white");
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.Q.value = 2.5;
+  filter.frequency.setValueAtTime(1800, now);
+  filter.frequency.exponentialRampToValueAtTime(500, now + duration);
+  const noiseGain = envelopeGain(ctx, 0.003, 0.4, duration - 0.05, now);
+  noise.connect(filter).connect(noiseGain).connect(destination);
+  noise.start(now);
+  noise.stop(now + duration + 0.1);
+
+  // Two close-detuned tones for the metallic "clang" underneath the snap —
+  // detuning (rather than a clean single tone) is what reads as metal rather
+  // than a struck bell like `meetingStart`/`bellToll`'s clean partial series.
+  tone(ctx, destination, 340, "square", now, 0.004, 0.22, 0.18);
+  tone(ctx, destination, 355, "square", now, 0.004, 0.2, 0.18);
 }
