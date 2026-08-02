@@ -259,6 +259,14 @@ describe("role selection — channel 1: content", () => {
       "ready",
       "hasPickedRole",
       "lastSeq",
+      // Carries no information about anyone. It is a bare tick counter that
+      // every player's row increments in lockstep during PLAYING (see
+      // `Player.heartbeat`), so it is always identical across all rows and
+      // says nothing beyond "a tick happened" — which the positions already
+      // said. It exists so a client can tell "still being sent this player"
+      // apart from "this player stopped moving", and it rides the same fog
+      // filter as every other field here.
+      "heartbeat",
       "hatId",
       "accessoryId",
       "petId",
@@ -267,10 +275,18 @@ describe("role selection — channel 1: content", () => {
       "deathEffectId",
     ]);
     const view = seats[0]!.client.state.toJSON() as unknown as PublicView;
-    for (const row of Object.values(view.players)) {
+    const rows = Object.values(view.players);
+    for (const row of rows) {
       expect(new Set(Object.keys(row))).toEqual(expected);
       expect(typeof row.hasPickedRole).toBe("boolean");
     }
+
+    // The one non-boolean field added since: prove it distinguishes nobody.
+    // Every row's heartbeat moves in lockstep (`GameRoom.update` bumps them
+    // all in the same pass), so it can never be read as a per-player signal —
+    // which is the only reason a per-tick counter is safe to make public.
+    const heartbeats = new Set(rows.map((row) => (row as { heartbeat: number }).heartbeat));
+    expect(heartbeats.size).toBe(1);
   });
 
   it("publishes only a boolean about someone else's progress", async () => {

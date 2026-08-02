@@ -39,6 +39,13 @@ export interface PlayerState extends Schema {
    */
   hasPickedRole: boolean;
   lastSeq: number;
+  /**
+   * Changes every tick during play and means nothing on its own — it exists
+   * so `GameScene` can tell "the server is still sending me this player"
+   * apart from "this player stopped moving". See the server `Player` schema's
+   * own doc for the decoder behaviour that makes this necessary.
+   */
+  heartbeat: number;
   /** The six cosmetic slots — a catalog id or empty string. See the server `Player` schema's own doc. */
   hatId: string;
   accessoryId: string;

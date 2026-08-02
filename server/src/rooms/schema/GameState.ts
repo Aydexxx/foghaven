@@ -115,6 +115,61 @@ export class Player extends Schema {
   @type("number") lastSeq = 0;
 
   /**
+   * A value that changes every tick during PLAYING and carries no meaning of
+   * its own — the client only ever cares THAT it changed, never what it is.
+   *
+   * ---
+   *
+   * ## The general rule, which is why this field exists
+   *
+   * **@colyseus/schema raises a change callback only when a decoded value
+   * DIFFERS from the one the client already holds. Re-sending an unchanged
+   * value is, to the client, indistinguishable from sending nothing at all.**
+   *
+   * So any client-observable mechanic built on "have I heard about X
+   * recently?" — visibility, liveness, presence, staleness, an idle or
+   * heartbeat timeout, anything that treats silence as meaningful — cannot be
+   * driven by re-sending existing state. It must ride a field that
+   * monotonically changes every tick, or it will read "the server is still
+   * sending me this" and "this stopped changing" as the same thing.
+   *
+   * This is written out in full because it already bit us once, below, and
+   * nothing about it is specific to positions or to the fog: the next
+   * subsystem to infer something from a quiet socket will hit it in exactly
+   * the same way, and the failure looks like a rendering bug rather than a
+   * networking one. `setDirty` does NOT get you out of it — that is a
+   * server-side encoder hint (it controls what goes on the wire and whether a
+   * filter re-runs) and has no bearing on whether the decoder fires a callback
+   * at the far end.
+   *
+   * ---
+   *
+   * The specific case: `setDirty("x")` alone is not enough to tell a client
+   * "you are still being sent this player". The server-side half works fine:
+   * dirtying a position re-runs the fog filter and really does put the entity
+   * on the wire every tick (measured — a stationary room still pushes a patch
+   * per tick). But by the rule above, a player standing perfectly still
+   * produced zero `onChange` calls on every other client no matter how many
+   * bytes arrived. `GameScene` derives visibility from exactly those callbacks
+   * (`lastFreshAt` / `VISIBILITY_TIMEOUT_MS`), so a motionless player went
+   * invisible after ~350ms — and, because the kill button only targets
+   * fog-visible entities, un-killable along with it. Both read as gameplay
+   * bugs; neither was.
+   *
+   * A field that genuinely differs each tick is the smallest fix that makes
+   * "the server is still sending you this player" observable to the client at
+   * all. `uint8` deliberately: it wraps at 256 and always encodes as exactly
+   * one byte, so it can never widen a patch the way a growing varint would —
+   * the packet-size side channel the kill-secrecy suite pins stays flat.
+   *
+   * The `setDirty` heartbeat in `GameRoom.update` stays regardless: this
+   * field proves liveness, but only re-dirtying x/y guarantees a client
+   * re-entering someone's vision receives their CURRENT position rather than
+   * keeping the stale one it last saw.
+   */
+  @type("uint8") heartbeat = 0;
+
+  /**
    * The six cosmetic slots — a catalog id (see `@foghaven/shared`'s
    * `COSMETICS`) or empty string for "nothing equipped in this slot". Set
    * once at `onJoin` from the account's saved loadout (see

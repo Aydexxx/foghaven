@@ -3855,10 +3855,25 @@ export class GameRoom extends Room<GameState> {
     // updates every patch, so an entity that has gone quiet is, by
     // elimination, hidden — which is how `GameScene` knows to stop drawing
     // them without ever being told.
+    // `setDirty` is what makes the SERVER re-filter and re-encode; the
+    // `heartbeat` bump is what makes the arrival observable to the CLIENT.
+    // Both are required and they are not interchangeable.
+    //
+    // The rule behind that, worth knowing before you build anything similar:
+    // @colyseus/schema fires a change callback only when a decoded value
+    // DIFFERS from what the client already holds, so re-sending an unchanged
+    // value looks exactly like sending nothing. Any client-side mechanic that
+    // reads meaning into silence — visibility, liveness, presence, an idle
+    // timeout — therefore has to ride a field that actually changes each
+    // tick. `setDirty` is a server-side encoder hint and does not help. See
+    // `Player.heartbeat`'s own doc for the full write-up and for how this
+    // once surfaced as a stationary player being invisible and unkillable.
     if (this.state.phase === PHASE.PLAYING) {
       this.state.players.forEach((player) => {
         player.setDirty("x");
         player.setDirty("y");
+        // Wraps at 256 — the client compares for inequality, never magnitude.
+        player.heartbeat = (player.heartbeat + 1) % 256;
       });
       this.state.bodies.forEach((body) => {
         body.setDirty("x");

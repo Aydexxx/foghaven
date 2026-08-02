@@ -164,14 +164,43 @@ const ROOM_LABEL_STYLE = phaserTextStyle("ui", "caption");
 const CAMERA_LERP = 0.15;
 
 /**
+ * How far in the world camera sits.
+ *
+ * This is a readability figure, not a taste one. The viewport is 960x640
+ * (`GameCanvas`), while a player outdoors can only see `VISION_RADIUS_OUTDOOR`
+ * = 170 units around themselves — so at 1:1 the lit circle spanned barely a
+ * third of the screen width and everything else was fog. The town read as
+ * small and distant because most of the frame was, literally, nothing.
+ *
+ * At 1.5 the camera shows 640x427 world units, so that same 340-unit lit
+ * circle fills ~80% of the frame height and the Haveners are half again as
+ * large. Nothing about what a player can *see* changes — the fog radius and
+ * the server's own filtering are untouched, and the crop only ever removes
+ * fog that was already opaque.
+ *
+ * Deliberately NOT a fix for room dimensions: the Tavern being an 8x9-tile
+ * box is a map-geometry question and belongs to the room art pass (roadmap
+ * 7.18), not here. `LobbyScene` keeps its own fixed zoom for that reason.
+ */
+const CAMERA_ZOOM = 1.5;
+
+/**
  * How long a remote player may go without an update before they are treated
- * as fogged and hidden. The server force-refreshes every position it is
- * willing to send at every patch (50 ms — see the fog heartbeat in
- * `GameRoom.update`), so silence is not ambiguity: an entity that has gone
- * quiet for several patch intervals is one the server is deliberately
- * withholding. This is how the client knows to stop drawing someone without
- * ever being told — Colyseus retracts nothing when a filter closes, it just
- * goes quiet.
+ * as fogged and hidden. The server force-refreshes every player it is willing
+ * to send at every patch (50 ms — see the fog heartbeat in `GameRoom.update`),
+ * so silence is not ambiguity: an entity that has gone quiet for several patch
+ * intervals is one the server is deliberately withholding. This is how the
+ * client knows to stop drawing someone without ever being told — Colyseus
+ * retracts nothing when a filter closes, it just goes quiet.
+ *
+ * What counts as "an update" is load-bearing and was once wrong. The decoder
+ * only raises a change callback when a decoded value actually DIFFERS from
+ * what this client already holds, so re-sending a standing player's unchanged
+ * x/y — which the server does, every tick — looked identical to sending them
+ * nothing at all. Every motionless player therefore went invisible after this
+ * timeout, and with them un-targetable (see `nearestPlayerTarget`), which is
+ * what made a stranger unable to kill anyone standing still. `Player.heartbeat`
+ * exists solely so that arrival is observable; see its doc on the server schema.
  */
 const VISIBILITY_TIMEOUT_MS = 350;
 
@@ -420,6 +449,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Before anything that sizes itself against the camera — the atmosphere's
+    // particle box and the fog overlay both read the zoom, so setting it later
+    // (when the local player arrives) would have them build for 1:1 and then
+    // never correct themselves.
+    this.cameras.main.setZoom(CAMERA_ZOOM);
+
     this.bindKeys();
     // Live rebind: the settings panel writes straight through `inputEngine`
     // while this scene may already be running, so picking up a change
@@ -1061,7 +1096,8 @@ export class GameScene extends Phaser.Scene {
       entity.disposers.push(player.onChange(() => this.reconcile(player, entity)));
       // The world is bigger than the screen; follow whoever this client is
       // playing as, smoothed rather than pinned so small corrections (like
-      // reconciliation snaps) don't visibly jerk the camera.
+      // reconciliation snaps) don't visibly jerk the camera. The zoom itself
+      // is set once in `create` — see the note there.
       this.cameras.main.startFollow(havener, true, CAMERA_LERP, CAMERA_LERP);
     } else {
       // Hidden until the server actually delivers them: a remote entry can
@@ -1073,6 +1109,11 @@ export class GameScene extends Phaser.Scene {
       label.setVisible(false);
       entity.buffer = [{ t: performance.now(), x: player.x, y: player.y }];
       entity.disposers.push(
+        // Fires once per patch this client is entitled to receive this player
+        // in — including while they stand perfectly still, which is the whole
+        // reason `Player.heartbeat` exists (see `VISIBILITY_TIMEOUT_MS`). Do
+        // not narrow this to `listen("x")`/`listen("y")`: that is exactly the
+        // value-changed-only behaviour that made motionless players vanish.
         player.onChange(() => {
           entity.buffer?.push({ t: performance.now(), x: player.x, y: player.y });
           entity.lastFreshAt = performance.now();
@@ -1608,10 +1649,18 @@ export class GameScene extends Phaser.Scene {
     // The brush is never on the display list — it exists only to be stamped
     // into the overlay with the erase blend each frame.
     this.fogBrush = this.make.image({ key: FOG_BRUSH_KEY, add: false });
+    // Sized and positioned in WORLD units, not screen units, so the camera's
+    // zoom scales it exactly like everything else it covers. A screen-space
+    // (`setScrollFactor(0)`) overlay would need every erase below re-projected
+    // through the zoom by hand; this way the arithmetic stays "world position
+    // minus the top-left of what the camera can see", which is what it always
+    // was — `worldView` simply equals `scroll` when the zoom is 1.
+    // `worldView`'s size is constant for a fixed zoom, so this never resizes.
+    const view = this.cameras.main.worldView;
     this.fogOverlay = this.add
-      .renderTexture(0, 0, this.scale.width, this.scale.height)
+      .renderTexture(0, 0, this.scale.width / CAMERA_ZOOM, this.scale.height / CAMERA_ZOOM)
       .setOrigin(0, 0)
-      .setScrollFactor(0)
+      .setPosition(view.x, view.y)
       .setDepth(FOG_DEPTH);
   }
 
@@ -1649,10 +1698,14 @@ export class GameScene extends Phaser.Scene {
       FOG_RADIUS_RATE;
 
     rt.fill(FOG_COLOR, this.fogAlpha);
-    const cam = this.cameras.main;
+    // The overlay tracks the top-left of the camera's world view. Both erases
+    // below are therefore plain world-space subtractions, at any zoom — see
+    // the note where `fogOverlay` is created.
+    const view = this.cameras.main.worldView;
+    rt.setPosition(view.x, view.y);
     brush.setScale((this.fogRadius * 2) / FOG_BRUSH_SIZE);
-    rt.erase(brush, pos.x - cam.scrollX, pos.y - cam.scrollY);
-    this.atmosphere.stampLightBleed(rt, cam.scrollX, cam.scrollY);
+    rt.erase(brush, pos.x - view.x, pos.y - view.y);
+    this.atmosphere.stampLightBleed(rt, view.x, view.y);
   }
 
   /**

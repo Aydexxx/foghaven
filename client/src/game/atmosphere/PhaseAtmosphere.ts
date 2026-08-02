@@ -267,13 +267,22 @@ export class PhaseAtmosphere {
     if (this.fogWisps || this.rain) {
       return;
     }
-    const width = this.scene.scale.width;
-    const height = this.scene.scale.height;
+    // Weather is screen-space (`setScrollFactor(0)`), but a camera zoom still
+    // scales it about the viewport centre — so an emission box of the raw
+    // viewport size would spray a zoomed-in camera's worth of particles
+    // outside the visible area and leave the rain looking thin. Emitting over
+    // the box that actually maps onto the screen keeps density identical at
+    // any zoom, including 1, where this collapses to the full viewport.
+    const zoom = this.scene.cameras.main.zoom || 1;
+    const width = this.scene.scale.width / zoom;
+    const height = this.scene.scale.height / zoom;
+    const originX = (this.scene.scale.width - width) / 2;
+    const originY = (this.scene.scale.height - height) / 2;
 
     this.fogWisps = this.scene.add
       .particles(0, 0, GLOW_KEY, {
-        x: { min: 0, max: width },
-        y: { min: 0, max: height },
+        x: { min: originX, max: originX + width },
+        y: { min: originY, max: originY + height },
         lifespan: { min: 9000, max: 15000 },
         speedX: { min: -8, max: 12 },
         speedY: { min: -4, max: 4 },
@@ -288,8 +297,8 @@ export class PhaseAtmosphere {
 
     this.rain = this.scene.add
       .particles(0, 0, RAIN_KEY, {
-        x: { min: 0, max: width },
-        y: { min: -50, max: height },
+        x: { min: originX, max: originX + width },
+        y: { min: originY - 50, max: originY + height },
         lifespan: { min: 900, max: 1300 },
         speedX: { min: -40, max: 20 },
         speedY: { min: 480, max: 680 },
@@ -355,8 +364,13 @@ export class PhaseAtmosphere {
    * schema) — nothing is ever drawn at a point unless the server already
    * sent it. Dimming the darkness there changes how dark the void looks,
    * never what data exists to see through it.
+   *
+   * `originX`/`originY` are the world coordinates the render texture's own
+   * (0,0) sits at — the top-left of the camera's world view. Passing the
+   * camera's raw scroll instead only happens to work at zoom 1; see the note
+   * where `GameScene` creates `fogOverlay`.
    */
-  stampLightBleed(rt: Phaser.GameObjects.RenderTexture, scrollX: number, scrollY: number): void {
+  stampLightBleed(rt: Phaser.GameObjects.RenderTexture, originX: number, originY: number): void {
     if (!this.effectsEnabled || !this.lightBleedBrush) {
       return;
     }
@@ -364,7 +378,7 @@ export class PhaseAtmosphere {
     brush.setScale((LIGHT_BLEED_RADIUS * 2) / GLOW_SIZE);
     brush.setAlpha(LIGHT_BLEED_ALPHA);
     for (const light of LIGHT_SOURCES) {
-      rt.erase(brush, light.pos.x - scrollX, light.pos.y - scrollY);
+      rt.erase(brush, light.pos.x - originX, light.pos.y - originY);
     }
   }
 

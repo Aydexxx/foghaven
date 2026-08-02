@@ -1412,6 +1412,112 @@ describe("GameRoom kill", () => {
     // A dead townsfolk still fills the bar — see GHOSTS_CAN_DO_TASKS for why.
     expect(room.state.taskBarCompleted).toBe(barBefore + 1);
   });
+
+  /**
+   * The end-to-end kill, with none of the shortcuts every other test in this
+   * suite takes.
+   *
+   * A playtest found the stranger unable to kill at all while all 630 tests
+   * passed, and the reason is visible in the tests themselves: each one calls
+   * `armAbility` to zero the cooldown and teleports the pair together by
+   * writing `player.x` on the server. Both are reasonable isolation for the
+   * rule they're each testing, but between them they skip the two things a
+   * real client actually depends on — that `startAbilityCooldowns` armed the
+   * kill at all, and that a killer who WALKS to a victim ends up genuinely in
+   * range. Nothing exercised the plain "a stranger walks up to someone and
+   * kills them" path, so nothing failed when it broke.
+   *
+   * So: no `armAbility` (the real `KILL_INITIAL_DELAY_MS` is waited out), and
+   * the killer closes the distance with real `input` messages. The only
+   * server-side positioning is the victim standing still — which is the point,
+   * since a motionless target is exactly what the client-side fog regression
+   * made un-targetable.
+   */
+  it("kills through the real flow — armed by the server, walked into range, no test hooks", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const { strangers, townsfolk } = splitRoles(seats);
+    const killer = strangers[0]!;
+    const victim = townsfolk[0]!;
+
+    // Both on the open plaza row the fog suite already uses as known-walkable
+    // ground. The victim stands still from here on and is never written again.
+    victim.player.x = 600;
+    victim.player.y = 832;
+    // The killer starts west of them, well outside KILL_RANGE.
+    killer.player.x = 400;
+    killer.player.y = 832;
+    // Everyone else goes far away so nobody's death ends the round early.
+    for (const s of seats) {
+      if (s !== killer && s !== victim) {
+        s.player.x = 1400;
+        s.player.y = 1050;
+      }
+    }
+    await tick(4);
+
+    const distance = () =>
+      Math.hypot(killer.player.x - victim.player.x, killer.player.y - victim.player.y);
+    expect(distance()).toBeGreaterThan(KILL_RANGE);
+
+    // The server arms every ability `KILL_INITIAL_DELAY_MS` after the world
+    // opens (`startAbilityCooldowns`). Waiting it out rather than reaching
+    // into `abilityReadyAt` is the whole point of this test: a regression
+    // that never armed the kill would fail here, not silently pass.
+    await new Promise((resolve) => setTimeout(resolve, KILL_INITIAL_DELAY_MS + 500));
+
+    // Walk east with the same message a real client sends, letting the
+    // server's own simulation decide where that puts them. Batched rather
+    // than fired in one burst because the server rate-limits how many queued
+    // inputs it will consume per tick (`MAX_INPUT_BUDGET`).
+    let seq = 0;
+    for (let batch = 0; batch < 12 && distance() > KILL_RANGE; batch++) {
+      for (let i = 0; i < 10; i++) {
+        killer.client.send("input", { seq: ++seq, dir: { x: 1, y: 0 } });
+      }
+      await tick(6);
+    }
+
+    expect(distance()).toBeLessThanOrEqual(KILL_RANGE);
+    // The walk is what closed the gap — the victim never moved.
+    expect(victim.player.x).toBe(600);
+    expect(victim.player.y).toBe(832);
+
+    const deathX = victim.player.x;
+    const deathY = victim.player.y;
+    killer.client.send("ability", { abilityId: "kill", targetId: victim.client.sessionId });
+    await tick(6);
+
+    // 1. Actually dead — not merely "the secrecy fields updated".
+    expect(victim.player.alive).toBe(false);
+    expect(killer.killConfirmedCount).toBe(1);
+    expect(victim.killedMessages).toHaveLength(1);
+    expect(victim.killedMessages[0]!.by).toBe(killer.client.sessionId);
+
+    // 2. A real corpse, where they actually fell.
+    const body = room.state.bodies.get(victim.client.sessionId);
+    expect(body).toBeDefined();
+    expect(body!.x).toBeCloseTo(deathX, 5);
+    expect(body!.y).toBeCloseTo(deathY, 5);
+    expect(realBodyCount(room)).toBe(1);
+
+    // 3. A ghost: their lantern is on the ground (§4.4) and the round is
+    //    still running, so this is a death, not a game-ending edge case.
+    expect(victim.player.lanternState).toBe("dropped");
+    expect(room.state.phase).toBe(PHASE.PLAYING);
+
+    // 4. The room agrees they are dead once a meeting makes it public — the
+    //    graveyard is rebuilt from the real `alive` flag, so a victim who was
+    //    only half-killed would be missing here.
+    killer.client.send("report_body", { bodyId: victim.client.sessionId });
+    await tick(4);
+    expect(room.state.phase).toBe(PHASE.MEETING);
+    expect([...room.state.deadPlayerIds]).toContain(victim.client.sessionId);
+
+    // Deliberately NOT asserted: removal from the task pool. Ghosts keep
+    // filling the task bar on purpose — see `GHOSTS_CAN_DO_TASKS`, and the
+    // test directly above this one, which pins that behaviour.
+  }, 40_000);
 });
 
 describe("GameRoom ghost visibility", () => {
@@ -3035,6 +3141,93 @@ describe("GameRoom fog of war", () => {
     expect(throughDoor).toBeDefined();
     expect(throughDoor!.x).toBeCloseTo(336, 3);
     expect(throughDoor!.y).toBeCloseTo(560, 3);
+  });
+
+  /**
+   * A playtest found every motionless player invisible to everyone else, and
+   * this is the shape of it. It is deliberately asserted at the CLIENT
+   * callback level rather than on decoded state, because decoded state was
+   * never the broken half.
+   *
+   * The server side always worked: `GameRoom.update` re-dirties every
+   * position each tick, the fog filter re-runs, and the bytes really do go
+   * out (measured — a room where nobody moves still pushes a patch per tick).
+   * What broke is that @colyseus/schema's decoder raises a change callback
+   * only when a decoded value DIFFERS from what the client already holds, so
+   * re-sending a standing player's unchanged x/y was indistinguishable, to
+   * the client, from sending nothing. `GameScene` derives visibility from
+   * exactly those callbacks (`lastFreshAt` / `VISIBILITY_TIMEOUT_MS`), so a
+   * player who stopped moving vanished ~350ms later — and, since the kill
+   * button only targets fog-visible entities, became unkillable too.
+   *
+   * Hence the assertion: not "does B's state contain A" (it always did — a
+   * filter retracts nothing, so a stale lobby-era copy is there regardless),
+   * but "does B's client observe A arriving, tick after tick, while A stands
+   * perfectly still". `Player.heartbeat` is what makes that observable; this
+   * test fails without it.
+   */
+  it("keeps delivering a player who never moves, observably, to a client that can see them", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const [a, b] = [seats[0]!, seats[1]!];
+
+    // Standing together on the open plaza — well inside vision, no wall.
+    a.player.x = 400;
+    a.player.y = 832;
+    b.player.x = 440;
+    b.player.y = 832;
+    // Everyone else far away, so they cannot be the source of any callback.
+    for (const s of seats.slice(2)) {
+      s.player.x = 1400;
+      s.player.y = 1050;
+    }
+    await tick(6);
+
+    const bSeesA = b.client.state.players.get(a.client.sessionId);
+    expect(bSeesA).toBeDefined();
+
+    // From here on NOTHING touches A. Any callback below is the server
+    // continuing to deliver a completely motionless player.
+    let observedArrivals = 0;
+    bSeesA!.onChange(() => observedArrivals++);
+    await tick(15);
+
+    expect(observedArrivals).toBeGreaterThan(0);
+    // One per patch, near enough — the point is that it never goes quiet for
+    // longer than the client's own VISIBILITY_TIMEOUT_MS (350ms ≈ 7 ticks).
+    expect(observedArrivals).toBeGreaterThanOrEqual(5);
+
+    // And the position stayed truthful the whole time, not just "some field
+    // changed": a liveness signal that cost correctness would be no fix.
+    expect(bSeesA!.x).toBeCloseTo(400, 3);
+    expect(bSeesA!.y).toBeCloseTo(832, 3);
+  });
+
+  /**
+   * The other half of the same guarantee: the heartbeat must not become a
+   * back door around the fog. A player standing still across the map stays
+   * exactly as hidden as they were before — no callbacks, nothing fresh.
+   */
+  it("does not deliver a motionless player who is beyond vision", async () => {
+    const room = await colyseus.createRoom<GameState>("game");
+    const seats = await seatAndPlay(room);
+    const [a, b] = [seats[0]!, seats[1]!];
+
+    a.player.x = 352;
+    a.player.y = 832;
+    b.player.x = 1152;
+    b.player.y = 832;
+    await tick(8);
+
+    const bSeesA = b.client.state.players.get(a.client.sessionId);
+    // A stale pre-fog copy may exist (filters retract nothing) — what must
+    // not happen is a live feed of it.
+    if (bSeesA) {
+      let leaked = 0;
+      bSeesA.onChange(() => leaked++);
+      await tick(15);
+      expect(leaked).toBe(0);
+    }
   });
 
   it("lets the dead watch the whole town", async () => {
