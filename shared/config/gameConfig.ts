@@ -293,6 +293,58 @@ export const SIM_DT = 1 / INPUT_RATE;
 /** Player movement speed, in world units per second. */
 export const PLAYER_SPEED = 220;
 
+/**
+ * A player's physical state, and the one place the death model lives.
+ *
+ *   - `healthy` — normal.
+ *   - `injured` — slowed (`INJURED_SPEED_MULTIPLIER`), lantern visibly
+ *     flickering, minigames handicapped. **Public on purpose**: "why are you
+ *     limping?" is a social question, and injury becoming information is the
+ *     whole point of it (docs/ROADMAP_PHASE8.md, pillar 1).
+ *   - `dead` — a corpse, exactly as a murdered player is.
+ *
+ * Injuring an already-injured player kills them. Nothing else escalates.
+ *
+ * ## Relationship to `Player.alive`
+ *
+ * `alive` is NOT replaced by this and must never disagree with it: it is a
+ * strict mirror of `condition !== "dead"`. That redundancy is deliberate —
+ * `alive` is read by both `filterChildren` predicates on `GameState` (the fog
+ * gate and the bodies gate), the voice wall, chat channel routing, and the win
+ * conditions, i.e. the most secrecy-critical code in the project. Rewriting
+ * all of it to ask about `condition` instead would put a leak-shaped mistake
+ * in every one of those places for no gain. Instead `GameRoom.setCondition` is
+ * the single writer of both, and a test pins that they can never drift.
+ */
+export const PLAYER_CONDITION = {
+  HEALTHY: "healthy",
+  INJURED: "injured",
+  DEAD: "dead",
+} as const;
+
+export type PlayerCondition = (typeof PLAYER_CONDITION)[keyof typeof PLAYER_CONDITION];
+
+/**
+ * How fast an injured player moves, as a fraction of `PLAYER_SPEED` — "~25%
+ * reduced". Applied inside `applyInput`, which the server simulation and the
+ * client's prediction both call, so a limp is felt identically on both sides
+ * rather than becoming a rubber-banding fight between them.
+ */
+export const INJURED_SPEED_MULTIPLIER = 0.75;
+
+/**
+ * How much longer an injured player gets to think, as a multiplier on a
+ * minigame's timing window — "a small handicap", per-minigame.
+ *
+ * Client-side difficulty only, and deliberately so for now: nothing is staked
+ * on a minigame's outcome until 8.2 hands the server authority over
+ * completion AND failure. Until then a hostile client can simply not apply
+ * this, and it costs them nothing to do so, because no outcome depends on it.
+ * Do not build a mechanic on top of this until that server-side validation
+ * exists.
+ */
+export const INJURED_MINIGAME_HANDICAP = 0.8;
+
 /** Player radius in world units (used for rendering and bounds clamping). */
 export const PLAYER_RADIUS = 16;
 

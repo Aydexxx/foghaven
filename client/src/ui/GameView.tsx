@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { Room } from "colyseus.js";
 import {
   roleById,
+  PLAYER_CONDITION,
   type AbilityEffectMessage,
   type AbilityStateMessage,
   type ClientTask,
@@ -90,6 +91,14 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
     return initial;
   });
   const [isGhost, setIsGhost] = useState(false);
+  /**
+   * The local player's own §8.1 condition. Read straight off public state —
+   * every client always receives itself (see the `filterChildren` on
+   * `GameState.players`), so this is never stale for the one player it
+   * describes. Drives the mini-game handicap only; the limp and the flickering
+   * lantern are rendered inside the Phaser scene.
+   */
+  const [injured, setInjured] = useState(false);
   const [commsSabotageActive, setCommsSabotageActive] = useState(
     room.state.commsSabotageActive,
   );
@@ -117,6 +126,9 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
       // per-child filter means a living client never receives another
       // player's `alive: false`, so bodies are the one reliable signal.
       setIsGhost(room.state.bodies.has(room.sessionId));
+      setInjured(
+        room.state.players.get(room.sessionId)?.condition === PLAYER_CONDITION.INJURED,
+      );
       setCommsSabotageActive(room.state.commsSabotageActive);
       setRepairedPoints(snapshotStrings(room.state.criticalRepairedPoints));
     };
@@ -173,11 +185,19 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
     const offAbilityEffect: () => void = room.onMessage<AbilityEffectMessage>(
       "abilityEffect",
       (msg) => {
-        if (msg.type !== "shielded") {
+        // Both of these go only to the doctor who acted, and both only ever
+        // name a target they chose themselves — see `protect.ts`/`heal.ts`.
+        const key =
+          msg.type === "shielded"
+            ? "abilities.protect.hintShielded"
+            : msg.type === "healed"
+              ? "abilities.heal.hintHealed"
+              : null;
+        if (!key) {
           return;
         }
         const name = room.state.players.get(msg.targetId)?.name ?? "?";
-        setHint({ text: t("abilities.protect.hintShielded", { name }), key: hintKey++ });
+        setHint({ text: t(key, { name }), key: hintKey++ });
       },
     );
 
@@ -314,6 +334,7 @@ export function GameView({ room, tasks, role, onLeave }: GameViewProps) {
           task={activeTask}
           onComplete={handleMinigameComplete}
           onCancel={handleMinigameCancel}
+          injured={injured}
         />
       )}
     </div>

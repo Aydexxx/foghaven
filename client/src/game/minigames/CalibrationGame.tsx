@@ -8,9 +8,13 @@ const SWEEP_MS = 1400;
 /** Width of the success zone, as a percentage of the track. */
 const ZONE_WIDTH_PCT = 18;
 
-/** A random zone that leaves the indicator room to sweep across the whole track. */
-function randomZone(): { start: number; width: number } {
-  const width = ZONE_WIDTH_PCT;
+/**
+ * A random zone that leaves the indicator room to sweep across the whole
+ * track. `handicap` scales its width — 1 healthy, `INJURED_MINIGAME_HANDICAP`
+ * injured, so a hurt player has a visibly tighter target.
+ */
+function randomZone(handicap: number): { start: number; width: number } {
+  const width = ZONE_WIDTH_PCT * handicap;
   const start = Math.random() * (100 - width);
   return { start, width };
 }
@@ -20,9 +24,13 @@ function randomZone(): { start: number; width: number } {
  * indicator sits inside the highlighted zone. Timing-based, unlike anything
  * else in the mini-game set.
  */
-export function CalibrationGame({ onComplete }: MinigameProps) {
+export function CalibrationGame({ onComplete, handicap }: MinigameProps) {
   const { t } = useTranslation();
-  const zone = useMemo(() => randomZone(), []);
+  // This puzzle's window is the success zone's width, so an injured player
+  // gets a narrower one to hit — the sweep speed is left alone, since a
+  // faster sweep would read as the machine breaking rather than the hand
+  // holding it being unsteady.
+  const zone = useMemo(() => randomZone(handicap), [handicap]);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const positionRef = useRef(0);
   const frameRef = useRef<number>(0);

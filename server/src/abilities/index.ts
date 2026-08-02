@@ -1,6 +1,7 @@
 import type { Ability } from "./types";
 import { killAbility } from "./kill";
 import { protectAbility } from "./protect";
+import { healAbility } from "./heal";
 import { investigateAbility } from "./investigate";
 import { lightLampAbility } from "./lightLamp";
 import { placeCameraAbility } from "./placeCamera";
@@ -26,6 +27,7 @@ import { criticalSabotageAbility } from "./criticalSabotage";
 export const ABILITIES: Record<string, Ability> = {
   [killAbility.id]: killAbility,
   [protectAbility.id]: protectAbility,
+  [healAbility.id]: healAbility,
   [investigateAbility.id]: investigateAbility,
   [lightLampAbility.id]: lightLampAbility,
   [placeCameraAbility.id]: placeCameraAbility,

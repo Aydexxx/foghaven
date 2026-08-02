@@ -1,4 +1,11 @@
-import { PLAYER_SPEED, PLAYER_RADIUS, MAP } from "../config/gameConfig";
+import {
+  PLAYER_SPEED,
+  PLAYER_RADIUS,
+  MAP,
+  INJURED_SPEED_MULTIPLIER,
+  PLAYER_CONDITION,
+  type PlayerCondition,
+} from "../config/gameConfig";
 import { isWalkableRegion, isPointInLockedDoor, isInsideLobby } from "../map/townMap";
 
 export interface Vec2 {
@@ -48,8 +55,22 @@ function axis(value: unknown): number {
  * `GameRoom` itself, the server enforces it for free: there is no separate
  * "server-side wall check" to fall out of sync with what the client predicts
  * or the map renders.
+ *
+ * `speedScale` multiplies `PLAYER_SPEED` — 1 for a healthy player,
+ * `INJURED_SPEED_MULTIPLIER` for an injured one. It rides through here rather
+ * than being applied by either caller for exactly the lockstep reason above:
+ * a limp the server simulates but the client does not predict is a
+ * rubber-banding bug, not a slower player. Both sides read it from the same
+ * public `Player.condition`, so neither has to be told.
+ *
+ * Defaulted to 1 so every existing caller and test is unaffected.
  */
-export function applyInput(pos: Vec2, dir: Direction, dt: number): Vec2 {
+export function applyInput(
+  pos: Vec2,
+  dir: Direction,
+  dt: number,
+  speedScale = 1,
+): Vec2 {
   let dx = dir.x;
   let dy = dir.y;
 
@@ -62,12 +83,13 @@ export function applyInput(pos: Vec2, dir: Direction, dt: number): Vec2 {
   let x = pos.x;
   let y = pos.y;
 
-  const nx = clamp(x + dx * PLAYER_SPEED * dt, PLAYER_RADIUS, MAP.width - PLAYER_RADIUS);
+  const speed = PLAYER_SPEED * speedScale;
+  const nx = clamp(x + dx * speed * dt, PLAYER_RADIUS, MAP.width - PLAYER_RADIUS);
   if (isWalkableRegion(nx, y, PLAYER_RADIUS)) {
     x = nx;
   }
 
-  const ny = clamp(y + dy * PLAYER_SPEED * dt, PLAYER_RADIUS, MAP.height - PLAYER_RADIUS);
+  const ny = clamp(y + dy * speed * dt, PLAYER_RADIUS, MAP.height - PLAYER_RADIUS);
   if (isWalkableRegion(x, ny, PLAYER_RADIUS)) {
     y = ny;
   }
@@ -90,8 +112,9 @@ export function applyInputWithLocks(
   dir: Direction,
   dt: number,
   lockedRoomSlugs: readonly string[],
+  speedScale = 1,
 ): Vec2 {
-  const next = applyInput(pos, dir, dt);
+  const next = applyInput(pos, dir, dt, speedScale);
   if (isPointInLockedDoor(next.x, next.y, lockedRoomSlugs)) {
     return pos;
   }
@@ -121,9 +144,30 @@ export function applyInputWithLocks(
  * inside-only test would do to anyone who somehow started outside.
  */
 export function applyLobbyInput(pos: Vec2, dir: Direction, dt: number): Vec2 {
+  // No `speedScale`: the lobby is pre-round, where nobody has a condition yet
+  // (`returnToLobby` and `onJoin` both reset everyone to healthy), so there is
+  // no limp to carry into it and no reason to give callers a knob that would
+  // always be 1.
   const next = applyInput(pos, dir, dt);
   if (!isInsideLobby(pos.x, pos.y, PLAYER_RADIUS)) {
     return next;
   }
   return isInsideLobby(next.x, next.y, PLAYER_RADIUS) ? next : pos;
+}
+
+/**
+ * The `speedScale` for a player in a given condition — the one place the
+ * healthy/injured mapping is made, so the server simulation and the client's
+ * prediction cannot disagree about how fast a limp is.
+ *
+ * Takes the condition rather than the whole player so it stays callable from
+ * both sides: the server holds a schema `Player`, the client holds its
+ * decoded mirror, and they are different types that happen to share this one
+ * field. `dead` returns the healthy scale because a dead player is not
+ * simulated at all (see `GameRoom.update`, which only moves players with
+ * queued input, and the client, which stops predicting for a ghost) — giving
+ * it its own number would imply a movement rule that does not exist.
+ */
+export function speedScaleFor(condition: PlayerCondition): number {
+  return condition === PLAYER_CONDITION.INJURED ? INJURED_SPEED_MULTIPLIER : 1;
 }

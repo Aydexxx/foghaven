@@ -8,6 +8,7 @@ import {
   LOBBY_READY_PAD_POINT,
   MAX_ROLE_OPTIONS,
   PHASE,
+  PLAYER_CONDITION,
   PRESET,
   presetRoleIds,
   RANDOM_ROLE_PICK,
@@ -252,6 +253,12 @@ describe("role selection — channel 1: content", () => {
       "y",
       "color",
       "alive",
+      // §8.1's death model. Public by design — an injured player limps and
+      // their lantern flickers, and the room is meant to be able to ask why.
+      // Safe here for the same reason `alive` is: it says something about a
+      // player's body, never about their role or faction, and a Stranger
+      // wears an injury identically to a Villager. Asserted below.
+      "condition",
       "lanternColor",
       "lanternState",
       "connected",
@@ -287,6 +294,14 @@ describe("role selection — channel 1: content", () => {
     // which is the only reason a per-tick counter is safe to make public.
     const heartbeats = new Set(rows.map((row) => (row as { heartbeat: number }).heartbeat));
     expect(heartbeats.size).toBe(1);
+
+    // `condition` is public and DOES legitimately vary per player once anyone
+    // is hurt — that is the mechanic. What it must never do is vary with
+    // faction. Nobody has been injured at this point in the round, so every
+    // row reads healthy regardless of what role was just dealt; a condition
+    // that differed here would mean role assignment had touched it.
+    const conditions = new Set(rows.map((row) => (row as { condition: string }).condition));
+    expect(conditions).toEqual(new Set([PLAYER_CONDITION.HEALTHY]));
   });
 
   it("publishes only a boolean about someone else's progress", async () => {

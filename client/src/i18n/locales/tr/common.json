@@ -292,6 +292,11 @@
       "target": "{{name}} adlı oyuncuyu koru",
       "hintShielded": "{{name}} adlı oyuncuyu korudun."
     },
+    "heal": {
+      "button": "İyileştir",
+      "target": "{{name}} kişisini iyileştir",
+      "hintHealed": "{{name}} kişisinin yarasını tedavi ettin."
+    },
     "investigate": {
       "button": "Soruştur",
       "target": "{{name}} adlı oyuncunun cesedini soruştur",

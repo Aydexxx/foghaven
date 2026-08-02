@@ -292,6 +292,11 @@
       "target": "Protect {{name}}",
       "hintShielded": "You shielded {{name}}."
     },
+    "heal": {
+      "button": "Heal",
+      "target": "Heal {{name}}",
+      "hintHealed": "You treated {{name}}'s injury."
+    },
     "investigate": {
       "button": "Investigate",
       "target": "Investigate the body of {{name}}",

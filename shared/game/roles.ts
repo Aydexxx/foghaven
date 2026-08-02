@@ -280,10 +280,11 @@ export interface CameraRevealMessage {
 }
 
 /**
- * Private confirmation of an ability's own side effect — today only the
- * doctor's shield placement, so the doctor's own client can draw a faint
- * indicator. Never sent to anyone but the actor; see `protect.ts`'s doc on
- * why that's safe (they already know who they targeted).
+ * Private confirmation of an ability's own side effect — the doctor's shield
+ * placement (`"shielded"`) and their heal landing (`"healed"`), so the
+ * doctor's own client can draw an indicator or a hint. Never sent to anyone
+ * but the actor; see `protect.ts`'s doc on why that's safe (they already know
+ * who they targeted).
  */
 export interface AbilityEffectMessage {
   type: string;

@@ -3,6 +3,9 @@ import {
   applyInputWithLocks,
   applyLobbyInput,
   canSee,
+  speedScaleFor,
+  PLAYER_CONDITION,
+  type PlayerCondition,
   sanitizeDirection,
   resolveRoleCounts,
   roleSelectOptionCount,
@@ -694,7 +697,7 @@ export class GameRoom extends Room<GameState> {
 
     player.color = this.pickColor();
     player.lanternColor = this.pickLanternColor();
-    player.alive = true;
+    this.setCondition(player, PLAYER_CONDITION.HEALTHY);
     player.lanternState = "lit";
 
     this.state.players.set(client.sessionId, player);
@@ -1933,6 +1936,7 @@ export class GameRoom extends Room<GameState> {
       // bricks into the next room.
       canSee,
       kill: (victim) => this.killPlayer(victim, client.sessionId),
+      heal: (target) => this.healPlayer(target),
       sendToActor: (type, payload) => client.send(type, payload),
       communeWithDead: () => this.communeWithDead(client.sessionId),
       findWitness: (room, excludeIds) => this.findWitness(room, excludeIds),
@@ -2258,17 +2262,86 @@ export class GameRoom extends Room<GameState> {
   }
 
   /**
+   * The ONLY writer of `condition` and `alive`. Both fields exist (see
+   * `PLAYER_CONDITION`'s doc for why), and this is what guarantees they can
+   * never disagree — every other path in this file goes through here, and a
+   * test pins the invariant across the whole roster.
+   */
+  private setCondition(player: Player, condition: PlayerCondition): void {
+    player.condition = condition;
+    player.alive = condition !== PLAYER_CONDITION.DEAD;
+  }
+
+  /**
+   * Hurt a player one step: healthy becomes injured, injured dies. A dead
+   * player is already at the bottom and is left alone, which makes this safe
+   * to call twice for the same event.
+   *
+   * Deliberately has no `source` parameter. Whatever hurt someone — a failed
+   * task in 8.2, a sabotaged station in 8.7 — the resulting state, and the
+   * corpse if this is the second hit, must be indistinguishable from a
+   * Stranger's work. There is nowhere here to record a cause because there
+   * must be nowhere to read one from.
+   *
+   * **Nothing calls this yet.** 8.1 is the state machine only; no task can
+   * injure anyone until the risky-task framework lands in 8.2.
+   */
+  private injure(player: Player): void {
+    if (player.condition === PLAYER_CONDITION.HEALTHY) {
+      this.setCondition(player, PLAYER_CONDITION.INJURED);
+      return;
+    }
+    if (player.condition === PLAYER_CONDITION.INJURED) {
+      // No killer: an accident produces the same corpse a murder does.
+      this.applyDeath(player, null);
+    }
+  }
+
+  /**
+   * Undo an injury. Only the Doctor's `heal` reaches this, and only for a
+   * player who is actually injured — healing the healthy is a no-op rather
+   * than an error so the ability can be offered without leaking, via a
+   * refusal, whether a distant target was hurt.
+   */
+  private healPlayer(player: Player): boolean {
+    if (player.condition !== PLAYER_CONDITION.INJURED) {
+      return false;
+    }
+    this.setCondition(player, PLAYER_CONDITION.HEALTHY);
+    return true;
+  }
+
+  /**
+   * A stranger's kill. A thin wrapper over `applyDeath` that adds the one
+   * thing only a murder has: a killer to confirm it to.
+   */
+  private killPlayer(victim: Player, killerId: string): void {
+    this.applyDeath(victim, killerId);
+  }
+
+  /**
    * Mark a player dead and leave a body where they fell. Flipping `alive`
    * is what makes them vanish from every living client's state — see the
    * `filterChildren` on `GameState.players`.
+   *
+   * **One path for every death, on purpose.** `killerId` is null for a death
+   * with no killer (an accident — a failed task, from 8.2 onward). That
+   * argument changes exactly two things, both of them private to people who
+   * already know: who `deathLocations` credits, and whether a `killConfirmed`
+   * goes to a killer. Everything an uninvolved player could observe — the
+   * body, the `alive`/`condition` flip, the dropped lantern, the voice roster
+   * broadcast, the win-condition check, the timing of all of it — is
+   * identical. That is what makes "was this murder, or did they just die?"
+   * an actual question rather than a UI detail, and it is why accidents and
+   * murders must never grow separate code paths here.
    */
-  private killPlayer(victim: Player, killerId: string): void {
+  private applyDeath(victim: Player, killerId: string | null): void {
     // Restore their real identity first, so the body left behind (and
     // anything reading `victim.name` below) shows who they actually were —
     // a shapeshift confuses *live* observers, not the death record.
     this.restoreDisguise(victim.id);
 
-    victim.alive = false;
+    this.setCondition(victim, PLAYER_CONDITION.DEAD);
     // §4.4's death sequence: the lantern detaches and hits the ground. This
     // is what tells every ghost's Havener (and, via `visionRadiusAt`,
     // nothing — a dead player already bypasses the fog entirely) that this
@@ -2292,15 +2365,30 @@ export class GameRoom extends Room<GameState> {
     // The medium's raw material — where and by whom, for a fact the medium
     // may surface later. Recorded for every real kill, including a
     // constable's mutual self-kill (killerId === victim.id there).
-    const killerRole = this.roles.get(killerId);
-    this.deathLocations.set(victim.id, {
-      room: roomSlugAt(victim.x, victim.y),
-      killerFaction: killerRole ? factionOf(killerRole) : null,
-    });
+    //
+    // An accident is deliberately NOT recorded. The medium's hint names the
+    // killer's faction, and the client already renders a missing one as
+    // "unknown" — which would tell the medium, in as many words, that this
+    // particular death was not a murder. That is precisely the distinction
+    // this whole death path exists to withhold, so accidents simply never
+    // enter the pool: the medium learns nothing false, and at worst can infer
+    // from counting bodies against facts that *one* of them was an accident,
+    // without ever being told which.
+    if (killerId !== null) {
+      const killerRole = this.roles.get(killerId);
+      this.deathLocations.set(victim.id, {
+        room: roomSlugAt(victim.x, victim.y),
+        killerFaction: killerRole ? factionOf(killerRole) : null,
+      });
+    }
 
     // Tell the victim directly. They cannot infer it from `alive` alone
-    // without a race, and this is what drives their death animation.
-    this.clientFor(victim.id)?.send("killed", { by: killerId });
+    // without a race, and this is what drives their death animation. The
+    // victim is the one person who already knows how they died, so `by`
+    // carrying an empty string for an accident reveals nothing they were not
+    // watching happen — and it is a private message, so no third party can
+    // compare the two shapes.
+    this.clientFor(victim.id)?.send("killed", { by: killerId ?? "" });
 
     // A kill during a meeting (the constable's shot) needs the graveyard
     // updated immediately — it was already frozen for this meeting's ballot
@@ -2772,8 +2860,10 @@ export class GameRoom extends Room<GameState> {
     this.restoreDisguise(sessionId);
 
     const confirmEjects = this.getBooleanSetting("confirmEjects");
-    ejected.alive = false;
-    // Same as a kill — see `killPlayer`'s doc on this field. An ejection
+    // An ejection kills outright regardless of condition — being already
+    // injured neither saves the ejected player nor is it what killed them.
+    this.setCondition(ejected, PLAYER_CONDITION.DEAD);
+    // Same as a kill — see `applyDeath`'s doc on this field. An ejection
     // leaves no body, but the lantern still hits the ground as they go.
     ejected.lanternState = "dropped";
     if (!this.diedAt.has(sessionId)) {
@@ -3186,8 +3276,11 @@ export class GameRoom extends Room<GameState> {
     this.clearRealBodies();
 
     this.state.players.forEach((player) => {
-      player.alive = true;
-      player.lanternState = "lit"; // relit for the new round — see `killPlayer`'s doc
+      // Healthy, not merely alive: an injury is a wound from LAST round and
+      // must not follow anyone into the next one, the same reason the lantern
+      // is relit and the ready flag cleared below.
+      this.setCondition(player, PLAYER_CONDITION.HEALTHY);
+      player.lanternState = "lit"; // relit for the new round — see `applyDeath`'s doc
       player.hasVoted = false;
       // Back to the Tavern to wait, and un-ready: last round's ready state
       // must not carry into the next lobby, or a room could re-start itself
@@ -3794,6 +3887,11 @@ export class GameRoom extends Room<GameState> {
 
       let pos = { x: player.x, y: player.y };
       let lastSeq = player.lastSeq;
+      // Read once per tick, not per step: a condition cannot change midway
+      // through a batch of queued inputs, and the client replays the whole
+      // batch at one scale during reconciliation, so reading it per step
+      // would be the two sides disagreeing about the same commands.
+      const speedScale = speedScaleFor(player.condition);
       for (let i = 0; i < steps; i++) {
         const command = state.queue[i]!;
         // In the lobby the Tavern's own walls are the boundary — its
@@ -3801,7 +3899,7 @@ export class GameRoom extends Room<GameState> {
         // player could walk straight out into a town that isn't running.
         pos = inLobby
           ? applyLobbyInput(pos, command.dir, SIM_DT)
-          : applyInputWithLocks(pos, command.dir, SIM_DT, lockedRoomSlugs);
+          : applyInputWithLocks(pos, command.dir, SIM_DT, lockedRoomSlugs, speedScale);
         lastSeq = command.seq;
       }
       state.queue.splice(0, steps);

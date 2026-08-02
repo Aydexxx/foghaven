@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { colors } from "../../theme/tokens";
 import { hexNum } from "../../theme/phaserColor";
-import type { LanternState } from "@foghaven/shared";
+import { INJURED_SPEED_MULTIPLIER, type LanternState } from "@foghaven/shared";
 import { AtlasKey } from "../../assets/atlasManifest";
 import { CHARACTER_HEIGHT, anchorLocal, type AnchorName } from "./anchors";
 import { HAVENER_ANIM_CONFIG } from "./havenerAnimConfig";
@@ -61,6 +61,13 @@ const GLOW_BASE_ALPHA = 0.45;
 const FLICKER_PERIOD_MS = 90;
 const FLICKER_MIN_ALPHA = 0.12;
 
+/**
+ * §8.1: how far an injured Havener leans while moving. Small — the limp is
+ * carried mostly by the slowed stride (`gaitPeriodScale`); this just stops it
+ * reading as "walking normally, but in slow motion".
+ */
+const INJURED_LEAN_DEG = 4;
+
 // §4.2 stack, top of file order = draw order. The `anchor` each layer sits on
 // is the ONLY place a layer's position comes from (all via `anchorLocal`).
 const LAYERS = [
@@ -108,6 +115,8 @@ export class Havener extends Phaser.GameObjects.Container {
   private lanternColorNum = WHITE;
   /** The server-authoritative lit/flickering/extinguished/dropped value — see `setLanternState`. Distinct from `visualState` (idle/walk/.../ghost), which is purely local animation. */
   private lanternState: LanternState = "lit";
+  /** §8.1 `condition === "injured"` — a render input only, never a game rule. See `setInjured`. */
+  private injured = false;
   private flickerTween?: Phaser.Tweens.Tween;
   /** True once `dropLantern` has detached the lantern — see the class doc. */
   private lanternDropped = false;
@@ -219,9 +228,46 @@ export class Havener extends Phaser.GameObjects.Container {
       return;
     }
     this.lanternState = state;
+    this.applyLanternLook();
+  }
+
+  /**
+   * §8.1's public injury tell, in the two channels the art bible gives a body:
+   * the lantern (an unsteady flame) and the gait (a slower, leaning walk).
+   *
+   * Injury is rendered here rather than by writing `lanternState` server-side
+   * on purpose — see `GameScene`'s `condition` listener. This keeps
+   * `lanternState` free for what it already means (doused, dropped) and for
+   * lantern oil in 8.8, and lets the two reasons a lantern can look unsteady
+   * combine instead of overwriting each other.
+   */
+  setInjured(injured: boolean): void {
+    if (injured === this.injured) {
+      return;
+    }
+    this.injured = injured;
+    this.applyLanternLook();
+    // Re-enter whatever is playing so the walk/run tween is rebuilt at the
+    // limping period. Idle and ghost are unaffected by the gait scale, so
+    // this is a cheap no-op for them.
+    this.restartCurrentState();
+  }
+
+  /**
+   * Render the lantern from BOTH of its inputs at once: the server's
+   * `lanternState` and the local injury flag.
+   *
+   * Injury only ever upgrades a `lit` lantern to the flickering look. It
+   * cannot relight an extinguished one or reattach a dropped one — a player
+   * who doused their lantern stays dark whether or not they are hurt, because
+   * `lanternState` is a deliberate choice (or a death) and injury is not
+   * allowed to override it.
+   */
+  private applyLanternLook(): void {
     this.flickerTween?.stop();
     this.flickerTween = undefined;
 
+    const state = this.lanternState;
     if (state === "dropped") {
       this.dropLantern();
       return;
@@ -229,7 +275,9 @@ export class Havener extends Phaser.GameObjects.Container {
     if (this.lanternDropped) {
       return; // already detached — nothing left on the rig to recolour
     }
-    switch (state) {
+    const effective: LanternState =
+      state === "lit" && this.injured ? "flickering" : state;
+    switch (effective) {
       case "lit":
         this.glow.setAlpha(GLOW_BASE_ALPHA);
         this.glow.setVisible(true);
@@ -243,8 +291,9 @@ export class Havener extends Phaser.GameObjects.Container {
         this.glow.setVisible(false);
         break;
       case "flickering":
-        // A visual tell only — see `LanternState`'s doc on why this has no
-        // mechanical effect yet. True colour, unsteady brightness.
+        // A visual tell only — no mechanical effect (see `LanternState`'s
+        // doc). Reached either because the server said so or because this
+        // player is injured. True colour, unsteady brightness.
         this.applyLanternColor();
         this.glow.setVisible(true);
         this.flickerTween = this.scene.tweens.add({
@@ -336,13 +385,17 @@ export class Havener extends Phaser.GameObjects.Container {
         this.startIdle();
         break;
       case "walk":
-        this.startWalkOrRun(HAVENER_ANIM_CONFIG.walk.periodMs, 1, 0);
+        this.startWalkOrRun(
+          HAVENER_ANIM_CONFIG.walk.periodMs * this.gaitPeriodScale(),
+          1,
+          this.injuredLeanDeg(),
+        );
         break;
       case "run":
         this.startWalkOrRun(
-          HAVENER_ANIM_CONFIG.run.periodMs,
+          HAVENER_ANIM_CONFIG.run.periodMs * this.gaitPeriodScale(),
           HAVENER_ANIM_CONFIG.run.amplitudeMultiplier,
-          HAVENER_ANIM_CONFIG.run.leanDeg,
+          HAVENER_ANIM_CONFIG.run.leanDeg + this.injuredLeanDeg(),
         );
         break;
       case "interact":
@@ -583,6 +636,24 @@ export class Havener extends Phaser.GameObjects.Container {
    * it. When a real hem layer exists, split this into its own tween with the
    * same `hemLagMs` and leave the leg swing unlagged.
    */
+  /**
+   * How much longer one walk cycle takes while injured.
+   *
+   * The inverse of `INJURED_SPEED_MULTIPLIER` on purpose: an injured player
+   * covers 75% of the ground, so their stride has to take 1/0.75 as long or
+   * the legs visibly scrub against the world like a badly-tuned treadmill.
+   * The limp reads *because* the cycle and the movement agree, not because
+   * of a separate animation.
+   */
+  private gaitPeriodScale(): number {
+    return this.injured ? 1 / INJURED_SPEED_MULTIPLIER : 1;
+  }
+
+  /** A small persistent lean while injured — the body favouring one side. */
+  private injuredLeanDeg(): number {
+    return this.injured ? INJURED_LEAN_DEG : 0;
+  }
+
   private startWalkOrRun(periodMs: number, amplitudeMultiplier: number, leanDeg: number): void {
     this.clearStateTweens();
     const cfg = HAVENER_ANIM_CONFIG.walk;

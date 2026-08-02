@@ -64,6 +64,12 @@ export interface AbilityContext {
   canSee(a: LitPosition, b: LitPosition): boolean;
   /** Kill a player: body, victim notification, win check. */
   kill(victim: Player): void;
+  /**
+   * Return an injured player to healthy. Returns false — and changes
+   * nothing — if they were not injured in the first place, so a caller can
+   * offer the ability without a refusal being an answer about the target.
+   */
+  heal(target: Player): boolean;
   /** Private message to the acting player only. */
   sendToActor(type: string, payload?: unknown): void;
   /**

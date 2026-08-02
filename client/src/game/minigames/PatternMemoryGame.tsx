@@ -17,12 +17,17 @@ type Phase = "showing" | "input" | "wrong";
  * order. The only mini-game that tests memory rather than a live physical
  * action.
  */
-export function PatternMemoryGame({ onComplete }: MinigameProps) {
+export function PatternMemoryGame({ onComplete, handicap }: MinigameProps) {
   const { t } = useTranslation();
   const sequence = useMemo(() => randomSequence(SEQUENCE_LENGTH, TILE_COLORS.length), []);
   const [phase, setPhase] = useState<Phase>("showing");
   const [litIndex, setLitIndex] = useState<number | null>(null);
   const [inputIndex, setInputIndex] = useState(0);
+  // This puzzle's window is how long each tile stays lit — an injured player
+  // gets less time to commit the sequence to memory. The sequence itself is
+  // untouched: making it longer would change what the task IS, not how hard
+  // it is to do while hurt.
+  const flashMs = FLASH_MS * handicap;
 
   useEffect(() => {
     if (phase !== "showing") {
@@ -36,22 +41,26 @@ export function PatternMemoryGame({ onComplete }: MinigameProps) {
         setTimeout(() => {
           if (cancelled) return;
           setLitIndex(tile);
-          timers.push(setTimeout(() => !cancelled && setLitIndex(null), FLASH_MS - 150));
-        }, i * FLASH_MS),
+          // Floored so a heavy handicap can never invert this into a negative
+          // timeout, which would fire immediately and show no flash at all.
+          timers.push(
+            setTimeout(() => !cancelled && setLitIndex(null), Math.max(60, flashMs - 150)),
+          );
+        }, i * flashMs),
       );
     });
 
     timers.push(
       setTimeout(() => {
         if (!cancelled) setPhase("input");
-      }, sequence.length * FLASH_MS + GAP_MS),
+      }, sequence.length * flashMs + GAP_MS),
     );
 
     return () => {
       cancelled = true;
       timers.forEach(clearTimeout);
     };
-  }, [phase, sequence]);
+  }, [phase, sequence, flashMs]);
 
   const click = (tile: number) => {
     if (phase !== "input") {

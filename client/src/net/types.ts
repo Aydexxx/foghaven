@@ -1,5 +1,5 @@
 import type { ArraySchema, MapSchema, Schema } from "@colyseus/schema";
-import type { LanternState } from "@foghaven/shared";
+import type { LanternState, PlayerCondition } from "@foghaven/shared";
 
 /**
  * Client-side view of the server's `Player` schema. Extending `Schema` gives
@@ -22,6 +22,13 @@ export interface PlayerState extends Schema {
   /** lit / flickering / extinguished / dropped — server-authoritative, never predicted. See `Havener.setLanternState`. */
   lanternState: LanternState;
   alive: boolean;
+  /**
+   * healthy / injured / dead. Public by design — an injured player limps and
+   * their lantern flickers, and everyone who can see them can see that. A
+   * strict mirror of `alive` at the dead end (`alive === condition !== "dead"`);
+   * see the server `Player` schema's own doc for why both fields exist.
+   */
+  condition: PlayerCondition;
   /** False while this player is inside their reconnection grace period. */
   connected: boolean;
   hasVoted: boolean;

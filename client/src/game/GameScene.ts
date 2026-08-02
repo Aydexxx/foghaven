@@ -2,6 +2,8 @@ import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
   applyInputWithLocks,
+  speedScaleFor,
+  PLAYER_CONDITION,
   canSee,
   visionRadiusAt,
   roomSlugAt,
@@ -723,6 +725,7 @@ export class GameScene extends Phaser.Scene {
       dir,
       SIM_DT,
       this.lockedRoomSlugsSnapshot(),
+      this.localSpeedScale(),
     );
     this.pending.push({ seq: this.seq, dir });
     if (this.pending.length > MAX_PENDING) {
@@ -1144,6 +1147,20 @@ export class GameScene extends Phaser.Scene {
       // play — lit/flickering/extinguished/dropped. The client renders
       // whatever arrives here and never predicts or infers it.
       player.listen("lanternState", (value) => havener.setLanternState(value)),
+    );
+    entity.disposers.push(
+      // §8.1's public injury tell — a flickering lantern and a slowed,
+      // leaning gait, both rendered by `Havener.setInjured`.
+      //
+      // Injury deliberately does NOT write `lanternState` server-side to get
+      // its flicker: that field already means doused/dropped and 8.8 (lantern
+      // oil) wants `flickering` for low fuel. Two writers to one field, two
+      // tasks apart, is a collision waiting to happen — so the two reasons a
+      // lantern can look unsteady are combined at render time inside
+      // `Havener` instead, where neither can clobber the other.
+      player.listen("condition", (value) =>
+        havener.setInjured(value === PLAYER_CONDITION.INJURED),
+      ),
     );
 
     // Cosmetics arrive slightly after the player itself: `GameRoom.onJoin`
@@ -1918,10 +1935,29 @@ export class GameScene extends Phaser.Scene {
     let pos: Vec2 = { x: player.x, y: player.y };
     this.pending = this.pending.filter((command) => command.seq > player.lastSeq);
     const lockedRoomSlugs = this.lockedRoomSlugsSnapshot();
+    // Replayed at the authoritative condition that arrived with this update,
+    // which is the same value the server used for the commands it has already
+    // applied — so the replay lands where the server put us.
+    const speedScale = speedScaleFor(player.condition);
     for (const command of this.pending) {
-      pos = applyInputWithLocks(pos, command.dir, SIM_DT, lockedRoomSlugs);
+      pos = applyInputWithLocks(pos, command.dir, SIM_DT, lockedRoomSlugs, speedScale);
     }
     entity.predicted = pos;
+  }
+
+  /**
+   * The local player's own movement scale — 0.75 while injured.
+   *
+   * Read from the same public `Player.condition` the server simulates from,
+   * so prediction and simulation agree without the client being told anything
+   * privately. The one moment they can briefly disagree is the tick a
+   * condition flips: inputs already in flight were predicted at the old scale
+   * and are replayed at the new one, which reconciliation absorbs as a single
+   * small correction rather than ongoing rubber-banding.
+   */
+  private localSpeedScale(): number {
+    const me = this.room.state.players.get(this.room.sessionId);
+    return me ? speedScaleFor(me.condition) : 1;
   }
 
   /** A plain-array snapshot of the currently locked rooms, for `applyInputWithLocks`. */

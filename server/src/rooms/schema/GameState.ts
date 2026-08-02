@@ -1,5 +1,11 @@
 import { Schema, MapSchema, ArraySchema, type, filterChildren } from "@colyseus/schema";
-import { PHASE, canSee, type LanternState } from "@foghaven/shared";
+import {
+  PHASE,
+  canSee,
+  PLAYER_CONDITION,
+  type LanternState,
+  type PlayerCondition,
+} from "@foghaven/shared";
 
 /**
  * The phases during which the fog restricts what a living client is sent.
@@ -30,7 +36,33 @@ export class Player extends Schema {
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") color = "";
+
+  /**
+   * Whether this player is not dead. A strict mirror of
+   * `condition !== "dead"` — see `PLAYER_CONDITION`'s own doc for why both
+   * fields exist and `GameRoom.setCondition` for the single writer that keeps
+   * them in lockstep. Never assign this directly.
+   */
   @type("boolean") alive = true;
+
+  /**
+   * healthy / injured / dead — the death model (`PLAYER_CONDITION`).
+   *
+   * **Public on purpose, and the point of the mechanic.** An injured player
+   * limps and their lantern flickers, and everyone who can see them can see
+   * that; "why are you limping?" is meant to be a question the room asks out
+   * loud. Being a field on `Player` puts it behind the same `filterChildren`
+   * fog gate as `x`/`y`, which is exactly the right scope: injury is public to
+   * anyone who can already see you, not announced town-wide.
+   *
+   * Safe to be public in the way `role` is not: it carries no faction, role or
+   * position information. A Stranger and a Villager wear an injury
+   * identically, and — critically — nothing here records HOW the condition
+   * changed. A corpse made by a failed task and a corpse made by a Stranger
+   * are the same corpse; see `GameRoom.applyDeath`, which is the single path
+   * both take precisely so no observer can tell them apart.
+   */
+  @type("string") condition: PlayerCondition = PLAYER_CONDITION.HEALTHY;
 
   /**
    * The §3.5 lantern colour this player was dealt — one of the 14

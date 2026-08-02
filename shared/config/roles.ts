@@ -161,7 +161,17 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     // the default set — Chaos (or a host toggle) opts a lobby in.
     id: "doctor",
     faction: FACTION.TOWNSFOLK,
-    abilities: [{ ability: "protect", cooldownMs: 0, uses: 1, abilityTargetKind: "player" }],
+    abilities: [
+      { ability: "protect", cooldownMs: 0, uses: 1, abilityTargetKind: "player" },
+      // The answer to the injury model (Phase 8.1): one wound undone per
+      // round. Its own slot rather than replacing `protect`, because the two
+      // are different plays — the shield is silent and pre-emptive, the heal
+      // is reactive and visibly outs you (see `server/src/abilities/heal.ts`).
+      // Deliberately `usesPerRound` so it refreshes each round the way the
+      // detective's investigation does: injuries recur, a shield answers one
+      // specific attempt.
+      { ability: "heal", cooldownMs: 0, uses: 1, usesPerRound: true, abilityTargetKind: "player" },
+    ],
     enabled: false,
     core: false,
     revealsFellows: false,

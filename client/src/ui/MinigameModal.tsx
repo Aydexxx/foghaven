@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
-import type { ClientTask, MinigameType } from "@foghaven/shared";
+import { INJURED_MINIGAME_HANDICAP, type ClientTask, type MinigameType } from "@foghaven/shared";
 import type { MinigameProps } from "../game/minigames/types";
 import { Button, Panel } from "./primitives";
 
@@ -21,15 +21,17 @@ interface MinigameModalProps {
   task: ClientTask;
   onComplete: () => void;
   onCancel: () => void;
+  /** True while the local player is injured — see `MinigameProps.handicap`. */
+  injured?: boolean;
 }
 
 /**
  * Picks the right mini-game component for the task at hand and renders it
- * inside a shared modal chrome. Every mini-game gets the exact same two
- * callbacks — see `MinigameProps` — so this component never needs to know
- * how any individual puzzle works.
+ * inside a shared modal chrome. Every mini-game gets the exact same props —
+ * see `MinigameProps` — so this component never needs to know how any
+ * individual puzzle works, only how hard it should currently be.
  */
-export function MinigameModal({ task, onComplete, onCancel }: MinigameModalProps) {
+export function MinigameModal({ task, onComplete, onCancel, injured = false }: MinigameModalProps) {
   const { t } = useTranslation();
   const Minigame = MINIGAMES[task.minigame];
 
@@ -53,7 +55,11 @@ export function MinigameModal({ task, onComplete, onCancel }: MinigameModalProps
           </Button>
         </header>
         <Suspense fallback={<p className="minigame-instructions">{t("app.loading")}</p>}>
-          <Minigame onComplete={onComplete} onCancel={onCancel} />
+          <Minigame
+            onComplete={onComplete}
+            onCancel={onCancel}
+            handicap={injured ? INJURED_MINIGAME_HANDICAP : 1}
+          />
         </Suspense>
       </Panel>
     </div>
